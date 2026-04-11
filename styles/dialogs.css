@@ -1,0 +1,239 @@
+/* ── Modal Overlay ────────────────────────────────────────────── */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--bg-light);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 520px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.modal h2 {
+  font-size: 1.2rem;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+/* ── Tone Builder ────────────────────────────────────────────── */
+
+.tb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tb-row label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  min-width: 60px;
+}
+
+.tb-row input[type="text"],
+.tb-row input[type="number"],
+.tb-row select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+
+.tb-row input[type="text"] {
+  flex: 1;
+}
+
+.tb-row input[type="color"] {
+  width: 36px;
+  height: 28px;
+  border: 1px solid #335;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  padding: 0;
+}
+
+.tb-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.tb-section {
+  border: 1px solid #335;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.tb-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.tb-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.tb-toggle input {
+  accent-color: var(--accent);
+}
+
+.tb-layer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+
+.tb-layer select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 3px 4px;
+  font-size: 0.75rem;
+}
+
+.tb-layer input[type="range"] {
+  width: 60px;
+  accent-color: var(--accent);
+}
+
+.tb-layer input[type="number"] {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 2px 4px;
+  width: 55px;
+  font-size: 0.75rem;
+}
+
+.tb-layer label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.tb-layer-gain-val {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  min-width: 28px;
+}
+
+.tb-small-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tb-small-btn:hover {
+  background: #1a4a80;
+}
+
+.tb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #335;
+}
+
+.tb-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tb-btn:hover:not(:disabled) {
+  background: #1a4a80;
+}
+
+.tb-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tb-btn.primary {
+  background: var(--accent);
+  color: #000;
+  font-weight: 600;
+  border-color: var(--accent);
+}
+
+.tb-btn.primary:hover {
+  background: var(--accent-hover);
+}
+
+/* ── Property Panel ──────────────────────────────────────────── */
+
+.prop-section {
+  padding: 6px 12px;
+  border-bottom: 1px solid #262636;
+}
+
+.prop-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+
+.prop-value {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.prop-value-sub {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.prop-section input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  margin-top: 4px;
+}
+
+.prop-val-text {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}

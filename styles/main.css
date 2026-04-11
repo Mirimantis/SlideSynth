@@ -1,0 +1,202 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #1a1a2e;
+  --bg-light: #16213e;
+  --surface: #0f3460;
+  --text: #e0e0e0;
+  --text-dim: #888;
+  --accent: #4fc3f7;
+  --accent-hover: #81d4fa;
+  --panel-width: 200px;
+  --toolbar-height: auto;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── App layout ──────────────────────────────────────────────── */
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────── */
+
+#toolbar {
+  background: var(--bg-light);
+  border-bottom: 1px solid #335;
+  padding: 6px 12px;
+  flex-shrink: 0;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-group label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.toolbar-group input[type="number"] {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 3px 6px;
+  width: 60px;
+  font-size: 0.85rem;
+}
+
+.toolbar-group input[type="range"] {
+  width: 100px;
+  accent-color: var(--accent);
+}
+
+.toolbar-group input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.transport button {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.15s;
+}
+
+.transport button:hover:not(:disabled) {
+  background: #1a4a80;
+}
+
+.transport button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tool-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.15s;
+}
+
+.tool-btn:hover {
+  background: #1a4a80;
+}
+
+.tool-btn.active {
+  background: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+
+/* ── Main area (3-column) ────────────────────────────────────── */
+
+#main-area {
+  display: grid;
+  grid-template-columns: var(--panel-width) 1fr var(--panel-width);
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Side panels ─────────────────────────────────────────────── */
+
+#track-panel,
+#property-panel {
+  background: var(--bg-light);
+  border-right: 1px solid #335;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+#property-panel {
+  border-right: none;
+  border-left: 1px solid #335;
+}
+
+.panel-header {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 8px 12px;
+  border-bottom: 1px solid #335;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+#track-list {
+  flex: 1;
+  padding: 8px;
+}
+
+#add-track-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: none;
+  border-top: 1px solid #335;
+  padding: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s;
+}
+
+#add-track-btn:hover {
+  background: #1a4a80;
+}
+
+.placeholder-text {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  padding: 12px;
+  font-style: italic;
+}
+
+/* ── Canvas container ────────────────────────────────────────── */
+
+#canvas-container {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+#bg-canvas,
+#fg-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#fg-canvas {
+  z-index: 1;
+}

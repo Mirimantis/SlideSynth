@@ -1,0 +1,131 @@
+/* ── Track Panel Items ────────────────────────────────────────── */
+
+.track-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-bottom: 2px;
+}
+
+.track-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.track-item.selected {
+  background: rgba(79, 195, 247, 0.15);
+  outline: 1px solid rgba(79, 195, 247, 0.3);
+}
+
+.track-item.muted {
+  opacity: 0.5;
+}
+
+.track-color {
+  width: 8px;
+  height: 24px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.track-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.track-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-tone {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.track-controls {
+  display: flex;
+  gap: 3px;
+}
+
+.track-mute,
+.track-solo {
+  background: var(--surface);
+  color: var(--text-dim);
+  border: 1px solid #335;
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.track-mute:hover,
+.track-solo:hover {
+  background: #1a4a80;
+}
+
+.track-mute.active {
+  background: #c62828;
+  color: #fff;
+  border-color: #c62828;
+}
+
+.track-solo.active {
+  background: #f9a825;
+  color: #000;
+  border-color: #f9a825;
+}
+
+.track-edit-tone,
+.track-tone-select {
+  background: var(--surface);
+  color: var(--text-dim);
+  border: 1px solid #335;
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.track-edit-tone:hover,
+.track-tone-select:hover {
+  background: #1a4a80;
+  color: var(--accent);
+}
+
+.track-panel-actions {
+  display: flex;
+  border-top: 1px solid #335;
+}
+
+.track-panel-actions button {
+  flex: 1;
+  background: var(--surface);
+  color: var(--text);
+  border: none;
+  border-right: 1px solid #335;
+  padding: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.15s;
+}
+
+.track-panel-actions button:last-child {
+  border-right: none;
+}
+
+.track-panel-actions button:hover {
+  background: #1a4a80;
+}
