@@ -10,6 +10,7 @@
     "test": "vitest"
   },
   "devDependencies": {
+    "midi-file": "^1.2.4",
     "midi-writer-js": "^3.2.1",
     "typescript": "^6.0.2",
     "vite": "^8.0.8",
