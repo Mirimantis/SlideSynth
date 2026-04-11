@@ -78,3 +78,27 @@ export function openFile(accept: string = '.json'): Promise<string> {
     input.click();
   });
 }
+
+/**
+ * Open a file picker and read the selected file as an ArrayBuffer.
+ * Used for binary formats like MIDI.
+ */
+export function openBinaryFile(accept: string): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) {
+        reject(new Error('No file selected'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(file);
+    });
+    input.click();
+  });
+}

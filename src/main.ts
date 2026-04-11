@@ -8,7 +8,8 @@ import { createPlaybackEngine } from './audio/playback';
 import { renderPropertyPanel } from './ui/property-panel';
 import { openToneBuilder } from './ui/tone-builder';
 import { openTonePicker } from './ui/tone-picker';
-import { serializeComposition, deserializeComposition, downloadFile, openFile } from './export/json-export';
+import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile } from './export/json-export';
+import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
 import { createTrack } from './model/track';
@@ -174,6 +175,20 @@ addToolbarButton('WAV', 'Export as WAV audio file', async () => {
     await exportWav(comp);
   } catch (e) {
     console.error('WAV export failed:', e);
+  }
+});
+
+addToolbarButton('MIDI', 'Import MIDI file', async () => {
+  try {
+    const buffer = await openBinaryFile('.mid,.midi');
+    const comp = midiToComposition(buffer);
+    playback.stop();
+    store.loadComposition(comp);
+    viewport.totalBeats = comp.totalBeats;
+    toolbar.updateLength(comp.totalBeats);
+    toolbar.updatePlayState(false);
+  } catch (e) {
+    console.error('MIDI import failed:', e);
   }
 });
 
