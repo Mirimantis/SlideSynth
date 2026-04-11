@@ -104,6 +104,29 @@ export interface AppState {
   snapEnabled: boolean;
 }
 
+// ── Transform Box ──────────────────────────────────────────────
+
+export type TransformHandle =
+  | 'translate'
+  | 'left' | 'right' | 'top' | 'bottom'
+  | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'
+  | 'octaveUp' | 'octaveDown';
+
+export interface BoundingBox {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+export interface TransformBoxState {
+  curveId: string;
+  originalPoints: ControlPoint[];
+  bbox: BoundingBox;
+  activeHandle: TransformHandle | null;
+  dragStart: Vec2 | null;
+}
+
 // ── Audio Samples ───────────────────────────────────────────────
 
 export interface CurveSample {

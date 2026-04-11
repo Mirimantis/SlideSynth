@@ -3,6 +3,7 @@ import type { Viewport } from './viewport';
 import { getSegmentControlPoints } from '../model/curve';
 
 const POINT_RADIUS = 5;
+const POINT_RADIUS_UNSELECTED = 3;
 const HANDLE_RADIUS = 3;
 
 /**
@@ -36,7 +37,7 @@ function renderCurve(
   if (curve.points.length >= 2) {
     ctx.beginPath();
     ctx.strokeStyle = tone.color;
-    ctx.lineWidth = isSelected ? 2.5 : 2;
+    ctx.lineWidth = isSelected ? 4 : 2;
     ctx.setLineDash(tone.dashPattern);
 
     const first = curve.points[0]!;
@@ -58,14 +59,14 @@ function renderCurve(
     ctx.setLineDash([]);
   }
 
-  // Draw control points and handles when selected
-  if (isSelected) {
-    for (let i = 0; i < curve.points.length; i++) {
-      const pt = curve.points[i]!;
-      const screen = vp.worldToScreen(pt.position.x, pt.position.y);
-      const isPointSelected = selectedPointIndex === i;
+  // Draw control points (always visible; handles only when selected)
+  for (let i = 0; i < curve.points.length; i++) {
+    const pt = curve.points[i]!;
+    const screen = vp.worldToScreen(pt.position.x, pt.position.y);
+    const isPointSelected = isSelected && selectedPointIndex === i;
 
-      // Draw handles
+    if (isSelected) {
+      // Draw handles when curve is selected
       if (pt.handleIn) {
         drawHandle(ctx, vp, pt.position, pt.handleIn, tone.color);
       }
@@ -73,7 +74,7 @@ function renderCurve(
         drawHandle(ctx, vp, pt.position, pt.handleOut, tone.color);
       }
 
-      // Draw anchor point
+      // Full-size anchor point
       ctx.beginPath();
       ctx.arc(screen.sx, screen.sy, POINT_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = isPointSelected ? '#fff' : tone.color;
@@ -96,15 +97,13 @@ function renderCurve(
         ctx.fillStyle = tone.color;
         ctx.fillRect(barX, barY, barWidth * pt.volume, barHeight);
       }
+    } else {
+      // Small, faint anchor point when not selected
+      ctx.beginPath();
+      ctx.arc(screen.sx, screen.sy, POINT_RADIUS_UNSELECTED, 0, Math.PI * 2);
+      ctx.fillStyle = tone.color;
+      ctx.fill();
     }
-  } else if (curve.points.length === 1) {
-    // Single point (curve being drawn): always show it
-    const pt = curve.points[0]!;
-    const screen = vp.worldToScreen(pt.position.x, pt.position.y);
-    ctx.beginPath();
-    ctx.arc(screen.sx, screen.sy, POINT_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = tone.color;
-    ctx.fill();
   }
 }
 
