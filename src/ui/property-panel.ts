@@ -1,6 +1,7 @@
 import { store } from '../state/store';
 import { noteNumberToName } from '../constants';
 import { setPointVolume } from '../model/curve';
+import { openTonePicker } from './tone-picker';
 
 /**
  * Render the property panel contents based on current selection.
@@ -26,7 +27,7 @@ export function renderPropertyPanel(container: HTMLElement): void {
       </div>
       <div class="prop-section">
         <div class="prop-label">Tone</div>
-        <div class="prop-value" style="color:${tone?.color ?? '#888'}">${tone?.name ?? '?'}</div>
+        <div class="prop-value prop-tone-clickable" id="prop-tone-name" style="color:${tone?.color ?? '#888'}" title="Click to change tone">${tone?.name ?? '?'}</div>
       </div>
       <div class="prop-section">
         <div class="prop-label">Curves</div>
@@ -45,6 +46,15 @@ export function renderPropertyPanel(container: HTMLElement): void {
       store.mutate(() => { track.volume = v; });
       const span = container.querySelector('.prop-val-text');
       if (span) span.textContent = v.toFixed(2);
+    });
+
+    container.querySelector('#prop-tone-name')?.addEventListener('click', (e) => {
+      const el = e.target as HTMLElement;
+      openTonePicker(comp.toneLibrary, track.toneId, el).then(picked => {
+        if (picked) {
+          store.mutate(() => { track.toneId = picked.id; });
+        }
+      });
     });
     return;
   }

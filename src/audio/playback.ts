@@ -16,6 +16,7 @@ interface PlaybackEngine {
   stop(): void;
   getPositionBeats(): number;
   isPlaying(): boolean;
+  setLoop(enabled: boolean): void;
 }
 
 export function createPlaybackEngine(
@@ -28,6 +29,7 @@ export function createPlaybackEngine(
   let schedulerInterval: ReturnType<typeof setInterval> | null = null;
   let trackPlaybacks: TrackPlayback[] = [];
   let currentComposition: Composition | null = null;
+  let loopEnabled = false;
 
   function getPositionBeats(): number {
     if (!playing) return startBeatOffset;
@@ -97,11 +99,20 @@ export function createPlaybackEngine(
     }
 
     // Update position callback
-    onPositionUpdate(getPositionBeats());
+    const currentPosition = getPositionBeats();
+    onPositionUpdate(currentPosition);
 
-    // Stop at end
-    if (currentComposition && getPositionBeats() >= currentComposition.totalBeats) {
-      stop();
+    // End of composition
+    if (currentComposition && currentPosition >= currentComposition.totalBeats) {
+      if (loopEnabled) {
+        // Restart from the beginning
+        const comp = currentComposition;
+        stop();
+        play(comp, 0);
+        onPositionUpdate(0);
+      } else {
+        stop();
+      }
     }
   }
 
@@ -189,5 +200,6 @@ export function createPlaybackEngine(
     stop,
     getPositionBeats,
     isPlaying: () => playing,
+    setLoop(enabled: boolean) { loopEnabled = enabled; },
   };
 }

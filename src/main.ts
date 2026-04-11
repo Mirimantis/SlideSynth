@@ -7,6 +7,7 @@ import { createToolbar } from './ui/toolbar';
 import { createPlaybackEngine } from './audio/playback';
 import { renderPropertyPanel } from './ui/property-panel';
 import { openToneBuilder } from './ui/tone-builder';
+import { openTonePicker } from './ui/tone-picker';
 import { serializeComposition, deserializeComposition, downloadFile, openFile } from './export/json-export';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
@@ -74,6 +75,11 @@ const interaction = createInteraction(fgCanvas, viewport);
 // ── Playback engine ─────────────────────────────────────────────
 const playback = createPlaybackEngine((beats) => {
   store.setPlaybackPosition(beats);
+  // Detect when playback auto-stopped (reached end without loop)
+  if (!playback.isPlaying() && store.getState().playback.state === 'playing') {
+    store.setPlaybackState('stopped');
+    toolbar.updatePlayState(false);
+  }
 });
 
 // ── Toolbar ─────────────────────────────────────────────────────
@@ -107,6 +113,14 @@ const toolbar = createToolbar(toolbarContainer, viewport, {
   },
   onBpmChange(bpm: number) {
     store.setBpm(bpm);
+  },
+  onLengthChange(beats: number) {
+    store.mutate(c => { c.totalBeats = beats; });
+    viewport.totalBeats = beats;
+    bgDirty = true;
+  },
+  onLoopToggle(enabled: boolean) {
+    playback.setLoop(enabled);
   },
   onZoomXChange(z: number) {
     viewport.setZoomX(z);
@@ -144,7 +158,11 @@ addToolbarButton('Load', 'Load composition (JSON)', async () => {
   try {
     const json = await openFile('.json');
     const comp = deserializeComposition(json);
+    playback.stop();
     store.loadComposition(comp);
+    viewport.totalBeats = comp.totalBeats;
+    toolbar.updateLength(comp.totalBeats);
+    toolbar.updatePlayState(false);
   } catch (e) {
     console.error('Failed to load:', e);
   }
@@ -186,6 +204,15 @@ window.addEventListener('keydown', (e) => {
     case 'x':
       store.setTool('delete');
       break;
+    case 'l':
+    case 'L': {
+      const loopCb = document.getElementById('loop-toggle') as HTMLInputElement | null;
+      if (loopCb) {
+        loopCb.checked = !loopCb.checked;
+        playback.setLoop(loopCb.checked);
+      }
+      break;
+    }
     case 'Delete':
     case 'Backspace': {
       // Delete selected point
@@ -226,13 +253,12 @@ function renderTrackList() {
       <div class="track-color" style="background:${tone?.color ?? '#888'}"></div>
       <div class="track-info">
         <span class="track-name">${track.name}</span>
-        <span class="track-tone">${tone?.name ?? '?'}</span>
+        <span class="track-tone tone-name-clickable" style="color:${tone?.color ?? '#888'}" title="Click to change tone">${tone?.name ?? '?'}</span>
       </div>
       <div class="track-controls">
         <button class="track-mute ${track.muted ? 'active' : ''}" title="Mute">M</button>
         <button class="track-solo ${track.solo ? 'active' : ''}" title="Solo">S</button>
         <button class="track-edit-tone" title="Edit tone">T</button>
-        <button class="track-tone-select" title="Change tone">&#9660;</button>
       </div>
     `;
 
@@ -260,11 +286,12 @@ function renderTrackList() {
         }
         return;
       }
-      if (target.classList.contains('track-tone-select')) {
-        // Cycle through available tones
-        const toneIdx = comp.toneLibrary.findIndex(t => t.id === track.toneId);
-        const nextIdx = (toneIdx + 1) % comp.toneLibrary.length;
-        store.mutate(() => { track.toneId = comp.toneLibrary[nextIdx]!.id; });
+      if (target.classList.contains('tone-name-clickable')) {
+        openTonePicker(comp.toneLibrary, track.toneId, target).then(picked => {
+          if (picked) {
+            store.mutate(() => { track.toneId = picked.id; });
+          }
+        });
         return;
       }
       store.setSelectedTrack(track.id);
@@ -274,11 +301,13 @@ function renderTrackList() {
   }
 }
 
-document.getElementById('add-track-btn')!.addEventListener('click', () => {
+document.getElementById('add-track-btn')!.addEventListener('click', async () => {
   const comp = store.getComposition();
-  const tones = comp.toneLibrary;
-  const nextTone = tones[comp.tracks.length % tones.length]!;
-  const track = createTrack(`Track ${comp.tracks.length + 1}`, nextTone.id);
+  // Show tone picker anchored to the add button
+  const btn = document.getElementById('add-track-btn')!;
+  const picked = await openTonePicker(comp.toneLibrary, null, btn);
+  if (!picked) return; // Cancelled
+  const track = createTrack(`Track ${comp.tracks.length + 1}`, picked.id);
   store.mutate(c => { c.tracks.push(track); });
   store.setSelectedTrack(track.id);
 });
@@ -308,6 +337,8 @@ window.addEventListener('mousemove', (e) => {
     const dx = e.clientX - lastMouse.x;
     const dy = e.clientY - lastMouse.y;
     viewport.panBy(dx, dy);
+    const rect = canvasContainer.getBoundingClientRect();
+    viewport.clampOffset(rect.width, rect.height);
     lastMouse = { x: e.clientX, y: e.clientY };
     bgDirty = true;
   }
@@ -333,6 +364,8 @@ fgCanvas.addEventListener('wheel', (e) => {
     viewport.zoomXAt(factor, sx);
   }
 
+  const rect2 = canvasContainer.getBoundingClientRect();
+  viewport.clampOffset(rect2.width, rect2.height);
   toolbar.updateZoom();
   bgDirty = true;
 }, { passive: false });
@@ -396,11 +429,14 @@ function render() {
 // ── Store subscription ──────────────────────────────────────────
 store.subscribe(() => {
   bgDirty = true;
+  // Sync viewport totalBeats in case composition was loaded or length changed
+  viewport.totalBeats = store.getComposition().totalBeats;
   renderTrackList();
   renderPropertyPanel(document.getElementById('prop-content')!);
 });
 
 // ── Initialization ──────────────────────────────────────────────
+viewport.totalBeats = store.getComposition().totalBeats;
 window.addEventListener('resize', resizeCanvases);
 resizeCanvases();
 renderTrackList();

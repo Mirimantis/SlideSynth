@@ -37,8 +37,13 @@ export function frequencyToNote(hz: number): number {
 // ── Default values ──────────────────────────────────────────────
 export const DEFAULT_BPM = 120;
 export const DEFAULT_BEATS_PER_MEASURE = 4;
-export const DEFAULT_TOTAL_BEATS = 32;
 export const SUBDIVISIONS_PER_BEAT = 16; // snap to 1/16 beats
+
+// Default composition length: 1 minute at default BPM = 120 beats
+export const DEFAULT_TOTAL_BEATS = DEFAULT_BPM; // 1 min at 120 BPM
+// Max composition: ~10 minutes at 300 BPM = 3000 beats (reasonable WAV size ~50MB stereo)
+export const MAX_TOTAL_BEATS = 3000;
+export const MIN_TOTAL_BEATS = 4;
 
 // ── Viewport defaults ───────────────────────────────────────────
 export const DEFAULT_ZOOM_X = 120;  // pixels per beat
