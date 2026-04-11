@@ -6,7 +6,8 @@ import { SCHEDULER_INTERVAL_MS, SCHEDULER_LOOKAHEAD_S } from '../constants';
 
 interface TrackPlayback {
   trackId: string;
-  synth: ToneSynth;
+  trackGain: GainNode;
+  curveSynths: Map<string, ToneSynth>;
   lastScheduledTime: number;
 }
 
@@ -48,24 +49,32 @@ export function createPlaybackEngine(
     for (const tp of trackPlaybacks) {
       const track = currentComposition.tracks.find(t => t.id === tp.trackId);
       if (!track || track.muted) {
-        // Muted: ensure silence
-        tp.synth.setVolume(0, now);
+        // Muted: silence via track gain
+        tp.trackGain.gain.setValueAtTime(0, now);
+        tp.lastScheduledTime = scheduleUntil;
         continue;
       }
 
       // Check solo logic: if any track has solo, only play solo tracks
       const hasSolo = currentComposition.tracks.some(t => t.solo);
       if (hasSolo && !track.solo) {
-        tp.synth.setVolume(0, now);
+        tp.trackGain.gain.setValueAtTime(0, now);
+        tp.lastScheduledTime = scheduleUntil;
         continue;
       }
+
+      // Ensure track gain reflects current volume
+      tp.trackGain.gain.setValueAtTime(track.volume, now);
 
       // Convert schedule window to beats
       const fromBeat = startBeatOffset + (tp.lastScheduledTime - startAudioTime) / beatsToSec;
       const toBeat = startBeatOffset + (scheduleUntil - startAudioTime) / beatsToSec;
 
-      // Schedule each curve in this track
+      // Schedule each curve on its own synth
       for (const curve of track.curves) {
+        const synth = tp.curveSynths.get(curve.id);
+        if (!synth) continue;
+
         const range = getCurveTimeRange(curve);
         if (!range) continue;
         if (range.end < fromBeat || range.start > toBeat) continue;
@@ -77,8 +86,8 @@ export function createPlaybackEngine(
           if (audioTime <= tp.lastScheduledTime) continue;
           if (audioTime > scheduleUntil) continue;
 
-          tp.synth.setFrequency(sample.frequency, audioTime);
-          tp.synth.setVolume(sample.volume * track.volume, audioTime);
+          synth.setFrequency(sample.frequency, audioTime);
+          synth.setVolume(sample.volume, audioTime);
         }
 
         // Handle gaps: silence before and after curves
@@ -87,11 +96,11 @@ export function createPlaybackEngine(
 
         if (curveStartSec > tp.lastScheduledTime && curveStartSec <= scheduleUntil) {
           // Fade in at curve start
-          tp.synth.setVolume(0, curveStartSec - 0.005);
+          synth.setVolume(0, curveStartSec - 0.005);
         }
         if (curveEndSec > tp.lastScheduledTime && curveEndSec <= scheduleUntil) {
           // Fade out at curve end
-          tp.synth.setVolume(0, curveEndSec + 0.005);
+          synth.setVolume(0, curveEndSec + 0.005);
         }
       }
 
@@ -118,19 +127,31 @@ export function createPlaybackEngine(
 
   function createTrackSynths(composition: Composition): void {
     disposeTrackSynths();
+    const ctx = getAudioContext();
 
     for (const track of composition.tracks) {
       const tone = composition.toneLibrary.find(t => t.id === track.toneId);
       if (!tone) continue;
 
-      const synth = createToneSynth(tone);
-      synth.connect(getMasterGain());
-      synth.setVolume(0);
-      synth.start();
+      // Per-track gain node carries track volume and mute/solo
+      const trackGain = ctx.createGain();
+      trackGain.gain.value = track.volume;
+      trackGain.connect(getMasterGain());
+
+      // One synth per curve
+      const curveSynths = new Map<string, ToneSynth>();
+      for (const curve of track.curves) {
+        const synth = createToneSynth(tone);
+        synth.connect(trackGain);
+        synth.setVolume(0);
+        synth.start();
+        curveSynths.set(curve.id, synth);
+      }
 
       trackPlaybacks.push({
         trackId: track.id,
-        synth,
+        trackGain,
+        curveSynths,
         lastScheduledTime: 0,
       });
     }
@@ -138,12 +159,16 @@ export function createPlaybackEngine(
 
   function disposeTrackSynths(): void {
     for (const tp of trackPlaybacks) {
-      try {
-        tp.synth.setVolume(0);
-        tp.synth.stop();
-      } catch {
-        // Oscillator may already be stopped
+      for (const synth of tp.curveSynths.values()) {
+        try {
+          synth.setVolume(0);
+          synth.stop();
+        } catch {
+          // Oscillator may already be stopped
+        }
       }
+      tp.curveSynths.clear();
+      tp.trackGain.disconnect();
     }
     trackPlaybacks = [];
   }
