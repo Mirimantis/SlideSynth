@@ -3,7 +3,10 @@ import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
 import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, deepCopyPoints, applyTransformToCurve } from '../model/curve';
-import { snapToGrid, DEFAULT_SNAP_CONFIG } from '../utils/snap';
+import { snapToGrid } from '../utils/snap';
+import type { SnapConfig } from '../utils/snap';
+import { getScaleById } from '../utils/scales';
+import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { distToPoint, nearestPointOnCubic } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
 
@@ -43,8 +46,7 @@ export function createInteraction(
     const sy = e.clientY - rect.top;
     const world = vp.screenToWorld(sx, sy);
 
-    const snap = store.getState().snapEnabled;
-    const snapped = snapToGrid(world.wx, world.wy, { ...DEFAULT_SNAP_CONFIG, enabled: snap });
+    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig());
     istate.cursorWorld = { x: snapped.wx, y: snapped.wy };
 
     // Transform box dragging
@@ -92,12 +94,12 @@ export function createInteraction(
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const world = vp.screenToWorld(sx, sy);
-    const snap = state.snapEnabled;
-    const snapped = snapToGrid(world.wx, world.wy, { ...DEFAULT_SNAP_CONFIG, enabled: snap });
-    const worldPt: Vec2 = { x: snapped.wx, y: snapped.wy };
+    const rawPt: Vec2 = { x: world.wx, y: world.wy };
+    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig());
+    const snappedPt: Vec2 = { x: snapped.wx, y: snapped.wy };
 
     if (state.activeTool === 'draw') {
-      handleDrawClick(istate, worldPt, vp);
+      handleDrawClick(istate, snappedPt, vp);
     } else if (state.activeTool === 'select') {
       // Check transform box hit first
       if (istate.transformBox) {
@@ -128,7 +130,7 @@ export function createInteraction(
 
           // For translate hits, check for curve selection first
           if (hit === 'translate') {
-            const curveHit = findCurveAt(worldPt, vp, track);
+            const curveHit = findCurveAt(rawPt, vp, track);
             if (curveHit && e.shiftKey) {
               // Shift+click inside box: toggle curve in/out of selection
               store.toggleSelectedCurve(curveHit.id);
@@ -148,7 +150,7 @@ export function createInteraction(
           // Start a transform drag (resize handles, or translate on selected/empty)
           history.snapshot();
           tb.activeHandle = hit;
-          tb.dragStart = { ...worldPt };
+          tb.dragStart = { ...snappedPt };
           const map = new Map<string, ControlPoint[]>();
           for (const curveId of tb.curveIds) {
             const curve = track.curves.find(c => c.id === curveId);
@@ -160,9 +162,9 @@ export function createInteraction(
         // Click outside the box dismisses it
         istate.transformBox = null;
       }
-      handleSelectClick(istate, worldPt, vp, e.shiftKey);
+      handleSelectClick(istate, rawPt, vp, e.shiftKey);
     } else if (state.activeTool === 'delete') {
-      handleDeleteClick(worldPt, vp);
+      handleDeleteClick(rawPt, vp);
     }
   });
 
@@ -526,4 +528,14 @@ function findCurveAt(worldPt: Vec2, vp: Viewport, track: Track): BezierCurve | n
 function getSelectedTrack(): Track | undefined {
   const state = store.getState();
   return state.composition.tracks.find(t => t.id === state.selectedTrackId);
+}
+
+function buildSnapConfig(): SnapConfig {
+  const state = store.getState();
+  return {
+    enabled: state.snapEnabled,
+    subdivisionsPerBeat: SUBDIVISIONS_PER_BEAT,
+    scaleRoot: state.scaleRoot,
+    scale: state.scaleId ? getScaleById(state.scaleId) ?? null : null,
+  };
 }
