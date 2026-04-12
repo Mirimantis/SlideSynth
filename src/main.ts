@@ -14,7 +14,7 @@ import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
 import { history } from './state/history';
-import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves } from './state/clipboard';
+import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
 import { computeMultiCurveBBox, deepCopyPoints } from './model/curve';
 import { getScaleById } from './utils/scales';
@@ -76,7 +76,25 @@ function resizeCanvases() {
 }
 
 // ── Interaction ─────────────────────────────────────────────────
-const interaction = createInteraction(fgCanvas, viewport);
+let scrubWasPlaying = false;
+const interaction = createInteraction(fgCanvas, viewport, {
+  onPlayheadScrub(beats, phase) {
+    if (phase === 'start') {
+      scrubWasPlaying = playback.isPlaying();
+      if (scrubWasPlaying) {
+        playback.pause();
+      }
+      store.setPlaybackPosition(beats);
+    } else if (phase === 'move') {
+      store.setPlaybackPosition(beats);
+    } else {
+      store.setPlaybackPosition(beats);
+      if (scrubWasPlaying) {
+        playback.play(store.getComposition(), beats);
+      }
+    }
+  },
+});
 
 // ── Playback engine ─────────────────────────────────────────────
 const playback = createPlaybackEngine((beats) => {
@@ -267,6 +285,16 @@ window.addEventListener('keydown', (e) => {
     const atBeat = state.playback.positionBeats;
     const newIds = pasteCurves(atBeat);
     if (newIds) {
+      const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+      if (track) rebuildTransformBox(interaction, track);
+    }
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
+    e.preventDefault();
+    const newIds = continueCurves();
+    if (newIds) {
+      const state = store.getState();
       const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
       if (track) rebuildTransformBox(interaction, track);
     }
@@ -593,11 +621,10 @@ function render() {
   }
 
   // Playhead
-  if (playback.isPlaying()) {
-    renderPlayhead(fgCtx, viewport, playback.getPositionBeats(), rect.height);
-  } else if (state.playback.positionBeats > 0) {
-    renderPlayhead(fgCtx, viewport, state.playback.positionBeats, rect.height);
-  }
+  const playheadBeat = playback.isPlaying()
+    ? playback.getPositionBeats()
+    : state.playback.positionBeats;
+  renderPlayhead(fgCtx, viewport, playheadBeat, rect.height);
 
   requestAnimationFrame(render);
 }

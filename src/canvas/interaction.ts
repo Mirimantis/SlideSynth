@@ -10,6 +10,11 @@ import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { distToPoint, nearestPointOnCubic } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
 
+const RULER_HEIGHT = 24;
+
+export interface InteractionCallbacks {
+  onPlayheadScrub?(beats: number, phase: 'start' | 'move' | 'end'): void;
+}
 
 export interface InteractionState {
   /** Mouse world position (snapped if snap on, unless shift held). */
@@ -22,13 +27,20 @@ export interface InteractionState {
   dragPointIndex: number;
   /** Transform box state (active when double-click selects a curve for transform). */
   transformBox: TransformBoxState | null;
+  /** World position where the current drag started (for shift-constrain). */
+  dragStartWorld: Vec2 | null;
+  /** Whether alt-duplicate has already been performed for the current transform drag. */
+  altDuplicated: boolean;
   /** Whether Ctrl temporarily switched from draw to select (for Ctrl-click). */
   ctrlSwitchedTool: boolean;
+  /** Whether we're currently scrubbing the playhead in the ruler zone. */
+  scrubbing: boolean;
 }
 
 export function createInteraction(
   canvas: HTMLCanvasElement,
   vp: Viewport,
+  callbacks?: InteractionCallbacks,
 ): InteractionState {
   const istate: InteractionState = {
     cursorWorld: null,
@@ -37,7 +49,10 @@ export function createInteraction(
     dragCurveId: null,
     dragPointIndex: -1,
     transformBox: null,
+    dragStartWorld: null,
+    altDuplicated: false,
     ctrlSwitchedTool: false,
+    scrubbing: false,
   };
 
   canvas.addEventListener('mousemove', (e) => {
@@ -45,21 +60,89 @@ export function createInteraction(
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const world = vp.screenToWorld(sx, sy);
+    const raw = { wx: world.wx, wy: world.wy };
+
+    // Playhead scrubbing — update position and skip all other interaction
+    if (istate.scrubbing) {
+      const snap = buildSnapConfig();
+      const snappedBeat = snap.enabled ? snapToGrid(raw.wx, 0, snap).wx : raw.wx;
+      const beat = Math.max(0, Math.min(snappedBeat, vp.totalBeats));
+      callbacks?.onPlayheadScrub?.(beat, 'move');
+      return;
+    }
 
     const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig());
-    istate.cursorWorld = { x: snapped.wx, y: snapped.wy };
+
+    // Determine effective coordinates:
+    // - Handles: raw (no snap) to allow smooth curve shaping
+    // - Points / transforms / idle: snapped
+    const isHandleDrag = istate.dragging === 'handleIn' || istate.dragging === 'handleOut';
+    let eff = isHandleDrag ? raw : snapped;
+
+    // Shift-constrain: lock to horizontal or vertical axis during any drag
+    const isDragging = istate.dragging || (istate.transformBox?.activeHandle && istate.transformBox.dragStart);
+    const dragOrigin = istate.dragStartWorld ?? istate.transformBox?.dragStart ?? null;
+    if (e.shiftKey && isDragging && dragOrigin) {
+      const dx = Math.abs(eff.wx - dragOrigin.x);
+      const dy = Math.abs(eff.wy - dragOrigin.y);
+      if (dx >= dy) {
+        eff = { wx: eff.wx, wy: dragOrigin.y };
+      } else {
+        eff = { wx: dragOrigin.x, wy: eff.wy };
+      }
+    }
+
+    istate.cursorWorld = { x: eff.wx, y: eff.wy };
 
     // Transform box dragging
     if (istate.transformBox?.activeHandle && istate.transformBox.dragStart) {
       const tb = istate.transformBox;
       const track = getSelectedTrack();
       if (track) {
+        // Alt-drag translate: duplicate curves and drag the copies
+        if (e.altKey && tb.activeHandle === 'translate' && !istate.altDuplicated) {
+          istate.altDuplicated = true;
+          // Restore originals to their snapshot positions
+          store.mutate(() => {
+            for (const curveId of tb.curveIds) {
+              const curve = track.curves.find(c => c.id === curveId);
+              const origPts = tb.originalPointsMap.get(curveId);
+              if (curve && origPts) {
+                for (let i = 0; i < curve.points.length; i++) {
+                  const orig = origPts[i]!;
+                  curve.points[i]!.position.x = orig.position.x;
+                  curve.points[i]!.position.y = orig.position.y;
+                  curve.points[i]!.handleIn = orig.handleIn ? { ...orig.handleIn } : null;
+                  curve.points[i]!.handleOut = orig.handleOut ? { ...orig.handleOut } : null;
+                }
+              }
+            }
+          });
+          // Create duplicates and switch the transform box to them
+          const newIds: string[] = [];
+          const newOrigMap = new Map<string, ControlPoint[]>();
+          store.mutate(() => {
+            for (const curveId of tb.curveIds) {
+              const original = track.curves.find(c => c.id === curveId);
+              if (!original || original.points.length === 0) continue;
+              const dup = createCurve();
+              dup.points = deepCopyPoints(original.points);
+              track.curves.push(dup);
+              newIds.push(dup.id);
+              newOrigMap.set(dup.id, deepCopyPoints(dup.points));
+            }
+          });
+          tb.curveIds = newIds;
+          tb.originalPointsMap = newOrigMap;
+          store.setSelectedCurves(newIds);
+        }
+
         store.mutate(() => {
           for (const curveId of tb.curveIds) {
             const curve = track.curves.find(c => c.id === curveId);
             const origPts = tb.originalPointsMap.get(curveId);
             if (curve && origPts) {
-              applyTransformToCurve(curve, origPts, tb.bbox, tb.activeHandle!, tb.dragStart!, { x: snapped.wx, y: snapped.wy });
+              applyTransformToCurve(curve, origPts, tb.bbox, tb.activeHandle!, tb.dragStart!, { x: eff.wx, y: eff.wy });
             }
           }
         });
@@ -67,8 +150,11 @@ export function createInteraction(
       return;
     }
 
-    // Transform box hover cursor + tooltip
-    if (istate.transformBox && !istate.dragging) {
+    // Cursor: ruler zone, transform box, or default
+    if (!istate.dragging && sy < RULER_HEIGHT) {
+      canvas.style.cursor = 'col-resize';
+      canvas.title = 'Click to position playhead';
+    } else if (istate.transformBox && !istate.dragging) {
       const hit = hitTestTransformBox(sx, sy, istate.transformBox.bbox, vp);
       canvas.style.cursor = hit ? getTransformCursor(hit) : 'default';
       canvas.title = hit === 'octaveUp' ? '1 Octave Up'
@@ -81,13 +167,15 @@ export function createInteraction(
 
     // Handle dragging
     if (istate.dragging) {
-      handleDrag(istate, snapped);
+      handleDrag(istate, eff);
     }
   });
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return; // left click only
-    if (e.altKey) return; // alt is for panning
+    // Alt is for panning, but allow through when a transform box is active
+    // in select mode (alt-drag to duplicate)
+    if (e.altKey && !(istate.transformBox && store.getState().activeTool === 'select')) return;
 
     const state = store.getState();
     const rect = canvas.getBoundingClientRect();
@@ -97,6 +185,16 @@ export function createInteraction(
     const rawPt: Vec2 = { x: world.wx, y: world.wy };
     const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig());
     const snappedPt: Vec2 = { x: snapped.wx, y: snapped.wy };
+
+    // Ruler zone: click in top area to position/scrub playhead
+    if (sy < RULER_HEIGHT && !e.altKey) {
+      const snap = buildSnapConfig();
+      const snappedBeat = snap.enabled ? snapToGrid(world.wx, 0, snap).wx : world.wx;
+      const beat = Math.max(0, Math.min(snappedBeat, vp.totalBeats));
+      istate.scrubbing = true;
+      callbacks?.onPlayheadScrub?.(beat, 'start');
+      return;
+    }
 
     if (state.activeTool === 'draw') {
       handleDrawClick(istate, snappedPt, vp);
@@ -149,6 +247,7 @@ export function createInteraction(
 
           // Start a transform drag (resize handles, or translate on selected/empty)
           history.snapshot();
+          istate.altDuplicated = false;
           tb.activeHandle = hit;
           tb.dragStart = { ...snappedPt };
           const map = new Map<string, ControlPoint[]>();
@@ -169,6 +268,12 @@ export function createInteraction(
   });
 
   canvas.addEventListener('mouseup', () => {
+    // End playhead scrubbing
+    if (istate.scrubbing) {
+      istate.scrubbing = false;
+      callbacks?.onPlayheadScrub?.(store.getState().playback.positionBeats, 'end');
+      return;
+    }
     // Finalize transform drag
     if (istate.transformBox?.activeHandle) {
       const track = getSelectedTrack();
@@ -179,11 +284,14 @@ export function createInteraction(
       }
       istate.transformBox.activeHandle = null;
       istate.transformBox.dragStart = null;
+      istate.dragStartWorld = null;
+      istate.altDuplicated = false;
       return;
     }
     istate.dragging = null;
     istate.dragCurveId = null;
     istate.dragPointIndex = -1;
+    istate.dragStartWorld = null;
   });
 
   // Enter to finish drawing, Escape to cancel/dismiss
@@ -266,6 +374,7 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
         istate.dragging = 'handleOut';
         istate.dragCurveId = targetCurve.id;
         istate.dragPointIndex = i;
+        istate.dragStartWorld = { ...worldPt };
         return;
       }
     }
@@ -284,6 +393,7 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
       istate.dragging = 'handleOut';
       istate.dragCurveId = targetCurve.id;
       istate.dragPointIndex = idx;
+      istate.dragStartWorld = { ...worldPt };
     } else {
       // Start a new curve
       history.snapshot();
@@ -303,6 +413,7 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
       istate.dragging = 'handleOut';
       istate.dragCurveId = curve.id;
       istate.dragPointIndex = 0;
+      istate.dragStartWorld = { ...worldPt };
     }
   } else {
     // Add point to existing drawing curve
@@ -315,6 +426,7 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
     istate.dragging = 'handleOut';
     istate.dragCurveId = istate.drawingCurve.id;
     istate.dragPointIndex = idx;
+    istate.dragStartWorld = { ...worldPt };
   }
 }
 
@@ -340,6 +452,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
             istate.dragging = 'handleIn';
             istate.dragCurveId = curve.id;
             istate.dragPointIndex = i;
+            istate.dragStartWorld = { ...habs };
             store.setSelectedPoint(i);
             return;
           }
@@ -351,6 +464,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
             istate.dragging = 'handleOut';
             istate.dragCurveId = curve.id;
             istate.dragPointIndex = i;
+            istate.dragStartWorld = { ...habs };
             store.setSelectedPoint(i);
             return;
           }
@@ -374,6 +488,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
           istate.dragging = 'point';
           istate.dragCurveId = curve.id;
           istate.dragPointIndex = i;
+          istate.dragStartWorld = { ...pt.position };
           store.setSelectedCurve(curve.id);
           store.setSelectedPoint(i);
           istate.transformBox = null;
