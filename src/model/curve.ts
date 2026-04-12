@@ -129,6 +129,25 @@ export function computeCurveBBox(curve: BezierCurve): BoundingBox {
   };
 }
 
+/** Compute axis-aligned bounding box across multiple curves. */
+export function computeMultiCurveBBox(curves: BezierCurve[]): BoundingBox {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const curve of curves) {
+    for (const pt of curve.points) {
+      if (pt.position.x < minX) minX = pt.position.x;
+      if (pt.position.y < minY) minY = pt.position.y;
+      if (pt.position.x > maxX) maxX = pt.position.x;
+      if (pt.position.y > maxY) maxY = pt.position.y;
+    }
+  }
+  return {
+    minX: minX - BBOX_PAD_X,
+    minY: minY - BBOX_PAD_Y,
+    maxX: maxX + BBOX_PAD_X,
+    maxY: maxY + BBOX_PAD_Y,
+  };
+}
+
 /** Deep copy an array of control points. */
 export function deepCopyPoints(points: ControlPoint[]): ControlPoint[] {
   return points.map(pt => ({

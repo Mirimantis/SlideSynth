@@ -13,8 +13,10 @@ import { serializeComposition, deserializeComposition, downloadFile, openFile, o
 import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
+import { history } from './state/history';
 import { createTrack } from './model/track';
-import type { ToolMode } from './types';
+import { computeMultiCurveBBox, deepCopyPoints } from './model/curve';
+import type { ToolMode, ControlPoint } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -114,9 +116,11 @@ const toolbar = createToolbar(toolbarContainer, viewport, {
     store.setSnap(enabled);
   },
   onBpmChange(bpm: number) {
+    history.snapshot();
     store.setBpm(bpm);
   },
   onLengthChange(beats: number) {
+    history.snapshot();
     store.mutate(c => { c.totalBeats = beats; });
     viewport.totalBeats = beats;
     bgDirty = true;
@@ -160,6 +164,7 @@ addToolbarButton('Load', 'Load composition (JSON)', async () => {
   try {
     const json = await openFile('.json');
     const comp = deserializeComposition(json);
+    history.snapshot();
     playback.stop();
     store.loadComposition(comp);
     viewport.totalBeats = comp.totalBeats;
@@ -183,6 +188,7 @@ addToolbarButton('MIDI', 'Import MIDI file', async () => {
   try {
     const buffer = await openBinaryFile('.mid,.midi');
     const comp = midiToComposition(buffer);
+    history.snapshot();
     playback.stop();
     store.loadComposition(comp);
     viewport.totalBeats = comp.totalBeats;
@@ -193,9 +199,44 @@ addToolbarButton('MIDI', 'Import MIDI file', async () => {
   }
 });
 
+// ── Undo / Redo buttons ────────────────────────────────────────
+function clearInteractionForUndo() {
+  interaction.drawingCurve = null;
+  interaction.dragging = null;
+  interaction.transformBox = null;
+}
+
+const undoBtn = addToolbarButton('Undo', 'Undo (Ctrl+Z)', () => { clearInteractionForUndo(); history.undo(); });
+const redoBtn = addToolbarButton('Redo', 'Redo (Ctrl+Shift+Z)', () => { clearInteractionForUndo(); history.redo(); });
+undoBtn.disabled = true;
+redoBtn.disabled = true;
+
+history.subscribe(() => {
+  undoBtn.disabled = !history.canUndo();
+  redoBtn.disabled = !history.canRedo();
+});
+
 // ── Keyboard shortcuts ──────────────────────────────────────────
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+
+  // Undo / Redo
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    clearInteractionForUndo();
+    if (e.shiftKey) {
+      history.redo();
+    } else {
+      history.undo();
+    }
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+    e.preventDefault();
+    clearInteractionForUndo();
+    history.redo();
+    return;
+  }
 
   switch (e.key) {
     case ' ':
@@ -220,6 +261,12 @@ window.addEventListener('keydown', (e) => {
     case 'x':
       store.setTool('delete');
       break;
+    case 's': {
+      const snapEnabled = !store.getState().snapEnabled;
+      store.setSnap(snapEnabled);
+      toolbar.updateSnap(snapEnabled);
+      break;
+    }
     case 'l':
     case 'L': {
       const loopCb = document.getElementById('loop-toggle') as HTMLInputElement | null;
@@ -231,12 +278,14 @@ window.addEventListener('keydown', (e) => {
     }
     case 'Delete':
     case 'Backspace': {
-      // Delete selected point
+      // Delete selected point (only when a single curve is selected with a point)
       const s = store.getState();
-      if (s.selectedCurveId && s.selectedPointIndex !== null) {
+      const delCurveId = store.getSelectedCurveId();
+      if (delCurveId && s.selectedPointIndex !== null) {
         const track = s.composition.tracks.find(t => t.id === s.selectedTrackId);
-        const curve = track?.curves.find(c => c.id === s.selectedCurveId);
+        const curve = track?.curves.find(c => c.id === delCurveId);
         if (curve) {
+          history.snapshot();
           store.mutate(() => {
             curve.points.splice(s.selectedPointIndex!, 1);
             if (curve.points.length === 0 && track) {
@@ -281,10 +330,12 @@ function renderTrackList() {
     div.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       if (target.classList.contains('track-mute')) {
+        history.snapshot();
         store.mutate(() => { track.muted = !track.muted; });
         return;
       }
       if (target.classList.contains('track-solo')) {
+        history.snapshot();
         store.mutate(() => { track.solo = !track.solo; });
         return;
       }
@@ -293,6 +344,7 @@ function renderTrackList() {
         if (currentTone) {
           openToneBuilder(currentTone).then(result => {
             if (result.action === 'save') {
+              history.snapshot();
               store.mutate(c => {
                 const idx = c.toneLibrary.findIndex(t => t.id === result.tone.id);
                 if (idx >= 0) c.toneLibrary[idx] = result.tone;
@@ -305,12 +357,32 @@ function renderTrackList() {
       if (target.classList.contains('tone-name-clickable')) {
         openTonePicker(comp.toneLibrary, track.toneId, target).then(picked => {
           if (picked) {
+            history.snapshot();
             store.mutate(() => { track.toneId = picked.id; });
           }
         });
         return;
       }
       store.setSelectedTrack(track.id);
+      // Select all curves in this track and build a transform box
+      if (track.curves.length > 0) {
+        const curveIds = track.curves.map(c => c.id);
+        store.setSelectedCurves(curveIds);
+        // Build transform box around all curves
+        const map = new Map<string, ControlPoint[]>();
+        for (const c of track.curves) {
+          map.set(c.id, deepCopyPoints(c.points));
+        }
+        interaction.transformBox = {
+          curveIds,
+          originalPointsMap: map,
+          bbox: computeMultiCurveBBox(track.curves),
+          activeHandle: null,
+          dragStart: null,
+        };
+        // Switch to select tool so the transform box is usable
+        store.setTool('select');
+      }
     });
 
     trackList.appendChild(div);
@@ -323,6 +395,7 @@ document.getElementById('add-track-btn')!.addEventListener('click', async () => 
   const btn = document.getElementById('add-track-btn')!;
   const picked = await openTonePicker(comp.toneLibrary, null, btn);
   if (!picked) return; // Cancelled
+  history.snapshot();
   const track = createTrack(`Track ${comp.tracks.length + 1}`, picked.id);
   store.mutate(c => { c.tracks.push(track); });
   store.setSelectedTrack(track.id);
@@ -331,6 +404,7 @@ document.getElementById('add-track-btn')!.addEventListener('click', async () => 
 document.getElementById('new-tone-btn')!.addEventListener('click', async () => {
   const result = await openToneBuilder();
   if (result.action === 'save') {
+    history.snapshot();
     store.mutate(c => { c.toneLibrary.push(result.tone); });
   }
 });
@@ -398,9 +472,23 @@ function render() {
     bgDirty = false;
   }
 
+  // Clear stale drawingCurve reference (e.g. after undo removed the curve)
+  if (interaction.drawingCurve) {
+    const track = comp.tracks.find(t => t.id === state.selectedTrackId);
+    if (!track || !track.curves.includes(interaction.drawingCurve)) {
+      interaction.drawingCurve = null;
+      interaction.dragging = null;
+    }
+  }
+
   // Foreground: curves + playhead + interaction
   const rect = canvasContainer.getBoundingClientRect();
   fgCtx.clearRect(0, 0, rect.width, rect.height);
+
+  // Transform box (rendered behind curves so unselected curves remain clickable)
+  if (interaction.transformBox) {
+    renderTransformBox(fgCtx, viewport, interaction.transformBox.bbox, interaction.transformBox.activeHandle);
+  }
 
   // Render curves for all tracks
   for (const track of comp.tracks) {
@@ -409,25 +497,23 @@ function render() {
     if (!tone) continue;
 
     const isActiveTrack = track.id === state.selectedTrackId;
+    const emptySet = new Set<string>();
     renderCurves(
       fgCtx, viewport, track.curves, tone,
-      isActiveTrack ? state.selectedCurveId : null,
+      isActiveTrack ? state.selectedCurveIds : emptySet,
+      isActiveTrack ? store.getSelectedCurveId() : null,
       isActiveTrack ? state.selectedPointIndex : null,
     );
   }
 
-  // Transform box
-  if (interaction.transformBox) {
-    renderTransformBox(fgCtx, viewport, interaction.transformBox.bbox, interaction.transformBox.activeHandle);
-  }
-
   // Draw preview line when in draw mode (hidden during Ctrl-select)
   if (state.activeTool === 'draw' && interaction.cursorWorld) {
-    // Use the drawing curve, or the selected curve if not actively drawing
+    // Use the drawing curve, or the single selected curve if not actively drawing
+    const singleId = store.getSelectedCurveId();
     const previewCurve = interaction.drawingCurve
-      ?? (state.selectedCurveId
+      ?? (singleId
         ? comp.tracks.find(t => t.id === state.selectedTrackId)
-            ?.curves.find(c => c.id === state.selectedCurveId)
+            ?.curves.find(c => c.id === singleId)
         : null);
     const points = previewCurve?.points;
     if (points && points.length > 0) {
@@ -472,8 +558,11 @@ function render() {
 // ── Store subscription ──────────────────────────────────────────
 store.subscribe(() => {
   bgDirty = true;
-  // Sync viewport totalBeats in case composition was loaded or length changed
-  viewport.totalBeats = store.getComposition().totalBeats;
+  const comp = store.getComposition();
+  // Sync viewport and toolbar in case composition was loaded, undone, or changed
+  viewport.totalBeats = comp.totalBeats;
+  toolbar.updateBpm(comp.bpm);
+  toolbar.updateLength(comp.totalBeats);
   renderTrackList();
   renderPropertyPanel(document.getElementById('prop-content')!);
 });

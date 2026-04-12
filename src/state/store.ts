@@ -8,7 +8,7 @@ function createInitialState(): AppState {
   return {
     composition: createComposition(),
     selectedTrackId: null,
-    selectedCurveId: null,
+    selectedCurveIds: new Set(),
     selectedPointIndex: null,
     activeTool: 'draw',
     viewport: {
@@ -59,15 +59,49 @@ class Store {
 
   setSelectedTrack(trackId: string | null) {
     this.state.selectedTrackId = trackId;
-    this.state.selectedCurveId = null;
+    this.state.selectedCurveIds = new Set();
     this.state.selectedPointIndex = null;
     this.notify();
   }
 
+  /** Replace selection with a single curve (or clear). */
   setSelectedCurve(curveId: string | null) {
-    this.state.selectedCurveId = curveId;
+    this.state.selectedCurveIds = curveId ? new Set([curveId]) : new Set();
     this.state.selectedPointIndex = null;
     this.notify();
+  }
+
+  /** Replace selection with multiple curves. */
+  setSelectedCurves(curveIds: string[]) {
+    this.state.selectedCurveIds = new Set(curveIds);
+    this.state.selectedPointIndex = null;
+    this.notify();
+  }
+
+  /** Add a curve to the selection (Shift+click). */
+  addSelectedCurve(curveId: string) {
+    this.state.selectedCurveIds.add(curveId);
+    this.state.selectedPointIndex = null;
+    this.notify();
+  }
+
+  /** Toggle a curve in/out of the selection (Shift+click). */
+  toggleSelectedCurve(curveId: string) {
+    if (this.state.selectedCurveIds.has(curveId)) {
+      this.state.selectedCurveIds.delete(curveId);
+    } else {
+      this.state.selectedCurveIds.add(curveId);
+    }
+    this.state.selectedPointIndex = null;
+    this.notify();
+  }
+
+  /** Convenience: get the single selected curve ID, or null if 0 or 2+. */
+  getSelectedCurveId(): string | null {
+    if (this.state.selectedCurveIds.size === 1) {
+      return [...this.state.selectedCurveIds][0]!;
+    }
+    return null;
   }
 
   setSelectedPoint(index: number | null) {
@@ -115,7 +149,7 @@ class Store {
   loadComposition(comp: Composition) {
     this.state.composition = comp;
     this.state.selectedTrackId = comp.tracks[0]?.id ?? null;
-    this.state.selectedCurveId = null;
+    this.state.selectedCurveIds = new Set();
     this.state.selectedPointIndex = null;
     this.notify();
   }

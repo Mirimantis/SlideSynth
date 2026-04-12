@@ -96,7 +96,7 @@ export type ToolMode = 'draw' | 'select' | 'delete';
 export interface AppState {
   composition: Composition;
   selectedTrackId: string | null;
-  selectedCurveId: string | null;
+  selectedCurveIds: Set<string>;
   selectedPointIndex: number | null;
   activeTool: ToolMode;
   viewport: ViewportState;
@@ -120,8 +120,8 @@ export interface BoundingBox {
 }
 
 export interface TransformBoxState {
-  curveId: string;
-  originalPoints: ControlPoint[];
+  curveIds: string[];
+  originalPointsMap: Map<string, ControlPoint[]>;
   bbox: BoundingBox;
   activeHandle: TransformHandle | null;
   dragStart: Vec2 | null;
