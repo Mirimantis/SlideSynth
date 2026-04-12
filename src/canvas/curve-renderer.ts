@@ -14,12 +14,14 @@ export function renderCurves(
   vp: Viewport,
   curves: BezierCurve[],
   tone: ToneDefinition,
-  selectedCurveId: string | null,
+  selectedCurveIds: ReadonlySet<string>,
+  selectedPointCurveId: string | null,
   selectedPointIndex: number | null,
 ): void {
   for (const curve of curves) {
-    const isSelected = curve.id === selectedCurveId;
-    renderCurve(ctx, vp, curve, tone, isSelected, selectedPointIndex);
+    const isSelected = selectedCurveIds.has(curve.id);
+    const showHandles = isSelected && curve.id === selectedPointCurveId;
+    renderCurve(ctx, vp, curve, tone, isSelected, showHandles, selectedPointIndex);
   }
 }
 
@@ -29,6 +31,7 @@ function renderCurve(
   curve: BezierCurve,
   tone: ToneDefinition,
   isSelected: boolean,
+  showHandles: boolean,
   selectedPointIndex: number | null,
 ): void {
   if (curve.points.length === 0) return;
@@ -63,10 +66,10 @@ function renderCurve(
   for (let i = 0; i < curve.points.length; i++) {
     const pt = curve.points[i]!;
     const screen = vp.worldToScreen(pt.position.x, pt.position.y);
-    const isPointSelected = isSelected && selectedPointIndex === i;
+    const isPointSelected = showHandles && selectedPointIndex === i;
 
-    if (isSelected) {
-      // Draw handles when curve is selected
+    if (showHandles) {
+      // Draw handles when curve is selected and in single-select/point mode
       if (pt.handleIn) {
         drawHandle(ctx, vp, pt.position, pt.handleIn, tone.color);
       }
@@ -97,6 +100,15 @@ function renderCurve(
         ctx.fillStyle = tone.color;
         ctx.fillRect(barX, barY, barWidth * pt.volume, barHeight);
       }
+    } else if (isSelected) {
+      // Selected but no handles (multi-select): full-size anchor, no handles
+      ctx.beginPath();
+      ctx.arc(screen.sx, screen.sy, POINT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = tone.color;
+      ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     } else {
       // Small, faint anchor point when not selected
       ctx.beginPath();

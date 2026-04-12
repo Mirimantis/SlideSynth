@@ -19,7 +19,7 @@ export function createToolbar(
   container: HTMLElement,
   viewport: Viewport,
   callbacks: ToolbarCallbacks,
-): { updatePlayState(playing: boolean): void; updateZoom(): void; updateLength(beats: number): void } {
+): { updatePlayState(playing: boolean): void; updateZoom(): void; updateLength(beats: number): void; updateBpm(bpm: number): void; updateSnap(enabled: boolean): void } {
   container.innerHTML = `
     <div class="toolbar-row">
       <div class="toolbar-group transport">
@@ -60,10 +60,7 @@ export function createToolbar(
       </div>
 
       <div class="toolbar-group">
-        <label>
-          <input type="checkbox" id="snap-toggle" checked />
-          Snap
-        </label>
+        <button id="snap-toggle" class="tool-btn active" title="Toggle snap (S)">Snap</button>
       </div>
     </div>
   `;
@@ -103,8 +100,13 @@ export function createToolbar(
   zoomY.addEventListener('input', () => callbacks.onZoomYChange(Number(zoomY.value)));
 
   // Snap toggle
-  const snapToggle = container.querySelector('#snap-toggle') as HTMLInputElement;
-  snapToggle.addEventListener('change', () => callbacks.onSnapToggle(snapToggle.checked));
+  const snapToggle = container.querySelector('#snap-toggle') as HTMLButtonElement;
+  let snapOn = true;
+  snapToggle.addEventListener('click', () => {
+    snapOn = !snapOn;
+    snapToggle.classList.toggle('active', snapOn);
+    callbacks.onSnapToggle(snapOn);
+  });
 
   // Length
   const lengthInput = container.querySelector('#input-length') as HTMLInputElement;
@@ -146,6 +148,14 @@ export function createToolbar(
     updateLength(beats: number) {
       lengthInput.value = String(beats);
       updateLengthDisplay();
+    },
+    updateBpm(bpm: number) {
+      bpmInput.value = String(bpm);
+      updateLengthDisplay();
+    },
+    updateSnap(enabled: boolean) {
+      snapOn = enabled;
+      snapToggle.classList.toggle('active', enabled);
     },
   };
 }

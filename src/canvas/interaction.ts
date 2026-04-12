@@ -1,7 +1,8 @@
-import type { Vec2, BezierCurve, Track, TransformBoxState } from '../types';
+import type { Vec2, BezierCurve, ControlPoint, Track, TransformBoxState } from '../types';
 import type { Viewport } from './viewport';
 import { store } from '../state/store';
-import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeCurveBBox, deepCopyPoints, applyTransformToCurve } from '../model/curve';
+import { history } from '../state/history';
+import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, deepCopyPoints, applyTransformToCurve } from '../model/curve';
 import { snapToGrid, DEFAULT_SNAP_CONFIG } from '../utils/snap';
 import { distToPoint, nearestPointOnCubic } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
@@ -18,6 +19,8 @@ export interface InteractionState {
   dragPointIndex: number;
   /** Transform box state (active when double-click selects a curve for transform). */
   transformBox: TransformBoxState | null;
+  /** Whether Ctrl temporarily switched from draw to select (for Ctrl-click). */
+  ctrlSwitchedTool: boolean;
 }
 
 export function createInteraction(
@@ -31,6 +34,7 @@ export function createInteraction(
     dragCurveId: null,
     dragPointIndex: -1,
     transformBox: null,
+    ctrlSwitchedTool: false,
   };
 
   canvas.addEventListener('mousemove', (e) => {
@@ -39,7 +43,7 @@ export function createInteraction(
     const sy = e.clientY - rect.top;
     const world = vp.screenToWorld(sx, sy);
 
-    const snap = !e.shiftKey && store.getState().snapEnabled;
+    const snap = store.getState().snapEnabled;
     const snapped = snapToGrid(world.wx, world.wy, { ...DEFAULT_SNAP_CONFIG, enabled: snap });
     istate.cursorWorld = { x: snapped.wx, y: snapped.wy };
 
@@ -47,10 +51,15 @@ export function createInteraction(
     if (istate.transformBox?.activeHandle && istate.transformBox.dragStart) {
       const tb = istate.transformBox;
       const track = getSelectedTrack();
-      const curve = track?.curves.find(c => c.id === tb.curveId);
-      if (curve) {
+      if (track) {
         store.mutate(() => {
-          applyTransformToCurve(curve, tb.originalPoints, tb.bbox, tb.activeHandle!, tb.dragStart!, { x: snapped.wx, y: snapped.wy });
+          for (const curveId of tb.curveIds) {
+            const curve = track.curves.find(c => c.id === curveId);
+            const origPts = tb.originalPointsMap.get(curveId);
+            if (curve && origPts) {
+              applyTransformToCurve(curve, origPts, tb.bbox, tb.activeHandle!, tb.dragStart!, { x: snapped.wx, y: snapped.wy });
+            }
+          }
         });
       }
       return;
@@ -83,7 +92,7 @@ export function createInteraction(
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const world = vp.screenToWorld(sx, sy);
-    const snap = !e.shiftKey && state.snapEnabled;
+    const snap = state.snapEnabled;
     const snapped = snapToGrid(world.wx, world.wy, { ...DEFAULT_SNAP_CONFIG, enabled: snap });
     const worldPt: Vec2 = { x: snapped.wx, y: snapped.wy };
 
@@ -95,31 +104,63 @@ export function createInteraction(
         const hit = hitTestTransformBox(sx, sy, istate.transformBox.bbox, vp);
         if (hit) {
           const track = getSelectedTrack();
-          const curve = track?.curves.find(c => c.id === istate.transformBox!.curveId);
-          if (!curve) return;
+          if (!track) return;
+          const tb = istate.transformBox;
 
           // Octave arrows are instant actions, not drags
           if (hit === 'octaveUp' || hit === 'octaveDown') {
+            history.snapshot();
             const shift = hit === 'octaveUp' ? 12 : -12;
             store.mutate(() => {
-              for (const pt of curve.points) {
-                pt.position.y += shift;
+              for (const curveId of tb.curveIds) {
+                const curve = track.curves.find(c => c.id === curveId);
+                if (curve) {
+                  for (const pt of curve.points) {
+                    pt.position.y += shift;
+                  }
+                }
               }
             });
-            istate.transformBox.bbox = computeCurveBBox(curve);
+            const curves = tb.curveIds.map(id => track.curves.find(c => c.id === id)).filter((c): c is BezierCurve => !!c);
+            tb.bbox = computeMultiCurveBBox(curves);
             return;
           }
 
-          // Start a transform drag
-          istate.transformBox.activeHandle = hit;
-          istate.transformBox.dragStart = { ...worldPt };
-          istate.transformBox.originalPoints = deepCopyPoints(curve.points);
+          // For translate hits, check for curve selection first
+          if (hit === 'translate') {
+            const curveHit = findCurveAt(worldPt, vp, track);
+            if (curveHit && e.shiftKey) {
+              // Shift+click inside box: toggle curve in/out of selection
+              store.toggleSelectedCurve(curveHit.id);
+              store.setSelectedPoint(null);
+              rebuildTransformBox(istate, track);
+              return;
+            }
+            if (curveHit && !state.selectedCurveIds.has(curveHit.id)) {
+              // Clicked an unselected curve inside box: select it instead
+              store.setSelectedCurve(curveHit.id);
+              store.setSelectedPoint(null);
+              rebuildTransformBox(istate, track);
+              return;
+            }
+          }
+
+          // Start a transform drag (resize handles, or translate on selected/empty)
+          history.snapshot();
+          tb.activeHandle = hit;
+          tb.dragStart = { ...worldPt };
+          const map = new Map<string, ControlPoint[]>();
+          for (const curveId of tb.curveIds) {
+            const curve = track.curves.find(c => c.id === curveId);
+            if (curve) map.set(curveId, deepCopyPoints(curve.points));
+          }
+          tb.originalPointsMap = map;
           return;
         }
         // Click outside the box dismisses it
         istate.transformBox = null;
       }
-      handleSelectClick(istate, worldPt, vp);
+      handleSelectClick(istate, worldPt, vp, e.shiftKey);
     } else if (state.activeTool === 'delete') {
       handleDeleteClick(worldPt, vp);
     }
@@ -129,10 +170,10 @@ export function createInteraction(
     // Finalize transform drag
     if (istate.transformBox?.activeHandle) {
       const track = getSelectedTrack();
-      const curve = track?.curves.find(c => c.id === istate.transformBox!.curveId);
-      if (curve) {
-        // Recompute bbox from transformed points
-        istate.transformBox.bbox = computeCurveBBox(curve);
+      if (track) {
+        const tb = istate.transformBox;
+        const curves = tb.curveIds.map(id => track.curves.find(c => c.id === id)).filter((c): c is BezierCurve => !!c);
+        tb.bbox = computeMultiCurveBBox(curves);
       }
       istate.transformBox.activeHandle = null;
       istate.transformBox.dragStart = null;
@@ -143,52 +184,13 @@ export function createInteraction(
     istate.dragPointIndex = -1;
   });
 
-  // Double-click in select mode to activate transform box
-  canvas.addEventListener('dblclick', (e) => {
-    const state = store.getState();
-    if (state.activeTool !== 'select') return;
-    const track = getSelectedTrack();
-    if (!track) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
-    const world = vp.screenToWorld(sx, sy);
-    const worldPt: Vec2 = { x: world.wx, y: world.wy };
-
-    const hitRadiusX = 8 / vp.state.zoomX;
-    const hitRadiusY = 8 / vp.state.zoomY;
-    const hitRadius = Math.max(hitRadiusX, hitRadiusY);
-
-    for (const curve of track.curves) {
-      if (curve.points.length < 2) continue;
-      for (let i = 0; i < curve.points.length - 1; i++) {
-        const seg = getSegmentControlPoints(curve, i);
-        if (!seg) continue;
-        const nearest = nearestPointOnCubic(seg.p0, seg.p1, seg.p2, seg.p3, worldPt);
-        if (nearest.dist < hitRadius) {
-          istate.transformBox = {
-            curveId: curve.id,
-            originalPoints: deepCopyPoints(curve.points),
-            bbox: computeCurveBBox(curve),
-            activeHandle: null,
-            dragStart: null,
-          };
-          store.setSelectedCurve(curve.id);
-          store.setSelectedPoint(null);
-          return;
-        }
-      }
-    }
-  });
-
   // Enter to finish drawing, Escape to cancel/dismiss
   // Ctrl held in draw mode temporarily switches to select
   // Delete/Backspace deletes selected curve (when no point is selected)
   window.addEventListener('keydown', (e) => {
     const state = store.getState();
     const inDrawMode = state.activeTool === 'draw';
-    const hasDrawTarget = istate.drawingCurve || state.selectedCurveId;
+    const hasDrawTarget = istate.drawingCurve || store.getSelectedCurveId();
     if (e.key === 'Escape' && istate.transformBox) {
       istate.transformBox = null;
       canvas.style.cursor = 'default';
@@ -197,14 +199,18 @@ export function createInteraction(
     } else if (e.key === 'Escape' && inDrawMode && hasDrawTarget) {
       finishDrawing(istate);
     } else if (e.key === 'Control' && inDrawMode) {
+      istate.ctrlSwitchedTool = true;
       store.setTool('select');
-    } else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedCurveId && state.selectedPointIndex === null) {
-      const curveId = state.selectedCurveId;
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedCurveIds.size > 0 && state.selectedPointIndex === null) {
+      history.snapshot();
+      const idsToDelete = [...state.selectedCurveIds];
       store.mutate(comp => {
         const track = comp.tracks.find(t => t.id === state.selectedTrackId);
         if (track) {
-          const idx = track.curves.findIndex(c => c.id === curveId);
-          if (idx >= 0) track.curves.splice(idx, 1);
+          for (const curveId of idsToDelete) {
+            const idx = track.curves.findIndex(c => c.id === curveId);
+            if (idx >= 0) track.curves.splice(idx, 1);
+          }
         }
       });
       store.setSelectedCurve(null);
@@ -213,10 +219,12 @@ export function createInteraction(
   });
 
   window.addEventListener('keyup', (e) => {
-    if (e.key === 'Control' && store.getState().activeTool === 'select') {
+    if (e.key === 'Control' && istate.ctrlSwitchedTool) {
+      istate.ctrlSwitchedTool = false;
       store.setTool('draw');
     }
   });
+
 
   return istate;
 }
@@ -226,10 +234,11 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
   const track = getSelectedTrack();
   if (!track) return;
 
-  // Determine the target curve: either the one being drawn, or a selected curve
+  // Determine the target curve: either the one being drawn, or the single selected curve
+  const singleSelectedId = store.getSelectedCurveId();
   const targetCurve = istate.drawingCurve
-    ?? (state.selectedCurveId
-      ? track.curves.find(c => c.id === state.selectedCurveId)
+    ?? (singleSelectedId
+      ? track.curves.find(c => c.id === singleSelectedId)
       : null);
 
   // Hit-test against existing points on the target curve
@@ -244,6 +253,7 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
         // Hit an existing point — clear handles and set up for handle drag.
         // If the user releases without dragging, handles stay null (sharp point).
         // If the user drags, handleDrag creates new handles.
+        history.snapshot();
         istate.drawingCurve = targetCurve;
         store.mutate(() => {
           pt.handleIn = null;
@@ -262,6 +272,7 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
   if (!istate.drawingCurve) {
     if (targetCurve) {
       // Add point to the selected curve
+      history.snapshot();
       istate.drawingCurve = targetCurve;
       const point = createControlPoint(worldPt.x, worldPt.y);
       const idx = addPointToCurve(targetCurve, point);
@@ -273,6 +284,7 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
       istate.dragPointIndex = idx;
     } else {
       // Start a new curve
+      history.snapshot();
       const curve = createCurve();
       const point = createControlPoint(worldPt.x, worldPt.y);
       addPointToCurve(curve, point);
@@ -292,6 +304,7 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
     }
   } else {
     // Add point to existing drawing curve
+    history.snapshot();
     const point = createControlPoint(worldPt.x, worldPt.y);
     const idx = addPointToCurve(istate.drawingCurve, point);
     store.setSelectedPoint(idx);
@@ -303,30 +316,28 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
   }
 }
 
-function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport): void {
-  const state = store.getState();
+function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport, shiftKey: boolean): void {
   const track = getSelectedTrack();
   if (!track) return;
 
-  // Hit-test against all points in all curves of selected track
-  // Convert hit radius from screen pixels to approximate world units
   const hitRadiusX = 8 / vp.state.zoomX;
   const hitRadiusY = 8 / vp.state.zoomY;
   const hitRadius = Math.max(hitRadiusX, hitRadiusY);
 
-  for (const curve of track.curves) {
-    for (let i = 0; i < curve.points.length; i++) {
-      const pt = curve.points[i]!;
-
-      // Check handle hits first (smaller targets, higher priority when selected)
-      if (curve.id === state.selectedCurveId) {
+  // Handle hits only available in single-curve mode, without Shift
+  const singleCurveId = store.getSelectedCurveId();
+  if (singleCurveId && !shiftKey) {
+    const curve = track.curves.find(c => c.id === singleCurveId);
+    if (curve) {
+      for (let i = 0; i < curve.points.length; i++) {
+        const pt = curve.points[i]!;
         if (pt.handleIn) {
           const habs: Vec2 = { x: pt.position.x + pt.handleIn.x, y: pt.position.y + pt.handleIn.y };
           if (distToPoint(worldPt, habs) < hitRadius) {
+            history.snapshot();
             istate.dragging = 'handleIn';
             istate.dragCurveId = curve.id;
             istate.dragPointIndex = i;
-            store.setSelectedCurve(curve.id);
             store.setSelectedPoint(i);
             return;
           }
@@ -334,23 +345,37 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
         if (pt.handleOut) {
           const habs: Vec2 = { x: pt.position.x + pt.handleOut.x, y: pt.position.y + pt.handleOut.y };
           if (distToPoint(worldPt, habs) < hitRadius) {
+            history.snapshot();
             istate.dragging = 'handleOut';
             istate.dragCurveId = curve.id;
             istate.dragPointIndex = i;
-            store.setSelectedCurve(curve.id);
             store.setSelectedPoint(i);
             return;
           }
         }
       }
+    }
+  }
 
-      // Check anchor point hit
+  // Hit-test anchor points on all curves
+  for (const curve of track.curves) {
+    for (let i = 0; i < curve.points.length; i++) {
+      const pt = curve.points[i]!;
       if (distToPoint(worldPt, pt.position) < hitRadius) {
-        istate.dragging = 'point';
-        istate.dragCurveId = curve.id;
-        istate.dragPointIndex = i;
-        store.setSelectedCurve(curve.id);
-        store.setSelectedPoint(i);
+        if (shiftKey) {
+          // Shift+click on a point: toggle the curve in selection
+          store.toggleSelectedCurve(curve.id);
+          rebuildTransformBox(istate, track);
+        } else {
+          // Click on a point: select that curve, select the point, start drag
+          history.snapshot();
+          istate.dragging = 'point';
+          istate.dragCurveId = curve.id;
+          istate.dragPointIndex = i;
+          store.setSelectedCurve(curve.id);
+          store.setSelectedPoint(i);
+          istate.transformBox = null;
+        }
         return;
       }
     }
@@ -362,20 +387,50 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
     for (let i = 0; i < curve.points.length - 1; i++) {
       const seg = getSegmentControlPoints(curve, i);
       if (!seg) continue;
-      // nearestPointOnCubic works in world coords; convert hit radius
-      // to world units using the average of X and Y zoom
       const nearest = nearestPointOnCubic(seg.p0, seg.p1, seg.p2, seg.p3, worldPt);
       if (nearest.dist < hitRadius) {
-        store.setSelectedCurve(curve.id);
+        if (shiftKey) {
+          store.toggleSelectedCurve(curve.id);
+        } else {
+          store.setSelectedCurve(curve.id);
+        }
         store.setSelectedPoint(null);
+        rebuildTransformBox(istate, track);
         return;
       }
     }
   }
 
-  // Click on empty space → deselect
-  store.setSelectedCurve(null);
-  store.setSelectedPoint(null);
+  // Click on empty space → deselect (unless Shift held)
+  if (!shiftKey) {
+    store.setSelectedCurve(null);
+    store.setSelectedPoint(null);
+    istate.transformBox = null;
+  }
+}
+
+/** Rebuild the transform box from the current selectedCurveIds. */
+function rebuildTransformBox(istate: InteractionState, track: Track): void {
+  const state = store.getState();
+  const selectedIds = [...state.selectedCurveIds];
+  const curves = selectedIds
+    .map(id => track.curves.find(c => c.id === id))
+    .filter((c): c is BezierCurve => !!c);
+  if (curves.length === 0) {
+    istate.transformBox = null;
+    return;
+  }
+  const map = new Map<string, ControlPoint[]>();
+  for (const curve of curves) {
+    map.set(curve.id, deepCopyPoints(curve.points));
+  }
+  istate.transformBox = {
+    curveIds: selectedIds,
+    originalPointsMap: map,
+    bbox: computeMultiCurveBBox(curves),
+    activeHandle: null,
+    dragStart: null,
+  };
 }
 
 function handleDeleteClick(worldPt: Vec2, vp: Viewport): void {
@@ -390,6 +445,7 @@ function handleDeleteClick(worldPt: Vec2, vp: Viewport): void {
     for (let i = 0; i < curve.points.length; i++) {
       const pt = curve.points[i]!;
       if (distToPoint(worldPt, pt.position) < hitRadius) {
+        history.snapshot();
         store.mutate(() => {
           curve.points.splice(i, 1);
           // Remove curve if empty
@@ -439,6 +495,33 @@ function finishDrawing(istate: InteractionState): void {
   store.setSelectedPoint(null);
 }
 
+
+/** Find the curve (point or segment) at a given world position. */
+function findCurveAt(worldPt: Vec2, vp: Viewport, track: Track): BezierCurve | null {
+  const hitRadiusX = 8 / vp.state.zoomX;
+  const hitRadiusY = 8 / vp.state.zoomY;
+  const hitRadius = Math.max(hitRadiusX, hitRadiusY);
+
+  // Check anchor points
+  for (const curve of track.curves) {
+    for (const pt of curve.points) {
+      if (distToPoint(worldPt, pt.position) < hitRadius) return curve;
+    }
+  }
+
+  // Check curve segments
+  for (const curve of track.curves) {
+    if (curve.points.length < 2) continue;
+    for (let i = 0; i < curve.points.length - 1; i++) {
+      const seg = getSegmentControlPoints(curve, i);
+      if (!seg) continue;
+      const nearest = nearestPointOnCubic(seg.p0, seg.p1, seg.p2, seg.p3, worldPt);
+      if (nearest.dist < hitRadius) return curve;
+    }
+  }
+
+  return null;
+}
 
 function getSelectedTrack(): Track | undefined {
   const state = store.getState();

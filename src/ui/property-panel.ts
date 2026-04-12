@@ -1,4 +1,5 @@
 import { store } from '../state/store';
+import { history } from '../state/history';
 import { noteNumberToName } from '../constants';
 import { setPointVolume } from '../model/curve';
 import { openTonePicker } from './tone-picker';
@@ -16,7 +17,8 @@ export function renderPropertyPanel(container: HTMLElement): void {
     return;
   }
 
-  const curve = track.curves.find(c => c.id === state.selectedCurveId);
+  const singleCurveId = store.getSelectedCurveId();
+  const curve = singleCurveId ? track.curves.find(c => c.id === singleCurveId) : null;
   if (!curve || state.selectedPointIndex === null) {
     // Show track info
     const tone = comp.toneLibrary.find(t => t.id === track.toneId);
@@ -41,6 +43,9 @@ export function renderPropertyPanel(container: HTMLElement): void {
       <p class="placeholder-text" style="margin-top:12px">Select a point to edit its properties</p>
     `;
 
+    container.querySelector('#prop-track-vol')?.addEventListener('mousedown', () => {
+      history.snapshot();
+    });
     container.querySelector('#prop-track-vol')?.addEventListener('input', (e) => {
       const v = Number((e.target as HTMLInputElement).value);
       store.mutate(() => { track.volume = v; });
@@ -52,6 +57,7 @@ export function renderPropertyPanel(container: HTMLElement): void {
       const el = e.target as HTMLElement;
       openTonePicker(comp.toneLibrary, track.toneId, el).then(picked => {
         if (picked) {
+          history.snapshot();
           store.mutate(() => { track.toneId = picked.id; });
         }
       });
@@ -97,6 +103,9 @@ export function renderPropertyPanel(container: HTMLElement): void {
     </div>
   `;
 
+  container.querySelector('#prop-vol')?.addEventListener('mousedown', () => {
+    history.snapshot();
+  });
   container.querySelector('#prop-vol')?.addEventListener('input', (e) => {
     const v = Number((e.target as HTMLInputElement).value);
     store.mutate(() => {

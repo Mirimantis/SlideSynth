@@ -21,7 +21,7 @@ Traditional music notation uses discrete note symbols. SlideSynth replaces this 
 
 **Why no React/Vue/Svelte?** The UI is ~90% canvas. The only DOM elements are the toolbar, tone builder dialog, tone picker popup, and track/property panels. These are simple enough that vanilla DOM manipulation is cleaner than a framework fighting with imperative canvas code.
 
-**Note on MIDI:** MIDI export was considered but deferred. MIDI's note-based model doesn't naturally support the continuous pitch modulation that is SlideSynth's core feature. Approximation via pitch bend events is possible but lossy. WAV export provides exact reproduction and is the recommended output format.
+**Note on MIDI:** MIDI *export* was considered but deferred. MIDI's note-based model doesn't naturally support the continuous pitch modulation that is SlideSynth's core feature. Approximation via pitch bend events is possible but lossy. WAV export provides exact reproduction and is the recommended output format. MIDI *import* is supported — MIDI notes are converted to Bezier curves (one curve per note, with pitch bends applied).
 
 ## Architecture Decisions
 
@@ -51,11 +51,15 @@ The `OfflineAudioContext` API renders the Web Audio graph in non-real-time. This
 
 ### 6. State Management Without a Library
 
-A simple pub/sub store with `getState()`, `mutate(fn)`, and `subscribe(callback)` in ~120 lines. The state shape is well-defined and the mutation surface is limited. Future undo/redo can be implemented via state snapshot stacking.
+A simple pub/sub store with `getState()`, `mutate(fn)`, and `subscribe(callback)` in ~120 lines. The state shape is well-defined and the mutation surface is limited. Undo/redo is implemented via snapshot-based state stacking (see below).
+
+### Undo/Redo via Snapshot Stacking
+
+A `UndoHistory` singleton takes deep clones of the `Composition` (via `JSON.parse(JSON.stringify())`) before each undoable operation. Clones are stored in an undo stack (max 50). On undo, current state is pushed to the redo stack and the previous snapshot is restored via `store.loadComposition()`. Drag operations are batched: the snapshot is taken on `mousedown`, so the entire drag counts as one undo step. Keyboard shortcuts: Ctrl+Z (undo), Ctrl+Shift+Z / Ctrl+Y (redo). UI buttons are also provided in the toolbar.
 
 ### 7. Bounded Viewport
 
-The viewport clamps pan/scroll to stay within the composition bounds: beat 0 to `totalBeats` on the X axis, and C2 (MIDI 36) to C7 (MIDI 96) on the Y axis. This prevents users from getting lost in infinite empty space. The composition length is user-configurable (default 120 beats = 1 minute at 120 BPM, max 3000 beats).
+The viewport clamps pan/scroll to stay within the composition bounds: beat 0 to `totalBeats` on the X axis, and C0 (MIDI 12) to C9 (MIDI 120) on the Y axis — 9 octaves. This prevents users from getting lost in infinite empty space. The composition length is user-configurable (default 120 beats = 1 minute at 120 BPM, max 3000 beats).
 
 ## Data Models
 
@@ -88,9 +92,9 @@ Top-level document: BPM, beats per measure, total length in beats, array of trac
 
 ## Staff Configuration
 
-- **Note range:** C2–C7 (5 octaves, 60 chromatic note lines)
+- **Note range:** C0–C9 (9 octaves, 108 chromatic note lines)
 - **Grid snap:** Each note line (Y) and each 1/16 beat (X) is a snap position
-- **Free placement:** Holding Shift disables snap for continuous positioning
+- **Free placement:** Press **S** to toggle snap on/off (shown as a toolbar button)
 - **Zoom:** Independent X (time) and Y (pitch) zoom via scroll wheel (Ctrl+wheel for Y)
 
 ## UI Layout
@@ -99,7 +103,7 @@ Top-level document: BPM, beats per measure, total length in beats, array of trac
 +---------------------------------------------------------------+
 | [TOOLBAR] Play|Pause|Stop [Loop]  BPM:[120]  Length:[120] 1:00|
 | Tool:[Draw|Select|Del]  ZoomX:[--o--]  ZoomY:[--o--]  [Snap] |
-| [Save] [Load] [WAV]                                          |
+| [Save] [Load] [WAV] [MIDI]  [Undo] [Redo]                    |
 +----------+-------------------------------------------+---------+
 |  TRACKS  |            CANVAS (dual layer)            |  PROPS  |
 |  200px   |  --- C5 --------------------------------  |  200px  |
@@ -117,12 +121,22 @@ Top-level document: BPM, beats per measure, total length in beats, array of trac
 Layout uses CSS Grid: `grid-template-columns: 200px 1fr 200px`, `grid-template-rows: auto 1fr`.
 
 ### Track Panel Features
-- Click a track to select it (curves are drawn on the selected track)
+- Click a track to select it, select all its curves, and show a transform box around them (auto-switches to Select tool)
 - Click the tone name to open a **tone picker popup** for reassigning the track's tone
 - **M** button mutes a track; **S** button solos it (only solo tracks play when any track is soloed)
 - **T** button opens the tone builder to edit the track's current tone
 - **+ Track** button opens tone picker first, then creates a new track with the chosen tone
 - **+ Tone** button opens the tone builder to create a new tone from scratch
+
+### Curve Selection and Transform
+- **Select tool:** Click a curve segment to select it and activate its transform box
+- **Multi-select:** Hold **Shift** and click additional curves to add/remove them from the selection
+- **Transform box:** Surrounds all selected curves with resize handles (edges, corners) and translate (drag body)
+- **Octave shift buttons:** ▲/▼ arrows on the transform box shift all selected curves ±12 semitones
+- Clicking a point on a selected curve (single-select only) enables point editing with handle display
+- Clicking an unselected curve inside a transform box selects it instead of starting a translate drag
+- **Ctrl held** in Draw mode temporarily switches to Select for quick Ctrl+click selection
+- **Delete/Backspace** with curves selected (no point selected) deletes all selected curves
 
 ### Tone Picker
 A popup anchored to the click target, listing all tones in the library with:
@@ -150,10 +164,14 @@ Context-sensitive right panel:
 | D | Switch to Draw tool |
 | V | Switch to Select tool |
 | X | Switch to Delete tool |
+| S | Toggle grid snap on/off |
 | L | Toggle loop on/off |
-| Delete / Backspace | Delete selected control point |
-| Escape | Cancel current drawing |
-| Shift (held) | Disable grid snapping |
+| Ctrl+Z | Undo |
+| Ctrl+Shift+Z / Ctrl+Y | Redo |
+| Delete / Backspace | Delete selected point, or all selected curves (if no point selected) |
+| Enter / Escape | Finish current drawing |
+| Ctrl (held in Draw mode) | Temporarily switch to Select tool |
+| Shift+Click (Select tool) | Add/remove curve from multi-selection |
 | Alt+Click drag | Pan the canvas |
 | Middle-click drag | Pan the canvas |
 | Scroll wheel | Zoom X axis |
@@ -167,6 +185,9 @@ Compositions are serialized as versioned JSON files. The format preserves the co
 ### WAV Export
 Uses `OfflineAudioContext` to render the full composition offline at 44100Hz stereo. The same synthesis code path (tone synth + curve sampler + scheduling) is used for both real-time playback and WAV export, guaranteeing identical output. The result is encoded as a standard 16-bit PCM WAV file.
 
+### MIDI Import
+MIDI files (`.mid`, `.midi`) can be imported via the toolbar button. Each MIDI channel maps to a track, and each note event is converted to a two-point Bezier curve (note-on to note-off). Pitch bend events are applied to adjust the curve's Y position. Tracks are auto-assigned tones from the default library in round-robin fashion. Composition BPM and total length are derived from the MIDI file's tempo and duration.
+
 ## Implementation Status
 
 | Phase | Focus | Status |
@@ -177,7 +198,11 @@ Uses `OfflineAudioContext` to render the full composition offline at 44100Hz ste
 | 4 | Playback Engine | Complete |
 | 5 | Tone Builder + Multi-Track | Complete |
 | 6 | JSON Save/Load + WAV Export | Complete |
-| 7 | Polish (Undo/redo, perf) | Not started |
+| 7 | MIDI Import | Complete |
+| 8 | Curve Select + Transform Box | Complete |
+| 9 | Undo/Redo | Complete |
+| 10 | Multi-Curve Selection | Complete |
+| 11 | UX Polish (extended range, snap toggle, shortcuts) | Complete |
 
 ## File Structure
 
@@ -194,8 +219,8 @@ SlideSynth/
 │   ├── types.ts                   # All shared interfaces
 │   ├── constants.ts               # Note range, zoom limits, presets, defaults
 │   ├── state/
-│   │   ├── store.ts               # Pub/sub state store (~120 lines)
-│   │   └── actions.ts             # Action type definitions (for future undo/redo)
+│   │   ├── store.ts               # Pub/sub state store with multi-curve selection
+│   │   └── history.ts             # Snapshot-based undo/redo (max 50 steps)
 │   ├── audio/
 │   │   ├── engine.ts              # AudioContext lifecycle, user-gesture guard
 │   │   ├── tone-synth.ts          # Build oscillator graph from ToneDefinition
@@ -203,8 +228,9 @@ SlideSynth/
 │   │   └── curve-sampler.ts       # Bezier → pitch/volume sample arrays
 │   ├── canvas/
 │   │   ├── staff-renderer.ts      # Grid lines, note labels, beat markers
-│   │   ├── curve-renderer.ts      # Curves with color/dash, handles, selection
-│   │   ├── interaction.ts         # Pen tool, select, drag, delete tools
+│   │   ├── curve-renderer.ts      # Curves with color/dash, handles, multi-select rendering
+│   │   ├── interaction.ts         # Pen tool, select (multi-curve), drag, delete, transform
+│   │   ├── transform-box-renderer.ts  # Transform box with resize handles and octave buttons
 │   │   ├── viewport.ts            # Pan, zoom, coord transforms, clamping
 │   │   └── playhead.ts            # Animated playhead line
 │   ├── model/
@@ -214,7 +240,8 @@ SlideSynth/
 │   │   └── composition.ts         # Top-level document model
 │   ├── export/
 │   │   ├── json-export.ts         # Serialize/deserialize, file download/open
-│   │   └── wav-export.ts          # OfflineAudioContext → 16-bit PCM WAV
+│   │   ├── wav-export.ts          # OfflineAudioContext → 16-bit PCM WAV
+│   │   └── midi-import.ts         # MIDI file → Composition conversion
 │   ├── ui/
 │   │   ├── toolbar.ts             # Transport, BPM, length, tools, zoom, snap
 │   │   ├── tone-builder.ts        # Tone definition modal dialog

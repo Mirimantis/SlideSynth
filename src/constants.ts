@@ -1,9 +1,9 @@
 import type { ToneDefinition } from './types';
 
 // ── Staff range ─────────────────────────────────────────────────
-// C2 (MIDI 36) through C7 (MIDI 96) — 5 octaves, 61 note lines
-export const MIN_NOTE = 36;  // C2
-export const MAX_NOTE = 96;  // C7
+// C0 (MIDI 12) through C9 (MIDI 120) — 9 octaves, 109 note lines
+export const MIN_NOTE = 12;  // C0
+export const MAX_NOTE = 120; // C9
 
 // ── Note names ──────────────────────────────────────────────────
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
