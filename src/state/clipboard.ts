@@ -145,3 +145,48 @@ export function duplicateCurves(): string[] | null {
   }
   return newIds.length > 0 ? newIds : null;
 }
+
+/**
+ * Duplicate selected curves, placing each copy so its first point
+ * is at the last point of the original (continuation).
+ * Returns the new curve IDs, or null if nothing duplicated.
+ */
+export function continueCurves(): string[] | null {
+  const state = store.getState();
+  if (state.selectedCurveIds.size === 0 || !state.selectedTrackId) return null;
+
+  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  if (!track) return null;
+
+  const newIds: string[] = [];
+
+  history.snapshot();
+  store.mutate(comp => {
+    const t = comp.tracks.find(t => t.id === state.selectedTrackId);
+    if (!t) return;
+
+    for (const curveId of state.selectedCurveIds) {
+      const original = t.curves.find(c => c.id === curveId);
+      if (!original || original.points.length === 0) continue;
+
+      const firstPt = original.points[0]!;
+      const lastPt = original.points[original.points.length - 1]!;
+      const offsetX = lastPt.position.x - firstPt.position.x;
+      const offsetY = lastPt.position.y - firstPt.position.y;
+
+      const curve = createCurve();
+      curve.points = deepCopyPoints(original.points);
+      for (const pt of curve.points) {
+        pt.position.x += offsetX;
+        pt.position.y += offsetY;
+      }
+      t.curves.push(curve);
+      newIds.push(curve.id);
+    }
+  });
+
+  if (newIds.length > 0) {
+    store.setSelectedCurves(newIds);
+  }
+  return newIds.length > 0 ? newIds : null;
+}
