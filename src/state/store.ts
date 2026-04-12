@@ -22,6 +22,8 @@ function createInitialState(): AppState {
       positionBeats: 0,
     },
     snapEnabled: true,
+    scaleRoot: null,
+    scaleId: null,
   };
 }
 
@@ -116,6 +118,19 @@ class Store {
 
   setSnap(enabled: boolean) {
     this.state.snapEnabled = enabled;
+    this.notify();
+  }
+
+  setScaleRoot(root: number | null) {
+    this.state.scaleRoot = root;
+    if (root === null) {
+      this.state.scaleId = null;
+    }
+    this.notify();
+  }
+
+  setScaleId(scaleId: string | null) {
+    this.state.scaleId = scaleId;
     this.notify();
   }
 

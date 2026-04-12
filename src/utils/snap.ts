@@ -1,13 +1,18 @@
 import { SUBDIVISIONS_PER_BEAT, MIN_NOTE, MAX_NOTE } from '../constants';
+import type { ScaleDefinition } from './scales';
+import { nearestScaleNote } from './scales';
 
 export interface SnapConfig {
   enabled: boolean;
   subdivisionsPerBeat: number;
+  scaleRoot: number | null;
+  scale: ScaleDefinition | null;
 }
 
 /**
  * Snap world coordinates to the grid.
- * X snaps to 1/16 beat boundaries, Y snaps to nearest integer note.
+ * X snaps to 1/16 beat boundaries.
+ * Y snaps to nearest in-scale note if a scale is active, otherwise nearest integer note.
  * Returns original coordinates if snap is disabled.
  */
 export function snapToGrid(
@@ -19,7 +24,13 @@ export function snapToGrid(
 
   const step = 1 / config.subdivisionsPerBeat;
   const snappedX = Math.round(wx / step) * step;
-  const snappedY = Math.round(Math.max(MIN_NOTE, Math.min(MAX_NOTE, wy)));
+
+  let snappedY: number;
+  if (config.scaleRoot !== null && config.scale) {
+    snappedY = nearestScaleNote(wy, config.scaleRoot, config.scale);
+  } else {
+    snappedY = Math.round(Math.max(MIN_NOTE, Math.min(MAX_NOTE, wy)));
+  }
 
   return { wx: Math.max(0, snappedX), wy: snappedY };
 }
@@ -27,4 +38,6 @@ export function snapToGrid(
 export const DEFAULT_SNAP_CONFIG: SnapConfig = {
   enabled: true,
   subdivisionsPerBeat: SUBDIVISIONS_PER_BEAT,
+  scaleRoot: null,
+  scale: null,
 };

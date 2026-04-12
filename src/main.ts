@@ -17,6 +17,7 @@ import { history } from './state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves } from './state/clipboard';
 import { createTrack } from './model/track';
 import { computeMultiCurveBBox, deepCopyPoints } from './model/curve';
+import { getScaleById } from './utils/scales';
 import type { ToolMode, ControlPoint } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -115,6 +116,14 @@ const toolbar = createToolbar(toolbarContainer, viewport, {
   },
   onSnapToggle(enabled: boolean) {
     store.setSnap(enabled);
+  },
+  onScaleRootChange(root: number | null) {
+    store.setScaleRoot(root);
+    bgDirty = true;
+  },
+  onScaleIdChange(scaleId: string | null) {
+    store.setScaleId(scaleId);
+    bgDirty = true;
   },
   onBpmChange(bpm: number) {
     history.snapshot();
@@ -504,7 +513,9 @@ function render() {
   // Background: staff grid
   if (bgDirty) {
     const rect = canvasContainer.getBoundingClientRect();
-    renderStaff(bgCtx, viewport, rect.width, rect.height, comp.totalBeats, comp.beatsPerMeasure);
+    const scaleRoot = state.scaleRoot;
+    const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
+    renderStaff(bgCtx, viewport, rect.width, rect.height, comp.totalBeats, comp.beatsPerMeasure, scaleRoot, scale);
     bgDirty = false;
   }
 

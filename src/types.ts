@@ -102,6 +102,8 @@ export interface AppState {
   viewport: ViewportState;
   playback: PlaybackInfo;
   snapEnabled: boolean;
+  scaleRoot: number | null;    // 0-11, or null = no scale
+  scaleId: string | null;      // ScaleDefinition.id, or null
 }
 
 // ── Transform Box ──────────────────────────────────────────────

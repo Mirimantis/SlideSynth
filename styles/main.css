@@ -75,6 +75,21 @@ body {
   accent-color: var(--accent);
 }
 
+.toolbar-group select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.toolbar-group select:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .toolbar-group input[type="checkbox"] {
   accent-color: var(--accent);
 }
