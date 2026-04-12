@@ -1,6 +1,7 @@
 import { createViewport } from './canvas/viewport';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
+import { renderTransformBox } from './canvas/transform-box-renderer';
 import { renderPlayhead } from './canvas/playhead';
 import { createInteraction } from './canvas/interaction';
 import { createToolbar } from './ui/toolbar';
@@ -415,19 +416,46 @@ function render() {
     );
   }
 
-  // Draw preview line when in draw mode
-  if (interaction.drawingCurve && interaction.cursorWorld) {
-    const points = interaction.drawingCurve.points;
-    const lastPt = points[points.length - 1];
-    if (lastPt) {
+  // Transform box
+  if (interaction.transformBox) {
+    renderTransformBox(fgCtx, viewport, interaction.transformBox.bbox, interaction.transformBox.activeHandle);
+  }
+
+  // Draw preview line when in draw mode (hidden during Ctrl-select)
+  if (state.activeTool === 'draw' && interaction.cursorWorld) {
+    // Use the drawing curve, or the selected curve if not actively drawing
+    const previewCurve = interaction.drawingCurve
+      ?? (state.selectedCurveId
+        ? comp.tracks.find(t => t.id === state.selectedTrackId)
+            ?.curves.find(c => c.id === state.selectedCurveId)
+        : null);
+    const points = previewCurve?.points;
+    if (points && points.length > 0) {
       const track = comp.tracks.find(t => t.id === state.selectedTrackId);
       const tone = track ? comp.toneLibrary.find(t => t.id === track.toneId) : null;
-      renderDrawPreview(
-        fgCtx, viewport,
-        lastPt.position,
-        interaction.cursorWorld,
-        tone?.color ?? '#4fc3f7',
-      );
+      const color = tone?.color ?? '#4fc3f7';
+      const cx = interaction.cursorWorld.x;
+
+      // Find the neighboring point(s) the cursor sits between
+      const firstPt = points[0]!;
+      const lastPt = points[points.length - 1]!;
+
+      if (cx <= firstPt.position.x) {
+        // Before the first point — connect to the first point
+        renderDrawPreview(fgCtx, viewport, firstPt.position, interaction.cursorWorld, color);
+      } else if (cx >= lastPt.position.x) {
+        // After the last point — connect to the last point
+        renderDrawPreview(fgCtx, viewport, lastPt.position, interaction.cursorWorld, color);
+      } else {
+        // Between two points — connect to both neighbors
+        for (let i = 0; i < points.length - 1; i++) {
+          if (cx >= points[i]!.position.x && cx <= points[i + 1]!.position.x) {
+            renderDrawPreview(fgCtx, viewport, points[i]!.position, interaction.cursorWorld, color);
+            renderDrawPreview(fgCtx, viewport, points[i + 1]!.position, interaction.cursorWorld, color);
+            break;
+          }
+        }
+      }
     }
   }
 

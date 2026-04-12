@@ -1,4 +1,4 @@
-import type { BezierCurve, ControlPoint, Vec2 } from '../types';
+import type { BezierCurve, ControlPoint, Vec2, BoundingBox, TransformHandle } from '../types';
 import { generateId } from './tone';
 
 /** Create a new empty curve. */
@@ -105,4 +105,102 @@ export function getSegmentControlPoints(
     : p3;
 
   return { p0, p1, p2, p3 };
+}
+
+// ── Transform Box helpers ──────────────────────────────────────
+
+const BBOX_PAD_X = 0.15; // beats
+const BBOX_PAD_Y = 0.3;  // semitones
+
+/** Compute axis-aligned bounding box from anchor positions. */
+export function computeCurveBBox(curve: BezierCurve): BoundingBox {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const pt of curve.points) {
+    if (pt.position.x < minX) minX = pt.position.x;
+    if (pt.position.y < minY) minY = pt.position.y;
+    if (pt.position.x > maxX) maxX = pt.position.x;
+    if (pt.position.y > maxY) maxY = pt.position.y;
+  }
+  return {
+    minX: minX - BBOX_PAD_X,
+    minY: minY - BBOX_PAD_Y,
+    maxX: maxX + BBOX_PAD_X,
+    maxY: maxY + BBOX_PAD_Y,
+  };
+}
+
+/** Deep copy an array of control points. */
+export function deepCopyPoints(points: ControlPoint[]): ControlPoint[] {
+  return points.map(pt => ({
+    position: { ...pt.position },
+    handleIn: pt.handleIn ? { ...pt.handleIn } : null,
+    handleOut: pt.handleOut ? { ...pt.handleOut } : null,
+    volume: pt.volume,
+  }));
+}
+
+/**
+ * Apply a transform to all curve points based on the original snapshot.
+ * Mutates curve.points in place.
+ */
+export function applyTransformToCurve(
+  curve: BezierCurve,
+  originalPoints: ControlPoint[],
+  bbox: BoundingBox,
+  handle: TransformHandle,
+  dragStart: Vec2,
+  dragCurrent: Vec2,
+): void {
+  const dx = dragCurrent.x - dragStart.x;
+  const dy = dragCurrent.y - dragStart.y;
+
+  if (handle === 'translate') {
+    for (let i = 0; i < curve.points.length; i++) {
+      const orig = originalPoints[i]!;
+      const pt = curve.points[i]!;
+      pt.position.x = orig.position.x + dx;
+      pt.position.y = orig.position.y + dy;
+      // Handles are relative — unchanged during translation
+    }
+    return;
+  }
+
+  // Compute scale factors based on which handle is being dragged
+  const bw = bbox.maxX - bbox.minX;
+  const bh = bbox.maxY - bbox.minY;
+  let scaleX = 1;
+  let scaleY = 1;
+  let anchorX = bbox.minX;
+  let anchorY = bbox.minY;
+
+  // X scaling
+  if (handle === 'right' || handle === 'topRight' || handle === 'bottomRight') {
+    anchorX = bbox.minX;
+    scaleX = bw > 0.001 ? (bw + dx) / bw : 1;
+  } else if (handle === 'left' || handle === 'topLeft' || handle === 'bottomLeft') {
+    anchorX = bbox.maxX;
+    scaleX = bw > 0.001 ? (bw - dx) / bw : 1;
+  }
+
+  // Y scaling
+  if (handle === 'top' || handle === 'topLeft' || handle === 'topRight') {
+    anchorY = bbox.minY;
+    scaleY = bh > 0.001 ? (bh + dy) / bh : 1;
+  } else if (handle === 'bottom' || handle === 'bottomLeft' || handle === 'bottomRight') {
+    anchorY = bbox.maxY;
+    scaleY = bh > 0.001 ? (bh - dy) / bh : 1;
+  }
+
+  for (let i = 0; i < curve.points.length; i++) {
+    const orig = originalPoints[i]!;
+    const pt = curve.points[i]!;
+    pt.position.x = anchorX + (orig.position.x - anchorX) * scaleX;
+    pt.position.y = anchorY + (orig.position.y - anchorY) * scaleY;
+    if (orig.handleIn) {
+      pt.handleIn = { x: orig.handleIn.x * scaleX, y: orig.handleIn.y * scaleY };
+    }
+    if (orig.handleOut) {
+      pt.handleOut = { x: orig.handleOut.x * scaleX, y: orig.handleOut.y * scaleY };
+    }
+  }
 }
