@@ -52,8 +52,8 @@ export function renderStaff(
           ctx.strokeStyle = '#445566';
           ctx.lineWidth = 1.0;
         } else {
-          ctx.strokeStyle = '#3a4455';
-          ctx.lineWidth = 0.8;
+          ctx.strokeStyle = '#4a6080';
+          ctx.lineWidth = 1.0;
         }
       } else {
         ctx.strokeStyle = '#1a1a28';
@@ -78,10 +78,14 @@ export function renderStaff(
     ctx.stroke();
 
     // Note labels on the left edge
-    if (isCNote(n) || (vp.state.zoomY >= 10 && isNaturalNote(n)) || vp.state.zoomY >= 18) {
+    // When a scale is active, show labels for all in-scale notes at moderate zoom
+    const inScaleForLabel = highlightIntegers && isNoteInScale(n, scaleRoot!, scale!);
+    const showLabel = isCNote(n)
+      || (vp.state.zoomY >= 10 && (isNaturalNote(n) || inScaleForLabel))
+      || vp.state.zoomY >= 18;
+    if (showLabel) {
       if (highlightIntegers) {
-        const inScale = isNoteInScale(n, scaleRoot!, scale!);
-        if (inScale) {
+        if (inScaleForLabel) {
           ctx.fillStyle = isCNote(n) ? '#99bbdd' : '#667788';
         } else {
           ctx.fillStyle = '#333';
