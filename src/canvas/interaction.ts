@@ -410,7 +410,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
 }
 
 /** Rebuild the transform box from the current selectedCurveIds. */
-function rebuildTransformBox(istate: InteractionState, track: Track): void {
+export function rebuildTransformBox(istate: InteractionState, track: Track): void {
   const state = store.getState();
   const selectedIds = [...state.selectedCurveIds];
   const curves = selectedIds

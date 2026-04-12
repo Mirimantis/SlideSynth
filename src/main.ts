@@ -3,7 +3,7 @@ import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
 import { renderPlayhead } from './canvas/playhead';
-import { createInteraction } from './canvas/interaction';
+import { createInteraction, rebuildTransformBox } from './canvas/interaction';
 import { createToolbar } from './ui/toolbar';
 import { createPlaybackEngine } from './audio/playback';
 import { renderPropertyPanel } from './ui/property-panel';
@@ -14,6 +14,7 @@ import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
 import { history } from './state/history';
+import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves } from './state/clipboard';
 import { createTrack } from './model/track';
 import { computeMultiCurveBBox, deepCopyPoints } from './model/curve';
 import type { ToolMode, ControlPoint } from './types';
@@ -235,6 +236,41 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     clearInteractionForUndo();
     history.redo();
+    return;
+  }
+
+  // Copy / Cut / Paste / Duplicate
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+    e.preventDefault();
+    copySelectedCurves();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') {
+    e.preventDefault();
+    if (cutSelectedCurves()) {
+      interaction.transformBox = null;
+    }
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+    e.preventDefault();
+    const state = store.getState();
+    const atBeat = state.playback.positionBeats;
+    const newIds = pasteCurves(atBeat);
+    if (newIds) {
+      const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+      if (track) rebuildTransformBox(interaction, track);
+    }
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+    e.preventDefault();
+    const newIds = duplicateCurves();
+    if (newIds) {
+      const state = store.getState();
+      const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+      if (track) rebuildTransformBox(interaction, track);
+    }
     return;
   }
 
