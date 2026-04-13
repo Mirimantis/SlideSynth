@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SlideSynth — User Guide</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #1a1a2e;
+      --bg-light: #16213e;
+      --surface: #0f3460;
+      --text: #e0e0e0;
+      --text-dim: #999;
+      --accent: #4fc3f7;
+      --accent-hover: #81d4fa;
+      --border: #335;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────── */
+
+    #sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: var(--bg-light);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    #sidebar h1 {
+      font-size: 1.1rem;
+      padding: 16px 16px 12px;
+      color: var(--accent);
+      letter-spacing: 0.03em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #sidebar nav {
+      flex: 1;
+      padding: 8px 0;
+    }
+
+    #sidebar nav a {
+      display: block;
+      padding: 7px 16px;
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.85rem;
+      transition: background 0.15s, color 0.15s;
+      border-left: 3px solid transparent;
+    }
+
+    #sidebar nav a:hover,
+    #sidebar nav a.active {
+      background: rgba(79, 195, 247, 0.08);
+      color: var(--text);
+      border-left-color: var(--accent);
+    }
+
+    #sidebar nav a.sub {
+      padding-left: 28px;
+      font-size: 0.8rem;
+    }
+
+    /* ── Content ──────────────────────────────────────── */
+
+    #content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 48px 64px;
+      scroll-behavior: smooth;
+    }
+
+    #content h2 {
+      font-size: 1.3rem;
+      color: var(--accent);
+      margin: 40px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #content h2:first-child {
+      margin-top: 0;
+    }
+
+    #content h3 {
+      font-size: 1rem;
+      color: var(--accent-hover);
+      margin: 24px 0 8px;
+    }
+
+    #content p, #content li {
+      font-size: 0.9rem;
+      line-height: 1.65;
+      color: var(--text);
+      max-width: 680px;
+    }
+
+    #content p {
+      margin-bottom: 10px;
+    }
+
+    #content ul, #content ol {
+      margin: 8px 0 12px 20px;
+    }
+
+    #content li {
+      margin-bottom: 4px;
+    }
+
+    kbd {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 6px;
+      font-size: 0.82rem;
+      font-family: 'Segoe UI', monospace;
+      white-space: nowrap;
+    }
+
+    /* ── Collapsible sections ────────────────────────── */
+
+    details {
+      margin: 12px 0;
+      max-width: 700px;
+    }
+
+    details summary {
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.92rem;
+      color: var(--text);
+      padding: 8px 12px;
+      background: var(--bg-light);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      list-style: none;
+      transition: background 0.15s;
+      user-select: none;
+    }
+
+    details summary::-webkit-details-marker { display: none; }
+
+    details summary::before {
+      content: '\25B6';
+      display: inline-block;
+      margin-right: 8px;
+      font-size: 0.7rem;
+      transition: transform 0.2s;
+    }
+
+    details[open] summary::before {
+      transform: rotate(90deg);
+    }
+
+    details summary:hover {
+      background: rgba(79, 195, 247, 0.08);
+    }
+
+    details .detail-body {
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      background: rgba(15, 52, 96, 0.25);
+    }
+
+    /* ── Table for shortcuts ─────────────────────────── */
+
+    table {
+      border-collapse: collapse;
+      margin: 12px 0;
+      max-width: 600px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+
+    th {
+      background: var(--surface);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    td {
+      background: rgba(15, 52, 96, 0.2);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar index ─────────────────────────────────── -->
+
+<div id="sidebar">
+  <h1>SlideSynth Guide</h1>
+  <nav>
+    <a href="#overview">Overview</a>
+    <a href="#drawing">Drawing Curves</a>
+    <a href="#selecting">Selecting & Editing</a>
+    <a href="#transform">Transform Box</a>
+    <a href="#playback">Playback & Transport</a>
+    <a href="#tracks">Tracks & Tones</a>
+    <a href="#snapping">Snap & Grid</a>
+    <a href="#scales">Key & Scale</a>
+    <a href="#viewport">Zoom & Pan</a>
+    <a href="#clipboard">Copy, Paste & Duplicate</a>
+    <a href="#undo">Undo & Redo</a>
+    <a href="#files">Save, Load & Export</a>
+    <a href="#shortcuts">Keyboard Shortcuts</a>
+  </nav>
+</div>
+
+<!-- ── Content ────────────────────────────────────────── -->
+
+<div id="content">
+
+  <!-- Overview -->
+  <h2 id="overview">Overview</h2>
+  <p>
+    SlideSynth is a canvas-based music composition tool where you draw Bezier curves
+    on a chromatic staff to create melodies. Each curve maps pitch over time and is
+    played back as a continuous, sliding tone — enabling expressive glissandi, portamenti,
+    and microtonal passages that traditional step-sequencers can't easily produce.
+  </p>
+  <p>
+    The workspace has three columns: a <strong>track panel</strong> on the left,
+    the <strong>canvas</strong> in the centre, and a <strong>property panel</strong>
+    on the right. A toolbar across the top provides transport, tool selection, zoom,
+    snap, scale controls, and file operations.
+  </p>
+
+  <!-- Drawing -->
+  <h2 id="drawing">Drawing Curves</h2>
+  <p>
+    Select the <strong>Draw</strong> tool (<kbd>D</kbd>) and click on the canvas to
+    place control points. Each click adds a point to the current curve. Dragging after
+    clicking a point pulls out Bezier handles to shape the curve between points.
+  </p>
+  <details>
+    <summary>Drawing details</summary>
+    <div class="detail-body">
+      <ul>
+        <li>Click on empty space to start a new curve.</li>
+        <li>Click on an existing point to reset its handles, then drag to reshape.</li>
+        <li>Press <kbd>Escape</kbd> or <kbd>Enter</kbd> to finish drawing the current curve.</li>
+        <li>While in Draw mode, hold <kbd>Ctrl</kbd> to temporarily switch to Select mode.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Selecting -->
+  <h2 id="selecting">Selecting & Editing</h2>
+  <p>
+    Switch to the <strong>Select</strong> tool (<kbd>V</kbd>) to manipulate existing
+    curves and points.
+  </p>
+  <details>
+    <summary>Selection details</summary>
+    <div class="detail-body">
+      <ul>
+        <li>Click a point to select it — drag to move it.</li>
+        <li>Click a curve segment to select the whole curve.</li>
+        <li><kbd>Shift</kbd>+click to add/remove curves from a multi-selection.</li>
+        <li>When a single curve is selected, drag its handles (handleIn / handleOut) to adjust curvature.</li>
+        <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to the horizontal or vertical axis.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Transform box -->
+  <h2 id="transform">Transform Box</h2>
+  <p>
+    Select multiple curves (via <kbd>Shift</kbd>+click) or double-click a single curve
+    to activate a transform box with 8 resize handles.
+  </p>
+  <details>
+    <summary>Transform details</summary>
+    <div class="detail-body">
+      <ul>
+        <li>Drag corners or edges to resize the selection.</li>
+        <li>Drag the interior to translate all selected curves.</li>
+        <li>Use the octave shift arrows (<strong>&#9650; &#9660;</strong>) to shift pitch by &plusmn;12 semitones.</li>
+        <li>Hold <kbd>Alt</kbd> when you start dragging to duplicate the selection before transforming.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Playback -->
+  <h2 id="playback">Playback & Transport</h2>
+  <p>
+    Use the transport buttons or press <kbd>Space</kbd> to toggle play/pause.
+  </p>
+  <details>
+    <summary>Playback details</summary>
+    <div class="detail-body">
+      <ul>
+        <li><strong>Play / Pause / Stop</strong> — toolbar buttons or <kbd>Space</kbd> to toggle.</li>
+        <li><strong>BPM</strong> — adjustable from 20 to 300.</li>
+        <li><strong>Length</strong> — composition length in beats (4 &ndash; 3000). Time display updates automatically.</li>
+        <li><strong>Loop</strong> (<kbd>L</kbd>) — loops playback from beginning.</li>
+        <li><strong>Scrubbing</strong> — click and drag in the ruler bar at the top of the canvas to position the playhead.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Tracks -->
+  <h2 id="tracks">Tracks & Tones</h2>
+  <p>
+    The track panel on the left lets you manage multiple tracks, each with its own
+    tone, colour, and curves.
+  </p>
+  <details>
+    <summary>Track details</summary>
+    <div class="detail-body">
+      <ul>
+        <li>Click <strong>+ Track</strong> to add a new track.</li>
+        <li>Click <strong>+ Tone</strong> to open the tone builder and design a custom synth voice.</li>
+        <li>Each track has <strong>M</strong> (mute), <strong>S</strong> (solo), and <strong>T</strong> (edit tone) controls.</li>
+        <li>Tone builder supports oscillator types (sine, square, sawtooth, triangle), detune, gain layers, and optional distortion.</li>
+        <li>Four built-in presets: Pure Sine, Bright Square, Warm Pad, Buzzy Saw.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Snap -->
+  <h2 id="snapping">Snap & Grid</h2>
+  <p>
+    Toggle snap on/off with the <strong>Snap</strong> button or press <kbd>S</kbd>.
+  </p>
+  <details>
+    <summary>Snap details</summary>
+    <div class="detail-body">
+      <ul>
+        <li>When snap is on, points snap to a 1/16-beat time grid and the nearest semitone (or nearest scale note if a scale is active).</li>
+        <li>Bezier handles are never snapped, allowing smooth curve shaping regardless of snap setting.</li>
+        <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to one axis.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Key & Scale -->
+  <h2 id="scales">Key & Scale</h2>
+  <p>
+    Use the <strong>Key</strong> and <strong>Scale</strong> dropdowns in the toolbar
+    to set a musical key. When a key is active, the staff highlights in-scale notes
+    and snap quantises to scale degrees.
+  </p>
+  <details>
+    <summary>Scale details</summary>
+    <div class="detail-body">
+      <ul>
+        <li>30 scales across 5 groups: Western modes, pentatonic/blues, other Western, world scales, and microtonal.</li>
+        <li>Microtonal scales (e.g. Maqam Rast, Gamelan Slendro) use fractional semitone intervals.</li>
+        <li>In-scale accidentals (sharps/flats that are part of the current scale) are visually prominent on the staff.</li>
+        <li>Set Key to <strong>None</strong> to return to chromatic mode.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Zoom & Pan -->
+  <h2 id="viewport">Zoom & Pan</h2>
+  <details>
+    <summary>Navigation controls</summary>
+    <div class="detail-body">
+      <ul>
+        <li><strong>Zoom X</strong> (time) — toolbar slider or scroll wheel.</li>
+        <li><strong>Zoom Y</strong> (pitch) — toolbar slider or <kbd>Ctrl</kbd>+scroll wheel.</li>
+        <li><strong>Pan</strong> — <kbd>Alt</kbd>+click drag or middle-click drag.</li>
+        <li>Zoom is centered on the cursor position.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Clipboard -->
+  <h2 id="clipboard">Copy, Paste & Duplicate</h2>
+  <details>
+    <summary>Clipboard operations</summary>
+    <div class="detail-body">
+      <ul>
+        <li><kbd>Ctrl</kbd>+<kbd>C</kbd> — copy selected curves.</li>
+        <li><kbd>Ctrl</kbd>+<kbd>X</kbd> — cut selected curves.</li>
+        <li><kbd>Ctrl</kbd>+<kbd>V</kbd> — paste at the current playhead position.</li>
+        <li><kbd>Ctrl</kbd>+<kbd>D</kbd> — duplicate selected curves in place.</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> — continue drawing (append a copy to the end of the selection).</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Undo -->
+  <h2 id="undo">Undo & Redo</h2>
+  <details>
+    <summary>History controls</summary>
+    <div class="detail-body">
+      <ul>
+        <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> — undo (up to 50 steps).</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd> — redo.</li>
+        <li>Toolbar <strong>Undo</strong> / <strong>Redo</strong> buttons mirror the shortcuts.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- File I/O -->
+  <h2 id="files">Save, Load & Export</h2>
+  <details>
+    <summary>File operations</summary>
+    <div class="detail-body">
+      <ul>
+        <li><strong>Save</strong> — downloads the composition as a JSON file.</li>
+        <li><strong>Load</strong> — opens a JSON composition file.</li>
+        <li><strong>WAV</strong> — renders the composition to a 16-bit stereo WAV file (44100 Hz).</li>
+        <li><strong>MIDI</strong> — imports a MIDI file, converting notes to Bezier curves with pitch bends.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Shortcuts reference -->
+  <h2 id="shortcuts">Keyboard Shortcuts</h2>
+  <table>
+    <tr><th>Key</th><th>Action</th></tr>
+    <tr><td><kbd>Space</kbd></td><td>Play / Pause</td></tr>
+    <tr><td><kbd>L</kbd></td><td>Toggle loop</td></tr>
+    <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>
+    <tr><td><kbd>V</kbd></td><td>Select tool</td></tr>
+    <tr><td><kbd>X</kbd></td><td>Delete tool</td></tr>
+    <tr><td><kbd>S</kbd></td><td>Toggle snap</td></tr>
+    <tr><td><kbd>Escape</kbd> / <kbd>Enter</kbd></td><td>Finish drawing</td></tr>
+    <tr><td><kbd>Ctrl</kbd> (hold in Draw)</td><td>Temporary Select</td></tr>
+    <tr><td><kbd>Shift</kbd> (hold while dragging)</td><td>Constrain to axis</td></tr>
+    <tr><td><kbd>Alt</kbd>+drag</td><td>Pan canvas</td></tr>
+    <tr><td><kbd>Alt</kbd>+drag (transform)</td><td>Duplicate before transform</td></tr>
+    <tr><td>Scroll wheel</td><td>Zoom X</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+scroll</td><td>Zoom Y</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Redo</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd></td><td>Copy / Cut / Paste</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Duplicate</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></td><td>Continue curves</td></tr>
+    <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Delete selected point</td></tr>
+    <tr><td><kbd>?</kbd></td><td>Open this help page</td></tr>
+  </table>
+
+</div>
+
+<!-- ── Sidebar highlight on scroll ───────────────────── -->
+
+<script>
+  const links = document.querySelectorAll('#sidebar nav a');
+  const sections = [];
+  links.forEach(a => {
+    const id = a.getAttribute('href')?.slice(1);
+    if (id) sections.push({ id, el: document.getElementById(id), link: a });
+  });
+
+  const content = document.getElementById('content');
+  content.addEventListener('scroll', () => {
+    let current = sections[0];
+    for (const s of sections) {
+      if (s.el && s.el.getBoundingClientRect().top <= 120) current = s;
+    }
+    links.forEach(l => l.classList.remove('active'));
+    current.link.classList.add('active');
+  });
+
+  // Activate first link on load
+  if (links.length) links[0].classList.add('active');
+</script>
+
+</body>
+</html>
