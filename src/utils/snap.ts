@@ -41,3 +41,14 @@ export const DEFAULT_SNAP_CONFIG: SnapConfig = {
   scaleRoot: null,
   scale: null,
 };
+
+/**
+ * Compute the snap subdivision count based on the current X zoom level.
+ * At high zoom, snaps to 1/16 beats. At lower zoom, coarsens to
+ * musically meaningful divisions: eighths, quarters, whole beats, measures.
+ */
+export function getAdaptiveSubdivisions(zoomX: number): number {
+  if (zoomX >= 60) return 16;           // 1/16 beats (sixteenths)
+  if (zoomX >= 35) return 2;            // 1/2 beats (eighths)
+  return 1;                             // whole beats
+}

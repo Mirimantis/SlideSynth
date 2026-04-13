@@ -216,6 +216,7 @@
     <a href="#transform">Transform Box</a>
     <a href="#playback">Playback & Transport</a>
     <a href="#tracks">Tracks & Tones</a>
+    <a href="#preview">Live Audio Preview</a>
     <a href="#snapping">Snap & Grid</a>
     <a href="#scales">Key & Scale</a>
     <a href="#viewport">Zoom & Pan</a>
@@ -241,8 +242,10 @@
   <p>
     The workspace has three columns: a <strong>track panel</strong> on the left,
     the <strong>canvas</strong> in the centre, and a <strong>property panel</strong>
-    on the right. A toolbar across the top provides transport, tool selection, zoom,
-    snap, scale controls, and file operations.
+    on the right. A toolbar across the top shows the <strong>composition name</strong>
+    (editable) followed by transport, tool selection, zoom, snap, scale controls,
+    and file operations. A <strong>ruler bar</strong> along the top of the canvas
+    displays measure numbers and beat/subdivision ticks.
   </p>
 
   <!-- Drawing -->
@@ -314,7 +317,8 @@
         <li><strong>BPM</strong> — adjustable from 20 to 300.</li>
         <li><strong>Length</strong> — composition length in beats (4 &ndash; 3000). Time display updates automatically.</li>
         <li><strong>Loop</strong> (<kbd>L</kbd>) — loops playback from beginning.</li>
-        <li><strong>Scrubbing</strong> — click and drag in the ruler bar at the top of the canvas to position the playhead.</li>
+        <li><strong>Ruler</strong> — a visual ruler bar at the top of the canvas shows measure numbers, beat ticks, and subdivision ticks that adapt to the current zoom level.</li>
+        <li><strong>Scrubbing</strong> — click and drag in the ruler bar to position the playhead.</li>
       </ul>
     </div>
   </details>
@@ -338,6 +342,32 @@
     </div>
   </details>
 
+  <!-- Live Audio Preview -->
+  <h2 id="preview">Live Audio Preview</h2>
+  <p>
+    Hold <kbd>Space</kbd> to hear a live preview of the note at the cursor position.
+    This lets you audition pitches before placing points, making melodic exploration
+    much faster.
+  </p>
+  <details>
+    <summary>Preview details</summary>
+    <div class="detail-body">
+      <ul>
+        <li><strong>Draw preview</strong> — in Draw mode, hold <kbd>Space</kbd> with the cursor
+            over the canvas. You'll hear the current track's tone at the cursor's pitch.
+            Move the cursor up and down to modulate pitch in real time.</li>
+        <li><strong>Scrub preview</strong> — while click-dragging in the ruler to scrub,
+            hold <kbd>Space</kbd> to hear all active curves at the current playhead position.
+            Drag left/right to hear how the composition sounds at each point in time.</li>
+        <li>Pitch respects snap and scale settings — if snap is on with a scale selected,
+            you'll hear scale-quantised notes.</li>
+        <li>Release <kbd>Space</kbd> to stop the preview.</li>
+        <li>When the cursor is not over the canvas or you're not in Draw mode,
+            <kbd>Space</kbd> works as the normal play/pause toggle.</li>
+      </ul>
+    </div>
+  </details>
+
   <!-- Snap -->
   <h2 id="snapping">Snap & Grid</h2>
   <p>
@@ -347,7 +377,8 @@
     <summary>Snap details</summary>
     <div class="detail-body">
       <ul>
-        <li>When snap is on, points snap to a 1/16-beat time grid and the nearest semitone (or nearest scale note if a scale is active).</li>
+        <li>When snap is on, points snap to the time grid and the nearest semitone (or nearest scale note if a scale is active).</li>
+        <li><strong>Adaptive snap</strong> — the time-axis snap granularity adjusts with zoom: 1/16-beat at high zoom, eighth-note at medium zoom, and whole beats when zoomed out. The ruler ticks match the current snap resolution.</li>
         <li>Bezier handles are never snapped, allowing smooth curve shaping regardless of snap setting.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to one axis.</li>
       </ul>
@@ -421,8 +452,9 @@
     <summary>File operations</summary>
     <div class="detail-body">
       <ul>
-        <li><strong>Save</strong> — downloads the composition as a JSON file.</li>
-        <li><strong>Load</strong> — opens a JSON composition file.</li>
+        <li><strong>Composition name</strong> — the editable text field at the top-left of the toolbar sets the composition name, which is used as the filename when saving.</li>
+        <li><strong>Save</strong> — downloads the composition as a JSON file named after the composition.</li>
+        <li><strong>Load</strong> — opens a JSON composition file (the name field updates to match).</li>
         <li><strong>WAV</strong> — renders the composition to a 16-bit stereo WAV file (44100 Hz).</li>
         <li><strong>MIDI</strong> — imports a MIDI file, converting notes to Bezier curves with pitch bends.</li>
       </ul>
@@ -433,7 +465,7 @@
   <h2 id="shortcuts">Keyboard Shortcuts</h2>
   <table>
     <tr><th>Key</th><th>Action</th></tr>
-    <tr><td><kbd>Space</kbd></td><td>Play / Pause</td></tr>
+    <tr><td><kbd>Space</kbd></td><td>Play / Pause (or hold for live audio preview in Draw mode / while scrubbing)</td></tr>
     <tr><td><kbd>L</kbd></td><td>Toggle loop</td></tr>
     <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>
     <tr><td><kbd>V</kbd></td><td>Select tool</td></tr>

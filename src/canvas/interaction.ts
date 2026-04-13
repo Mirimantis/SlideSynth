@@ -3,17 +3,19 @@ import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
 import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, deepCopyPoints, applyTransformToCurve } from '../model/curve';
-import { snapToGrid } from '../utils/snap';
+import { snapToGrid, getAdaptiveSubdivisions } from '../utils/snap';
 import type { SnapConfig } from '../utils/snap';
 import { getScaleById } from '../utils/scales';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { distToPoint, nearestPointOnCubic } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
 
-const RULER_HEIGHT = 24;
+export const RULER_HEIGHT = 24;
 
 export interface InteractionCallbacks {
   onPlayheadScrub?(beats: number, phase: 'start' | 'move' | 'end'): void;
+  onCursorMove?(worldX: number, worldY: number, screenY: number): void;
+  onCursorLeave?(): void;
 }
 
 export interface InteractionState {
@@ -35,6 +37,10 @@ export interface InteractionState {
   ctrlSwitchedTool: boolean;
   /** Whether we're currently scrubbing the playhead in the ruler zone. */
   scrubbing: boolean;
+  /** Screen Y of cursor (for ruler zone detection). */
+  cursorScreenY: number;
+  /** Whether the cursor is currently over the canvas element. */
+  cursorInCanvas: boolean;
 }
 
 export function createInteraction(
@@ -53,6 +59,8 @@ export function createInteraction(
     altDuplicated: false,
     ctrlSwitchedTool: false,
     scrubbing: false,
+    cursorScreenY: 0,
+    cursorInCanvas: false,
   };
 
   canvas.addEventListener('mousemove', (e) => {
@@ -64,14 +72,14 @@ export function createInteraction(
 
     // Playhead scrubbing — update position and skip all other interaction
     if (istate.scrubbing) {
-      const snap = buildSnapConfig();
+      const snap = buildSnapConfig(vp.state.zoomX);
       const snappedBeat = snap.enabled ? snapToGrid(raw.wx, 0, snap).wx : raw.wx;
       const beat = Math.max(0, Math.min(snappedBeat, vp.totalBeats));
       callbacks?.onPlayheadScrub?.(beat, 'move');
       return;
     }
 
-    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig());
+    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig(vp.state.zoomX));
 
     // Determine effective coordinates:
     // - Handles: raw (no snap) to allow smooth curve shaping
@@ -93,6 +101,8 @@ export function createInteraction(
     }
 
     istate.cursorWorld = { x: eff.wx, y: eff.wy };
+    istate.cursorScreenY = sy;
+    callbacks?.onCursorMove?.(eff.wx, eff.wy, sy);
 
     // Transform box dragging
     if (istate.transformBox?.activeHandle && istate.transformBox.dragStart) {
@@ -183,12 +193,12 @@ export function createInteraction(
     const sy = e.clientY - rect.top;
     const world = vp.screenToWorld(sx, sy);
     const rawPt: Vec2 = { x: world.wx, y: world.wy };
-    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig());
+    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig(vp.state.zoomX));
     const snappedPt: Vec2 = { x: snapped.wx, y: snapped.wy };
 
     // Ruler zone: click in top area to position/scrub playhead
     if (sy < RULER_HEIGHT && !e.altKey) {
-      const snap = buildSnapConfig();
+      const snap = buildSnapConfig(vp.state.zoomX);
       const snappedBeat = snap.enabled ? snapToGrid(world.wx, 0, snap).wx : world.wx;
       const beat = Math.max(0, Math.min(snappedBeat, vp.totalBeats));
       istate.scrubbing = true;
@@ -335,6 +345,11 @@ export function createInteraction(
     }
   });
 
+  canvas.addEventListener('mouseenter', () => { istate.cursorInCanvas = true; });
+  canvas.addEventListener('mouseleave', () => {
+    istate.cursorInCanvas = false;
+    callbacks?.onCursorLeave?.();
+  });
 
   return istate;
 }
@@ -645,11 +660,14 @@ function getSelectedTrack(): Track | undefined {
   return state.composition.tracks.find(t => t.id === state.selectedTrackId);
 }
 
-function buildSnapConfig(): SnapConfig {
+function buildSnapConfig(zoomX?: number): SnapConfig {
   const state = store.getState();
+  const subdivisions = zoomX !== undefined
+    ? getAdaptiveSubdivisions(zoomX)
+    : SUBDIVISIONS_PER_BEAT;
   return {
     enabled: state.snapEnabled,
-    subdivisionsPerBeat: SUBDIVISIONS_PER_BEAT,
+    subdivisionsPerBeat: subdivisions,
     scaleRoot: state.scaleRoot,
     scale: state.scaleId ? getScaleById(state.scaleId) ?? null : null,
   };

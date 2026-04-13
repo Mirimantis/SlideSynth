@@ -54,6 +54,28 @@ body {
   gap: 6px;
 }
 
+.comp-name-input {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  width: 150px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.comp-name-input:hover {
+  border-color: #335;
+}
+
+.comp-name-input:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+  outline: none;
+}
+
 .toolbar-group label {
   font-size: 0.8rem;
   color: var(--text-dim);
