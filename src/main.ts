@@ -236,6 +236,8 @@ function clearInteractionForUndo() {
 
 const undoBtn = addToolbarButton('Undo', 'Undo (Ctrl+Z)', () => { clearInteractionForUndo(); history.undo(); });
 const redoBtn = addToolbarButton('Redo', 'Redo (Ctrl+Shift+Z)', () => { clearInteractionForUndo(); history.redo(); });
+
+addToolbarButton('?', 'User Guide (?)', () => { window.open('/help.html', '_blank'); });
 undoBtn.disabled = true;
 redoBtn.disabled = true;
 
@@ -349,6 +351,9 @@ window.addEventListener('keydown', (e) => {
       }
       break;
     }
+    case '?':
+      window.open('/help.html', '_blank');
+      break;
     case 'Delete':
     case 'Backspace': {
       // Delete selected point (only when a single curve is selected with a point)
