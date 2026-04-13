@@ -1,6 +1,7 @@
 import { createViewport } from './canvas/viewport';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
+import { renderChordOverlay } from './canvas/chord-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
 import { renderPlayhead } from './canvas/playhead';
 import { createInteraction, rebuildTransformBox, RULER_HEIGHT } from './canvas/interaction';
@@ -18,8 +19,9 @@ import { store } from './state/store';
 import { history } from './state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
-import { computeMultiCurveBBox, deepCopyPoints } from './model/curve';
+import { createCurve, createControlPoint, computeMultiCurveBBox, deepCopyPoints } from './model/curve';
 import { getScaleById } from './utils/scales';
+import { getChordById, getChordNotes } from './utils/chords';
 import type { ToolMode, ControlPoint } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -148,14 +150,7 @@ const toolbar = createToolbar(toolbarContainer, viewport, {
     toolbar.updatePlayState(false);
   },
   onToolChange(tool: ToolMode) {
-    store.setTool(tool);
-    if (tool !== 'draw' && interaction.drawingCurve) {
-      interaction.drawingCurve = null;
-    }
-    if (tool !== 'draw' && previewActive && preview.isDrawPreviewActive()) {
-      preview.stopAll();
-      previewActive = false;
-    }
+    switchTool(tool);
   },
   onSnapToggle(enabled: boolean) {
     store.setSnap(enabled);
@@ -166,6 +161,10 @@ const toolbar = createToolbar(toolbarContainer, viewport, {
   },
   onScaleIdChange(scaleId: string | null) {
     store.setScaleId(scaleId);
+    bgDirty = true;
+  },
+  onChordIdChange(chordId: string) {
+    store.setChordId(chordId);
     bgDirty = true;
   },
   onBpmChange(bpm: number) {
@@ -289,6 +288,23 @@ history.subscribe(() => {
   redoBtn.disabled = !history.canRedo();
 });
 
+function switchTool(tool: ToolMode) {
+  store.setTool(tool);
+  toolbar.updateActiveTool(tool);
+  if (tool !== 'draw' && interaction.drawingCurve) {
+    interaction.drawingCurve = null;
+  }
+  if (tool !== 'draw' && previewActive && preview.isDrawPreviewActive()) {
+    preview.stopAll();
+    previewActive = false;
+  }
+  if (tool !== 'chord' && previewActive && preview.isChordPreviewActive()) {
+    preview.stopAll();
+    previewActive = false;
+  }
+  bgDirty = true;
+}
+
 // ── Keyboard shortcuts ──────────────────────────────────────────
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
@@ -366,9 +382,24 @@ window.addEventListener('keydown', (e) => {
         && interaction.cursorInCanvas
         && interaction.cursorScreenY >= RULER_HEIGHT
         && interaction.cursorWorld !== null;
+      const inChordContext = state.activeTool === 'chord'
+        && state.selectedPointIndex !== null;
       const inScrubContext = interaction.scrubbing;
 
-      if (inDrawContext) {
+      if (inChordContext) {
+        // Start chord preview — play all chord tones
+        const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+        const tone = track ? state.composition.toneLibrary.find(t => t.id === track.toneId) : null;
+        const chordDef = state.chordId ? getChordById(state.chordId) : null;
+        const curveId = store.getSelectedCurveId();
+        const curve = curveId ? track?.curves.find(c => c.id === curveId) : null;
+        const pt = curve && state.selectedPointIndex !== null ? curve.points[state.selectedPointIndex] : null;
+        if (tone && chordDef && pt) {
+          const notes = getChordNotes(pt.position.y, chordDef);
+          preview.startChordPreview(tone, notes);
+          previewActive = true;
+        }
+      } else if (inDrawContext) {
         // Start draw preview — play tone at cursor pitch
         const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
         const tone = track ? state.composition.toneLibrary.find(t => t.id === track.toneId) : null;
@@ -396,13 +427,16 @@ window.addEventListener('keydown', (e) => {
       break;
     }
     case 'd':
-      store.setTool('draw');
+      switchTool('draw');
       break;
     case 'v':
-      store.setTool('select');
+      switchTool('select');
       break;
     case 'x':
-      store.setTool('delete');
+      switchTool('delete');
+      break;
+    case 'c':
+      switchTool('chord');
       break;
     case 's': {
       const snapEnabled = !store.getState().snapEnabled;
@@ -416,6 +450,41 @@ window.addEventListener('keydown', (e) => {
       if (loopCb) {
         loopCb.checked = !loopCb.checked;
         playback.setLoop(loopCb.checked);
+      }
+      break;
+    }
+    case 'Enter': {
+      // Chord tool: commit chord tones as new curves
+      const st = store.getState();
+      if (st.activeTool === 'chord' && st.selectedPointIndex !== null) {
+        const chordDef = st.chordId ? getChordById(st.chordId) : null;
+        const curveId = store.getSelectedCurveId();
+        const track = st.composition.tracks.find(t => t.id === st.selectedTrackId);
+        const curve = curveId ? track?.curves.find(c => c.id === curveId) : null;
+        const rootPt = curve && st.selectedPointIndex !== null ? curve.points[st.selectedPointIndex] : null;
+        if (chordDef && track && rootPt) {
+          const rootX = rootPt.position.x;
+          const rootY = rootPt.position.y;
+          const rootVol = rootPt.volume;
+          // Get non-root intervals only
+          const nonRootIntervals = chordDef.intervals.filter(iv => iv !== 0);
+          if (nonRootIntervals.length > 0) {
+            history.snapshot();
+            const newCurveIds: string[] = [curveId!];
+            store.mutate(() => {
+              for (const interval of nonRootIntervals) {
+                const noteY = rootY + interval;
+                if (noteY < 12 || noteY > 120) continue;
+                const newCurve = createCurve();
+                const pt = createControlPoint(rootX, noteY, rootVol);
+                newCurve.points.push(pt);
+                track.curves.push(newCurve);
+                newCurveIds.push(newCurve.id);
+              }
+            });
+            // Keep current selection so user can continue stamping chords
+          }
+        }
       }
       break;
     }
@@ -623,7 +692,20 @@ function render() {
     const rect = canvasContainer.getBoundingClientRect();
     const scaleRoot = state.scaleRoot;
     const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
-    renderStaff(bgCtx, viewport, rect.width, rect.height, comp.totalBeats, comp.beatsPerMeasure, scaleRoot, scale);
+
+    // Chord guide lines on staff when chord tool is active and a point is selected
+    let chordDef = null;
+    let chordRootNote = null;
+    if (state.activeTool === 'chord' && state.chordId && state.selectedPointIndex !== null) {
+      chordDef = getChordById(state.chordId) ?? null;
+      const cId = store.getSelectedCurveId();
+      const track = comp.tracks.find(t => t.id === state.selectedTrackId);
+      const curve = cId ? track?.curves.find(c => c.id === cId) : null;
+      const pt = curve ? curve.points[state.selectedPointIndex] : null;
+      if (pt) chordRootNote = pt.position.y;
+    }
+
+    renderStaff(bgCtx, viewport, rect.width, rect.height, comp.totalBeats, comp.beatsPerMeasure, scaleRoot, scale, chordDef, chordRootNote);
     renderRuler(bgCtx, viewport, rect.width, comp.totalBeats, comp.beatsPerMeasure);
     bgDirty = false;
   }
@@ -660,6 +742,20 @@ function render() {
       isActiveTrack ? store.getSelectedCurveId() : null,
       isActiveTrack ? state.selectedPointIndex : null,
     );
+  }
+
+  // Chord overlay when chord tool is active and a point is selected
+  if (state.activeTool === 'chord' && state.selectedPointIndex !== null && state.chordId) {
+    const chordDef = getChordById(state.chordId);
+    const cId = store.getSelectedCurveId();
+    const track = comp.tracks.find(t => t.id === state.selectedTrackId);
+    const curve = cId ? track?.curves.find(c => c.id === cId) : null;
+    const pt = curve ? curve.points[state.selectedPointIndex] : null;
+    if (chordDef && pt && track) {
+      const tone = comp.toneLibrary.find(t => t.id === track.toneId);
+      const color = tone?.color ?? '#4fc3f7';
+      renderChordOverlay(fgCtx, viewport, pt.position, chordDef, color);
+    }
   }
 
   // Draw preview line when in draw mode (hidden during Ctrl-select)

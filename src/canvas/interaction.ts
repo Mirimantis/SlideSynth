@@ -274,6 +274,8 @@ export function createInteraction(
       handleSelectClick(istate, rawPt, vp, e.shiftKey);
     } else if (state.activeTool === 'delete') {
       handleDeleteClick(rawPt, vp);
+    } else if (state.activeTool === 'chord') {
+      handleChordClick(rawPt, vp);
     }
   });
 
@@ -590,6 +592,31 @@ function handleDeleteClick(worldPt: Vec2, vp: Viewport): void {
       }
     }
   }
+}
+
+function handleChordClick(worldPt: Vec2, vp: Viewport): void {
+  const track = getSelectedTrack();
+  if (!track) return;
+
+  const hitRadiusX = 8 / vp.state.zoomX;
+  const hitRadiusY = 8 / vp.state.zoomY;
+  const hitRadius = Math.max(hitRadiusX, hitRadiusY);
+
+  // Hit-test anchor points on all curves in the active track
+  for (const curve of track.curves) {
+    for (let i = 0; i < curve.points.length; i++) {
+      const pt = curve.points[i]!;
+      if (distToPoint(worldPt, pt.position) < hitRadius) {
+        store.setSelectedCurve(curve.id);
+        store.setSelectedPoint(i);
+        return;
+      }
+    }
+  }
+
+  // Click on empty space → deselect
+  store.setSelectedCurve(null);
+  store.setSelectedPoint(null);
 }
 
 function handleDrag(istate: InteractionState, snapped: { wx: number; wy: number }): void {

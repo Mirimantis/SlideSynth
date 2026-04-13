@@ -6,6 +6,8 @@ import {
 } from '../constants';
 import type { ScaleDefinition } from '../utils/scales';
 import { isNoteInScale, isMicrotonal, getScaleNotes } from '../utils/scales';
+import type { ChordDefinition } from '../utils/chords';
+import { getChordNotesAllOctaves } from '../utils/chords';
 
 /**
  * Render the background staff grid onto a canvas.
@@ -21,6 +23,8 @@ export function renderStaff(
   beatsPerMeasure: number = DEFAULT_BEATS_PER_MEASURE,
   scaleRoot: number | null = null,
   scale: ScaleDefinition | null = null,
+  chordDef: ChordDefinition | null = null,
+  chordRootNote: number | null = null,
 ): void {
   ctx.clearRect(0, 0, width, height);
 
@@ -134,6 +138,32 @@ export function renderStaff(
           : noteNumberToName(baseNote);
         ctx.fillText(label, 4, sy);
       }
+    }
+  }
+
+  // ── Chord tone guide lines ─────────────────────────────────
+  if (chordDef && chordRootNote !== null) {
+    const rootPitchClass = ((Math.round(chordRootNote) % 12) + 12) % 12;
+    const chordNotes = getChordNotesAllOctaves(rootPitchClass, chordDef, minNote, maxNote);
+    const rootInterval0Notes = new Set<number>();
+    // Mark root octave instances (interval 0)
+    for (let oct = Math.floor((minNote - rootPitchClass) / 12); oct <= Math.ceil((maxNote - rootPitchClass) / 12); oct++) {
+      rootInterval0Notes.add(rootPitchClass + oct * 12);
+    }
+
+    for (const n of chordNotes) {
+      if (n < minNote || n > maxNote) continue;
+      const { sy } = vp.worldToScreen(0, n);
+      const isRoot = rootInterval0Notes.has(n);
+
+      ctx.strokeStyle = isRoot ? '#cc9933' : '#aa8833';
+      ctx.lineWidth = isRoot ? 2.0 : 1.2;
+      ctx.globalAlpha = isRoot ? 0.7 : 0.4;
+      ctx.beginPath();
+      ctx.moveTo(0, sy);
+      ctx.lineTo(width, sy);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
     }
   }
 

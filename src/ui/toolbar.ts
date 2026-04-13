@@ -2,6 +2,7 @@ import type { ToolMode } from '../types';
 import type { Viewport } from '../canvas/viewport';
 import { MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_TOTAL_BEATS, MAX_TOTAL_BEATS } from '../constants';
 import { SCALE_CATALOG, getScaleGroups } from '../utils/scales';
+import { CHORD_CATALOG, getChordGroups } from '../utils/chords';
 
 export interface ToolbarCallbacks {
   onPlay(): void;
@@ -16,6 +17,7 @@ export interface ToolbarCallbacks {
   onLoopToggle(enabled: boolean): void;
   onZoomXChange(zoom: number): void;
   onZoomYChange(zoom: number): void;
+  onChordIdChange(chordId: string): void;
 }
 
 export function createToolbar(
@@ -30,7 +32,20 @@ export function createToolbar(
   updateSnap(enabled: boolean): void;
   updateScaleRoot(root: number | null): void;
   updateScaleId(scaleId: string | null): void;
+  updateChordId(chordId: string | null): void;
+  updateActiveTool(tool: ToolMode): void;
 } {
+  // Build chord type <optgroup> options
+  const chordGroups = getChordGroups();
+  let chordOptionsHtml = '';
+  for (const group of chordGroups) {
+    chordOptionsHtml += `<optgroup label="${group}">`;
+    for (const c of CHORD_CATALOG.filter(ch => ch.group === group)) {
+      chordOptionsHtml += `<option value="${c.id}"${c.id === 'major' ? ' selected' : ''}>${c.name}</option>`;
+    }
+    chordOptionsHtml += '</optgroup>';
+  }
+
   // Build scale type <optgroup> options
   const groups = getScaleGroups();
   let scaleOptionsHtml = '';
@@ -69,6 +84,7 @@ export function createToolbar(
         <button id="tool-draw" class="tool-btn active" data-tool="draw" title="Draw (D)">Draw</button>
         <button id="tool-select" class="tool-btn" data-tool="select" title="Select (V)">Select</button>
         <button id="tool-delete" class="tool-btn" data-tool="delete" title="Delete (X)">Delete</button>
+        <button id="tool-chord" class="tool-btn" data-tool="chord" title="Chord (C)">Chord</button>
       </div>
 
       <div class="toolbar-group">
@@ -83,6 +99,13 @@ export function createToolbar(
 
       <div class="toolbar-group">
         <button id="snap-toggle" class="tool-btn active" title="Toggle snap (S)">Snap</button>
+      </div>
+
+      <div class="toolbar-group chord">
+        <label>Chord</label>
+        <select id="chord-type">
+          ${chordOptionsHtml}
+        </select>
       </div>
 
       <div class="toolbar-group scale">
@@ -172,6 +195,12 @@ export function createToolbar(
     callbacks.onScaleIdChange(scaleTypeSelect.value);
   });
 
+  // Chord type
+  const chordTypeSelect = container.querySelector('#chord-type') as HTMLSelectElement;
+  chordTypeSelect.addEventListener('change', () => {
+    callbacks.onChordIdChange(chordTypeSelect.value);
+  });
+
   // Length
   const lengthInput = container.querySelector('#input-length') as HTMLInputElement;
   const lengthTimeSpan = container.querySelector('#length-time') as HTMLElement;
@@ -227,6 +256,14 @@ export function createToolbar(
     },
     updateScaleId(scaleId: string | null) {
       if (scaleId) scaleTypeSelect.value = scaleId;
+    },
+    updateChordId(chordId: string | null) {
+      if (chordId) chordTypeSelect.value = chordId;
+    },
+    updateActiveTool(tool: ToolMode) {
+      toolBtns.forEach(b => b.classList.remove('active'));
+      const target = container.querySelector(`[data-tool="${tool}"]`);
+      if (target) target.classList.add('active');
     },
   };
 }

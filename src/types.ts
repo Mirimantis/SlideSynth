@@ -89,7 +89,7 @@ export interface PlaybackInfo {
 
 // ── Tool ────────────────────────────────────────────────────────
 
-export type ToolMode = 'draw' | 'select' | 'delete';
+export type ToolMode = 'draw' | 'select' | 'delete' | 'chord';
 
 // ── App State ───────────────────────────────────────────────────
 
@@ -104,6 +104,7 @@ export interface AppState {
   snapEnabled: boolean;
   scaleRoot: number | null;    // 0-11, or null = no scale
   scaleId: string | null;      // ScaleDefinition.id, or null
+  chordId: string | null;      // ChordDefinition.id, or null
 }
 
 // ── Transform Box ──────────────────────────────────────────────

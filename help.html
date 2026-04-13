@@ -218,6 +218,7 @@
     <a href="#tracks">Tracks & Tones</a>
     <a href="#preview">Live Audio Preview</a>
     <a href="#snapping">Snap & Grid</a>
+    <a href="#chords">Chord Tool</a>
     <a href="#scales">Key & Scale</a>
     <a href="#viewport">Zoom & Pan</a>
     <a href="#clipboard">Copy, Paste & Duplicate</a>
@@ -404,6 +405,37 @@
     </div>
   </details>
 
+  <!-- Chord Tool -->
+  <h2 id="chords">Chord Tool</h2>
+  <p>
+    The <strong>Chord</strong> tool (<kbd>C</kbd>) helps you build harmonies by showing
+    the notes that complete a chord relative to a selected point. Pick a chord type from
+    the <strong>Chord</strong> dropdown in the toolbar, then click any existing point to
+    use it as the root.
+  </p>
+  <details>
+    <summary>Chord tool details</summary>
+    <div class="detail-body">
+      <ul>
+        <li><strong>Select chord type</strong> &mdash; use the Chord dropdown in the toolbar.
+            Available types include intervals, triads (major, minor, diminished, augmented, sus2, sus4),
+            sevenths (maj7, min7, dom7, dim7, etc.), extended chords (9th, 11th, 13th), and power chords.</li>
+        <li><strong>Select a root</strong> &mdash; in Chord mode, click any existing control point.
+            Amber guide lines appear across the staff at every chord-tone pitch, and diamond markers
+            show the specific voicing at the root point's time position.</li>
+        <li><strong>Audio preview</strong> &mdash; hold <kbd>Space</kbd> to hear all chord tones
+            played simultaneously. Release to stop.</li>
+        <li><strong>Commit chord</strong> &mdash; press <kbd>Enter</kbd> to create new single-point
+            curves at each chord-tone pitch (same time as the root). The root curve plus the new
+            curves are auto-selected with a transform box so you can immediately move or reshape
+            the chord as a unit.</li>
+        <li>Undo (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) removes the committed chord curves in one step.</li>
+        <li>The chord type dropdown is always visible so you can pre-select a chord before switching
+            to the Chord tool.</li>
+      </ul>
+    </div>
+  </details>
+
   <!-- Zoom & Pan -->
   <h2 id="viewport">Zoom & Pan</h2>
   <details>
@@ -470,7 +502,10 @@
     <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>
     <tr><td><kbd>V</kbd></td><td>Select tool</td></tr>
     <tr><td><kbd>X</kbd></td><td>Delete tool</td></tr>
+    <tr><td><kbd>C</kbd></td><td>Chord tool</td></tr>
     <tr><td><kbd>S</kbd></td><td>Toggle snap</td></tr>
+    <tr><td><kbd>Space</kbd> (Chord mode)</td><td>Hold to preview chord audio</td></tr>
+    <tr><td><kbd>Enter</kbd> (Chord mode)</td><td>Commit chord tones as new curves</td></tr>
     <tr><td><kbd>Escape</kbd> / <kbd>Enter</kbd></td><td>Finish drawing</td></tr>
     <tr><td><kbd>Ctrl</kbd> (hold in Draw)</td><td>Temporary Select</td></tr>
     <tr><td><kbd>Shift</kbd> (hold while dragging)</td><td>Constrain to axis</td></tr>

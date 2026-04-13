@@ -24,6 +24,7 @@ function createInitialState(): AppState {
     snapEnabled: true,
     scaleRoot: null,
     scaleId: null,
+    chordId: 'major',
   };
 }
 
@@ -131,6 +132,11 @@ class Store {
 
   setScaleId(scaleId: string | null) {
     this.state.scaleId = scaleId;
+    this.notify();
+  }
+
+  setChordId(chordId: string | null) {
+    this.state.chordId = chordId;
     this.notify();
   }
 
