@@ -3,7 +3,9 @@ import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
 import { renderPlayhead } from './canvas/playhead';
-import { createInteraction, rebuildTransformBox } from './canvas/interaction';
+import { createInteraction, rebuildTransformBox, RULER_HEIGHT } from './canvas/interaction';
+import { createPreviewManager } from './audio/preview';
+import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
 import { createPlaybackEngine } from './audio/playback';
 import { renderPropertyPanel } from './ui/property-panel';
@@ -75,6 +77,10 @@ function resizeCanvases() {
   bgDirty = true;
 }
 
+// ── Audio preview ──────────────────────────────────────────────
+const preview = createPreviewManager();
+let previewActive = false;
+
 // ── Interaction ─────────────────────────────────────────────────
 let scrubWasPlaying = false;
 const interaction = createInteraction(fgCanvas, viewport, {
@@ -87,11 +93,25 @@ const interaction = createInteraction(fgCanvas, viewport, {
       store.setPlaybackPosition(beats);
     } else if (phase === 'move') {
       store.setPlaybackPosition(beats);
+      if (previewActive && preview.isScrubPreviewActive()) {
+        preview.updateScrubPosition(beats, store.getComposition());
+      }
     } else {
       store.setPlaybackPosition(beats);
       if (scrubWasPlaying) {
         playback.play(store.getComposition(), beats);
       }
+    }
+  },
+  onCursorMove(_worldX, worldY, _screenY) {
+    if (previewActive && preview.isDrawPreviewActive()) {
+      preview.updateDrawPitch(worldY);
+    }
+  },
+  onCursorLeave() {
+    if (previewActive && preview.isDrawPreviewActive()) {
+      preview.stopAll();
+      previewActive = false;
     }
   },
 });
@@ -110,6 +130,7 @@ const playback = createPlaybackEngine((beats) => {
 const toolbarContainer = document.getElementById('toolbar')!;
 const toolbar = createToolbar(toolbarContainer, viewport, {
   onPlay() {
+    if (previewActive) { preview.stopAll(); previewActive = false; }
     const state = store.getState();
     playback.play(state.composition, state.playback.positionBeats);
     store.setPlaybackState('playing');
@@ -130,6 +151,10 @@ const toolbar = createToolbar(toolbarContainer, viewport, {
     store.setTool(tool);
     if (tool !== 'draw' && interaction.drawingCurve) {
       interaction.drawingCurve = null;
+    }
+    if (tool !== 'draw' && previewActive && preview.isDrawPreviewActive()) {
+      preview.stopAll();
+      previewActive = false;
     }
   },
   onSnapToggle(enabled: boolean) {
@@ -166,8 +191,24 @@ const toolbar = createToolbar(toolbarContainer, viewport, {
   },
 });
 
-// ── Save / Load / Export buttons (added to toolbar) ─────────────
+// ── Composition name field (prepended to toolbar) ──────────────
 const toolbarRow = toolbarContainer.querySelector('.toolbar-row')!;
+const nameGroup = document.createElement('div');
+nameGroup.className = 'toolbar-group';
+const nameInput = document.createElement('input');
+nameInput.type = 'text';
+nameInput.id = 'comp-name';
+nameInput.className = 'comp-name-input';
+nameInput.value = store.getComposition().name || 'Untitled';
+nameInput.title = 'Composition name';
+nameInput.spellcheck = false;
+nameInput.addEventListener('change', () => {
+  store.mutate(c => { c.name = nameInput.value || 'Untitled'; });
+});
+nameGroup.appendChild(nameInput);
+toolbarRow.insertBefore(nameGroup, toolbarRow.firstChild);
+
+// ── Save / Load / Export buttons (added to toolbar) ─────────────
 
 function addToolbarButton(label: string, title: string, onClick: () => void): HTMLButtonElement {
   const group = document.createElement('div');
@@ -198,6 +239,7 @@ addToolbarButton('Load', 'Load composition (JSON)', async () => {
     viewport.totalBeats = comp.totalBeats;
     toolbar.updateLength(comp.totalBeats);
     toolbar.updatePlayState(false);
+    nameInput.value = comp.name || 'Untitled';
   } catch (e) {
     console.error('Failed to load:', e);
   }
@@ -222,6 +264,7 @@ addToolbarButton('MIDI', 'Import MIDI file', async () => {
     viewport.totalBeats = comp.totalBeats;
     toolbar.updateLength(comp.totalBeats);
     toolbar.updatePlayState(false);
+    nameInput.value = comp.name || 'Untitled';
   } catch (e) {
     console.error('MIDI import failed:', e);
   }
@@ -314,19 +357,44 @@ window.addEventListener('keydown', (e) => {
   }
 
   switch (e.key) {
-    case ' ':
+    case ' ': {
       e.preventDefault();
-      if (playback.isPlaying()) {
-        playback.pause();
-        store.setPlaybackState('paused');
-        toolbar.updatePlayState(false);
+      if (e.repeat) break; // prevent rapid toggling when holding space
+
+      const state = store.getState();
+      const inDrawContext = state.activeTool === 'draw'
+        && interaction.cursorInCanvas
+        && interaction.cursorScreenY >= RULER_HEIGHT
+        && interaction.cursorWorld !== null;
+      const inScrubContext = interaction.scrubbing;
+
+      if (inDrawContext) {
+        // Start draw preview — play tone at cursor pitch
+        const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+        const tone = track ? state.composition.toneLibrary.find(t => t.id === track.toneId) : null;
+        if (tone && interaction.cursorWorld) {
+          preview.startDrawPreview(tone, interaction.cursorWorld.y);
+          previewActive = true;
+        }
+      } else if (inScrubContext) {
+        // Start scrub preview — play all curves at scrub position
+        preview.startScrubPreview(state.composition);
+        preview.updateScrubPosition(state.playback.positionBeats, state.composition);
+        previewActive = true;
       } else {
-        const state = store.getState();
-        playback.play(state.composition, state.playback.positionBeats);
-        store.setPlaybackState('playing');
-        toolbar.updatePlayState(true);
+        // Normal play/pause toggle
+        if (playback.isPlaying()) {
+          playback.pause();
+          store.setPlaybackState('paused');
+          toolbar.updatePlayState(false);
+        } else {
+          playback.play(state.composition, state.playback.positionBeats);
+          store.setPlaybackState('playing');
+          toolbar.updatePlayState(true);
+        }
       }
       break;
+    }
     case 'd':
       store.setTool('draw');
       break;
@@ -377,6 +445,13 @@ window.addEventListener('keydown', (e) => {
       }
       break;
     }
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (e.key === ' ' && previewActive) {
+    preview.stopAll();
+    previewActive = false;
   }
 });
 
@@ -549,6 +624,7 @@ function render() {
     const scaleRoot = state.scaleRoot;
     const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
     renderStaff(bgCtx, viewport, rect.width, rect.height, comp.totalBeats, comp.beatsPerMeasure, scaleRoot, scale);
+    renderRuler(bgCtx, viewport, rect.width, comp.totalBeats, comp.beatsPerMeasure);
     bgDirty = false;
   }
 
@@ -596,10 +672,11 @@ function render() {
             ?.curves.find(c => c.id === singleId)
         : null);
     const points = previewCurve?.points;
+    const track = comp.tracks.find(t => t.id === state.selectedTrackId);
+    const tone = track ? comp.toneLibrary.find(t => t.id === track.toneId) : null;
+    const color = tone?.color ?? '#4fc3f7';
+
     if (points && points.length > 0) {
-      const track = comp.tracks.find(t => t.id === state.selectedTrackId);
-      const tone = track ? comp.toneLibrary.find(t => t.id === track.toneId) : null;
-      const color = tone?.color ?? '#4fc3f7';
       const cx = interaction.cursorWorld.x;
 
       // Find the neighboring point(s) the cursor sits between
@@ -622,6 +699,15 @@ function render() {
           }
         }
       }
+    } else if (track) {
+      // No curve yet — show standalone cursor dot for first point placement
+      const scr = viewport.worldToScreen(interaction.cursorWorld.x, interaction.cursorWorld.y);
+      fgCtx.beginPath();
+      fgCtx.arc(scr.sx, scr.sy, 4, 0, Math.PI * 2);
+      fgCtx.fillStyle = color;
+      fgCtx.globalAlpha = 0.6;
+      fgCtx.fill();
+      fgCtx.globalAlpha = 1;
     }
   }
 
