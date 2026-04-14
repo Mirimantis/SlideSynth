@@ -89,7 +89,7 @@ export interface PlaybackInfo {
 
 // ── Tool ────────────────────────────────────────────────────────
 
-export type ToolMode = 'draw' | 'select' | 'delete';
+export type ToolMode = 'draw' | 'select' | 'delete' | 'scissors';
 
 // ── App State ───────────────────────────────────────────────────
 

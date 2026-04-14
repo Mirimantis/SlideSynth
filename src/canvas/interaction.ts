@@ -2,12 +2,12 @@ import type { Vec2, BezierCurve, ControlPoint, Track, TransformBoxState } from '
 import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
-import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, deepCopyPoints, applyTransformToCurve } from '../model/curve';
+import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, deepCopyPoints, applyTransformToCurve, splitCurveAtSegment, splitCurveAtPoint } from '../model/curve';
 import { snapToGrid, getAdaptiveSubdivisions } from '../utils/snap';
 import type { SnapConfig } from '../utils/snap';
 import { getScaleById } from '../utils/scales';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
-import { distToPoint, nearestPointOnCubic } from '../utils/bezier-math';
+import { distToPoint, nearestPointOnCubic, nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
 
 export const RULER_HEIGHT = 24;
@@ -41,6 +41,8 @@ export interface InteractionState {
   cursorScreenY: number;
   /** Whether the cursor is currently over the canvas element. */
   cursorInCanvas: boolean;
+  /** Preview position for the scissors tool (world coords), null if no valid cut. */
+  scissorsPreview: Vec2 | null;
 }
 
 export function createInteraction(
@@ -61,6 +63,7 @@ export function createInteraction(
     scrubbing: false,
     cursorScreenY: 0,
     cursorInCanvas: false,
+    scissorsPreview: null,
   };
 
   canvas.addEventListener('mousemove', (e) => {
@@ -170,7 +173,12 @@ export function createInteraction(
       canvas.title = hit === 'octaveUp' ? '1 Octave Up'
         : hit === 'octaveDown' ? '1 Octave Down'
         : '';
+    } else if (!istate.dragging && store.getState().activeTool === 'scissors') {
+      canvas.style.cursor = 'crosshair';
+      canvas.title = 'Click a curve to split';
+      istate.scissorsPreview = findScissorsPreview({ x: raw.wx, y: raw.wy }, vp);
     } else if (!istate.dragging) {
+      istate.scissorsPreview = null;
       canvas.style.cursor = 'default';
       canvas.title = '';
     }
@@ -274,6 +282,8 @@ export function createInteraction(
       handleSelectClick(istate, rawPt, vp, e.shiftKey);
     } else if (state.activeTool === 'delete') {
       handleDeleteClick(rawPt, vp);
+    } else if (state.activeTool === 'scissors') {
+      handleScissorsClick(rawPt, vp);
     }
   });
 
@@ -590,6 +600,104 @@ function handleDeleteClick(worldPt: Vec2, vp: Viewport): void {
       }
     }
   }
+}
+
+/** Screen-space distance between two world points. */
+function screenDist(a: Vec2, b: Vec2, vp: Viewport): number {
+  const dx = (a.x - b.x) * vp.state.zoomX;
+  const dy = (a.y - b.y) * vp.state.zoomY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+const SCISSORS_HIT_PX = 8; // pixel threshold for scissors hit-testing
+
+/**
+ * Find the scissors cut target: which curve, segment index, parameter t, and preview point.
+ * Checks interior control points first (snap-to-point), then curve segments.
+ * When snap is enabled, the cut X is snapped to the beat grid.
+ */
+function findScissorsCut(worldPt: Vec2, vp: Viewport): {
+  curve: BezierCurve; segmentIndex: number; t: number; point: Vec2; atPoint: boolean;
+} | null {
+  const track = getSelectedTrack();
+  if (!track) return null;
+
+  // First pass: snap to interior control points
+  for (const curve of track.curves) {
+    if (curve.points.length < 3) continue;
+    for (let i = 1; i < curve.points.length - 1; i++) {
+      if (screenDist(worldPt, curve.points[i]!.position, vp) < SCISSORS_HIT_PX) {
+        return { curve, segmentIndex: -1, t: 0, point: { ...curve.points[i]!.position }, atPoint: true };
+      }
+    }
+  }
+
+  // Second pass: cut on curve segments (screen-space distance)
+  const snap = buildSnapConfig(vp.state.zoomX);
+  for (const curve of track.curves) {
+    if (curve.points.length < 2) continue;
+    for (let i = 0; i < curve.points.length - 1; i++) {
+      const seg = getSegmentControlPoints(curve, i);
+      if (!seg) continue;
+      const nearest = nearestPointOnCubicScaled(
+        seg.p0, seg.p1, seg.p2, seg.p3, worldPt,
+        vp.state.zoomX, vp.state.zoomY,
+      );
+      if (nearest.dist < SCISSORS_HIT_PX && nearest.t > 0.001 && nearest.t < 0.999) {
+        let t = nearest.t;
+        let point = { ...nearest.point };
+
+        // Snap X to beat grid if snap is enabled
+        if (snap.enabled) {
+          const step = 1 / snap.subdivisionsPerBeat;
+          const snappedX = Math.max(0, Math.round(point.x / step) * step);
+          // Only snap if the snapped X is still inside this segment
+          if (snappedX > seg.p0.x && snappedX < seg.p3.x) {
+            t = findTForX(seg.p0, seg.p1, seg.p2, seg.p3, snappedX);
+            point = evaluateCubic(seg.p0, seg.p1, seg.p2, seg.p3, t);
+          }
+        }
+
+        if (t > 0.001 && t < 0.999) {
+          return { curve, segmentIndex: i, t, point, atPoint: false };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function handleScissorsClick(worldPt: Vec2, vp: Viewport): void {
+  const cut = findScissorsCut(worldPt, vp);
+  if (!cut) return;
+
+  history.snapshot();
+  if (cut.atPoint) {
+    // Split at existing control point
+    const pointIdx = cut.curve.points.findIndex(p => p.position.x === cut.point.x && p.position.y === cut.point.y);
+    if (pointIdx < 1 || pointIdx >= cut.curve.points.length - 1) return;
+    const { left, right } = splitCurveAtPoint(cut.curve, pointIdx);
+    const track = getSelectedTrack()!;
+    store.mutate(() => {
+      const idx = track.curves.indexOf(cut.curve);
+      if (idx >= 0) track.curves.splice(idx, 1, left, right);
+    });
+  } else {
+    const { left, right } = splitCurveAtSegment(cut.curve, cut.segmentIndex, cut.t);
+    const track = getSelectedTrack()!;
+    store.mutate(() => {
+      const idx = track.curves.indexOf(cut.curve);
+      if (idx >= 0) track.curves.splice(idx, 1, left, right);
+    });
+  }
+  store.setSelectedCurve(null);
+  store.setSelectedPoint(null);
+}
+
+function findScissorsPreview(worldPt: Vec2, vp: Viewport): Vec2 | null {
+  const cut = findScissorsCut(worldPt, vp);
+  return cut ? cut.point : null;
 }
 
 function handleDrag(istate: InteractionState, snapped: { wx: number; wy: number }): void {

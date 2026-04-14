@@ -1,5 +1,6 @@
 import type { BezierCurve, ControlPoint, Vec2, BoundingBox, TransformHandle } from '../types';
 import { generateId } from './tone';
+import { subdivideCubic, distToPoint } from '../utils/bezier-math';
 
 /** Create a new empty curve. */
 export function createCurve(): BezierCurve {
@@ -127,6 +128,122 @@ export function getSegmentControlPoints(
     : p3;
 
   return { p0, p1, p2, p3 };
+}
+
+/**
+ * Split a curve into two at a given segment and parameter t.
+ * Returns two new curves whose visual shape is identical to the original.
+ */
+export function splitCurveAtSegment(
+  curve: BezierCurve,
+  segmentIndex: number,
+  t: number,
+): { left: BezierCurve; right: BezierCurve } {
+  const seg = getSegmentControlPoints(curve, segmentIndex)!;
+  const [L0, L1, L2, L3, _R0, R1, R2, R3] = subdivideCubic(seg.p0, seg.p1, seg.p2, seg.p3, t);
+
+  const volA = curve.points[segmentIndex]!.volume;
+  const volB = curve.points[segmentIndex + 1]!.volume;
+  const splitVolume = volA + (volB - volA) * t;
+
+  // Left curve: points[0..segmentIndex] + split point
+  const left = createCurve();
+  left.points = deepCopyPoints(curve.points.slice(0, segmentIndex + 1));
+  // Adjust the last copied point's handleOut to match the subdivision
+  const lastLeft = left.points[left.points.length - 1]!;
+  lastLeft.handleOut = { x: L1.x - L0.x, y: L1.y - L0.y };
+  // Append the split point
+  left.points.push({
+    position: { x: L3.x, y: L3.y },
+    handleIn: { x: L2.x - L3.x, y: L2.y - L3.y },
+    handleOut: null,
+    volume: splitVolume,
+  });
+
+  // Right curve: split point + points[segmentIndex+1..end]
+  const right = createCurve();
+  right.points = [
+    {
+      position: { x: L3.x, y: L3.y }, // same split point, fresh copy
+      handleIn: null,
+      handleOut: { x: R1.x - L3.x, y: R1.y - L3.y },
+      volume: splitVolume,
+    },
+    ...deepCopyPoints(curve.points.slice(segmentIndex + 1)),
+  ];
+  // Adjust the first original point's handleIn to match the subdivision
+  right.points[1]!.handleIn = { x: R2.x - R3.x, y: R2.y - R3.y };
+
+  return { left, right };
+}
+
+/**
+ * Split a curve at an existing control point, duplicating the point
+ * so it becomes the end of the left curve and the start of the right.
+ * The point keeps its handleIn on the left side and handleOut on the right.
+ */
+export function splitCurveAtPoint(
+  curve: BezierCurve,
+  pointIndex: number,
+): { left: BezierCurve; right: BezierCurve } {
+  const left = createCurve();
+  left.points = deepCopyPoints(curve.points.slice(0, pointIndex + 1));
+  left.points[left.points.length - 1]!.handleOut = null;
+
+  const right = createCurve();
+  right.points = deepCopyPoints(curve.points.slice(pointIndex));
+  right.points[0]!.handleIn = null;
+
+  return { left, right };
+}
+
+/**
+ * Join multiple curves into one, sorted by time (first point x).
+ * Adjacent endpoints within `threshold` merge into a single point;
+ * otherwise a new straight segment bridges the gap.
+ */
+export function joinCurves(
+  curves: BezierCurve[],
+  threshold: number,
+): { merged: BezierCurve; consumedIds: Set<string> } {
+  // Sort curves left-to-right by their first point
+  const sorted = [...curves].sort(
+    (a, b) => a.points[0]!.position.x - b.points[0]!.position.x,
+  );
+
+  const merged = createCurve();
+  merged.points = deepCopyPoints(sorted[0]!.points);
+  const consumedIds = new Set<string>([sorted[0]!.id]);
+
+  for (let c = 1; c < sorted.length; c++) {
+    const incoming = deepCopyPoints(sorted[c]!.points);
+    const tail = merged.points[merged.points.length - 1]!;
+    const head = incoming[0]!;
+
+    // Skip curves whose start is behind the current end — would create backwards segments
+    if (head.position.x < tail.position.x) continue;
+
+    consumedIds.add(sorted[c]!.id);
+
+    if (distToPoint(tail.position, head.position) <= threshold) {
+      // Merge: average position, keep tail's handleIn, take head's handleOut
+      tail.position.x = (tail.position.x + head.position.x) / 2;
+      tail.position.y = (tail.position.y + head.position.y) / 2;
+      tail.handleOut = head.handleOut;
+      tail.volume = (tail.volume + head.volume) / 2;
+      // Append remaining points (skip the merged head)
+      for (let i = 1; i < incoming.length; i++) {
+        merged.points.push(incoming[i]!);
+      }
+    } else {
+      // Gap: append all points — existing null handles create a straight segment
+      for (const pt of incoming) {
+        merged.points.push(pt);
+      }
+    }
+  }
+
+  return { merged, consumedIds };
 }
 
 // ── Transform Box helpers ──────────────────────────────────────

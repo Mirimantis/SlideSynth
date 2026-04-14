@@ -18,7 +18,7 @@ import { store } from './state/store';
 import { history } from './state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
-import { computeMultiCurveBBox, deepCopyPoints } from './model/curve';
+import { computeMultiCurveBBox, deepCopyPoints, joinCurves } from './model/curve';
 import { getScaleById } from './utils/scales';
 import type { ToolMode, ControlPoint } from './types';
 
@@ -156,6 +156,11 @@ const toolbar = createToolbar(toolbarContainer, viewport, {
       preview.stopAll();
       previewActive = false;
     }
+    if (tool === 'scissors') {
+      interaction.transformBox = null;
+      store.setSelectedCurve(null);
+      store.setSelectedPoint(null);
+    }
   },
   onSnapToggle(enabled: boolean) {
     store.setSnap(enabled);
@@ -270,6 +275,31 @@ addToolbarButton('MIDI', 'Import MIDI file', async () => {
   }
 });
 
+// ── Join helper ────────────────────────────────────────────────
+function performJoin() {
+  const state = store.getState();
+  if (state.selectedCurveIds.size < 2) return;
+  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  if (!track) return;
+  const curves = [...state.selectedCurveIds]
+    .map(id => track.curves.find(c => c.id === id))
+    .filter((c): c is import('./types').BezierCurve => !!c);
+  if (curves.length < 2) return;
+  const threshold = Math.max(8 / viewport.state.zoomX, 8 / viewport.state.zoomY);
+  const { merged, consumedIds } = joinCurves(curves, threshold);
+  if (consumedIds.size < 2) return;
+  history.snapshot();
+  store.mutate(() => {
+    for (let i = track.curves.length - 1; i >= 0; i--) {
+      if (consumedIds.has(track.curves[i]!.id)) track.curves.splice(i, 1);
+    }
+    track.curves.push(merged);
+  });
+  store.setSelectedCurve(merged.id);
+  store.setSelectedPoint(null);
+  interaction.transformBox = null;
+}
+
 // ── Undo / Redo buttons ────────────────────────────────────────
 function clearInteractionForUndo() {
   interaction.drawingCurve = null;
@@ -280,6 +310,7 @@ function clearInteractionForUndo() {
 const undoBtn = addToolbarButton('Undo', 'Undo (Ctrl+Z)', () => { clearInteractionForUndo(); history.undo(); });
 const redoBtn = addToolbarButton('Redo', 'Redo (Ctrl+Shift+Z)', () => { clearInteractionForUndo(); history.redo(); });
 
+addToolbarButton('Join', 'Join selected curves (Ctrl+J)', performJoin);
 addToolbarButton('?', 'User Guide (?)', () => { window.open('/help.html', '_blank'); });
 undoBtn.disabled = true;
 redoBtn.disabled = true;
@@ -356,6 +387,13 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
+  // Join selected curves
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+    e.preventDefault();
+    performJoin();
+    return;
+  }
+
   switch (e.key) {
     case ' ': {
       e.preventDefault();
@@ -397,12 +435,22 @@ window.addEventListener('keydown', (e) => {
     }
     case 'd':
       store.setTool('draw');
+      toolbar.updateTool('draw');
       break;
     case 'v':
       store.setTool('select');
+      toolbar.updateTool('select');
       break;
     case 'x':
       store.setTool('delete');
+      toolbar.updateTool('delete');
+      break;
+    case 'c':
+      store.setTool('scissors');
+      toolbar.updateTool('scissors');
+      interaction.transformBox = null;
+      store.setSelectedCurve(null);
+      store.setSelectedPoint(null);
       break;
     case 's': {
       const snapEnabled = !store.getState().snapEnabled;
@@ -709,6 +757,18 @@ function render() {
       fgCtx.fill();
       fgCtx.globalAlpha = 1;
     }
+  }
+
+  // Scissors preview dot
+  if (state.activeTool === 'scissors' && interaction.scissorsPreview) {
+    const scr = viewport.worldToScreen(interaction.scissorsPreview.x, interaction.scissorsPreview.y);
+    fgCtx.beginPath();
+    fgCtx.arc(scr.sx, scr.sy, 5, 0, Math.PI * 2);
+    fgCtx.fillStyle = '#ff5252';
+    fgCtx.fill();
+    fgCtx.lineWidth = 1.5;
+    fgCtx.strokeStyle = '#fff';
+    fgCtx.stroke();
   }
 
   // Playhead

@@ -213,6 +213,8 @@
     <a href="#overview">Overview</a>
     <a href="#drawing">Drawing Curves</a>
     <a href="#selecting">Selecting & Editing</a>
+    <a href="#scissors">Scissors (Split)</a>
+    <a href="#join">Join Curves</a>
     <a href="#transform">Transform Box</a>
     <a href="#playback">Playback & Transport</a>
     <a href="#tracks">Tracks & Tones</a>
@@ -282,6 +284,47 @@
         <li><kbd>Shift</kbd>+click to add/remove curves from a multi-selection.</li>
         <li>When a single curve is selected, drag its handles (handleIn / handleOut) to adjust curvature.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to the horizontal or vertical axis.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Scissors -->
+  <h2 id="scissors">Scissors (Split Curve)</h2>
+  <p>
+    Select the <strong>Scissors</strong> tool (<kbd>C</kbd>) and click on a curve
+    segment to split it into two independent curves at the click location. The visual
+    shape is preserved exactly — the two halves look identical to the original.
+  </p>
+  <details>
+    <summary>Scissors details</summary>
+    <div class="detail-body">
+      <ul>
+        <li>A red preview dot shows where the cut will happen as you hover over a curve.</li>
+        <li>Click on a curve segment to split it into two curves at that point. Bezier handles are recalculated so both halves maintain the original shape.</li>
+        <li>Click near an interior control point to split exactly at that point, duplicating it as the end/start of each half.</li>
+        <li>When snap is enabled, the cut position snaps horizontally to the beat grid.</li>
+        <li>Volume is interpolated at the split point.</li>
+        <li>Use <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo a split.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Join -->
+  <h2 id="join">Join Curves</h2>
+  <p>
+    Select two or more curves and press <kbd>Ctrl</kbd>+<kbd>J</kbd> to merge them into
+    a single curve. Curves are joined in time order (left to right).
+  </p>
+  <details>
+    <summary>Join details</summary>
+    <div class="detail-body">
+      <ul>
+        <li>If adjacent endpoints are close together (within a few pixels), they merge into one point.</li>
+        <li>If endpoints are far apart, a new straight segment bridges the gap.</li>
+        <li>Curves that overlap in time (start point before the previous curve's end) are skipped.</li>
+        <li>Handles at merged points are preserved from each side, maintaining curve shape.</li>
+        <li>Also available via the <strong>Join</strong> button in the toolbar.</li>
+        <li>Use <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo a join.</li>
       </ul>
     </div>
   </details>
@@ -470,6 +513,7 @@
     <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>
     <tr><td><kbd>V</kbd></td><td>Select tool</td></tr>
     <tr><td><kbd>X</kbd></td><td>Delete tool</td></tr>
+    <tr><td><kbd>C</kbd></td><td>Scissors tool (split curve)</td></tr>
     <tr><td><kbd>S</kbd></td><td>Toggle snap</td></tr>
     <tr><td><kbd>Escape</kbd> / <kbd>Enter</kbd></td><td>Finish drawing</td></tr>
     <tr><td><kbd>Ctrl</kbd> (hold in Draw)</td><td>Temporary Select</td></tr>
@@ -483,6 +527,7 @@
     <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd></td><td>Copy / Cut / Paste</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Duplicate</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></td><td>Continue curves</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>J</kbd></td><td>Join selected curves</td></tr>
     <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Delete selected point</td></tr>
     <tr><td><kbd>?</kbd></td><td>Open this help page</td></tr>
   </table>
