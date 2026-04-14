@@ -30,6 +30,7 @@ export function createToolbar(
   updateSnap(enabled: boolean): void;
   updateScaleRoot(root: number | null): void;
   updateScaleId(scaleId: string | null): void;
+  updateTool(tool: ToolMode): void;
 } {
   // Build scale type <optgroup> options
   const groups = getScaleGroups();
@@ -69,6 +70,7 @@ export function createToolbar(
         <button id="tool-draw" class="tool-btn active" data-tool="draw" title="Draw (D)">Draw</button>
         <button id="tool-select" class="tool-btn" data-tool="select" title="Select (V)">Select</button>
         <button id="tool-delete" class="tool-btn" data-tool="delete" title="Delete (X)">Delete</button>
+        <button id="tool-scissors" class="tool-btn" data-tool="scissors" title="Scissors (C)">Scissors</button>
       </div>
 
       <div class="toolbar-group">
@@ -227,6 +229,9 @@ export function createToolbar(
     },
     updateScaleId(scaleId: string | null) {
       if (scaleId) scaleTypeSelect.value = scaleId;
+    },
+    updateTool(tool: ToolMode) {
+      toolBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-tool') === tool));
     },
   };
 }
