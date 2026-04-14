@@ -1,4 +1,5 @@
 import { createViewport } from './canvas/viewport';
+import { MIN_TOTAL_BEATS, MAX_TOTAL_BEATS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
@@ -31,6 +32,27 @@ app.innerHTML = `
   <div id="toolbar"></div>
   <div id="main-area">
     <div id="track-panel">
+      <div class="panel-header">Transport</div>
+      <div id="transport-section">
+        <div class="transport-buttons transport">
+          <button id="btn-play" title="Play (Space)">&#9654;</button>
+          <button id="btn-pause" title="Pause" disabled>&#10074;&#10074;</button>
+          <button id="btn-stop" title="Stop">&#9632;</button>
+          <label class="toolbar-loop-label" title="Loop playback (L)">
+            <input type="checkbox" id="loop-toggle" />
+            <span>Loop</span>
+          </label>
+        </div>
+        <div class="transport-row">
+          <label>BPM</label>
+          <input type="number" id="input-bpm" value="120" min="20" max="300" step="1" />
+        </div>
+        <div class="transport-row">
+          <label>Length</label>
+          <input type="number" id="input-length" value="${viewport.totalBeats}" min="${MIN_TOTAL_BEATS}" max="${MAX_TOTAL_BEATS}" step="1" title="Composition length in beats" />
+          <span id="length-time" class="toolbar-time-display"></span>
+        </div>
+      </div>
       <div class="panel-header">Tracks</div>
       <div id="track-list"></div>
       <div class="track-panel-actions">
@@ -41,6 +63,11 @@ app.innerHTML = `
     <div id="canvas-container">
       <canvas id="bg-canvas"></canvas>
       <canvas id="fg-canvas"></canvas>
+      <div id="zoom-controls">
+        <span class="zoom-label">Zoom</span>
+        <input type="range" id="zoom-x" min="${MIN_ZOOM_X}" max="${MAX_ZOOM_X}" value="${viewport.state.zoomX}" step="1" title="Zoom X (time)" />
+        <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="1" title="Zoom Y (pitch)" />
+      </div>
     </div>
     <div id="property-panel">
       <div class="panel-header">Properties</div>
@@ -122,31 +149,13 @@ const playback = createPlaybackEngine((beats) => {
   // Detect when playback auto-stopped (reached end without loop)
   if (!playback.isPlaying() && store.getState().playback.state === 'playing') {
     store.setPlaybackState('stopped');
-    toolbar.updatePlayState(false);
+    updatePlayState(false);
   }
 });
 
 // ── Toolbar ─────────────────────────────────────────────────────
 const toolbarContainer = document.getElementById('toolbar')!;
-const toolbar = createToolbar(toolbarContainer, viewport, {
-  onPlay() {
-    if (previewActive) { preview.stopAll(); previewActive = false; }
-    const state = store.getState();
-    playback.play(state.composition, state.playback.positionBeats);
-    store.setPlaybackState('playing');
-    toolbar.updatePlayState(true);
-  },
-  onPause() {
-    playback.pause();
-    store.setPlaybackState('paused');
-    toolbar.updatePlayState(false);
-  },
-  onStop() {
-    playback.stop();
-    store.setPlaybackState('stopped');
-    store.setPlaybackPosition(0);
-    toolbar.updatePlayState(false);
-  },
+const toolbar = createToolbar(toolbarContainer, {
   onToolChange(tool: ToolMode) {
     store.setTool(tool);
     if (tool !== 'draw' && interaction.drawingCurve) {
@@ -162,6 +171,9 @@ const toolbar = createToolbar(toolbarContainer, viewport, {
       store.setSelectedPoint(null);
     }
   },
+  onJoin() {
+    performJoin();
+  },
   onSnapToggle(enabled: boolean) {
     store.setSnap(enabled);
   },
@@ -173,28 +185,95 @@ const toolbar = createToolbar(toolbarContainer, viewport, {
     store.setScaleId(scaleId);
     bgDirty = true;
   },
-  onBpmChange(bpm: number) {
-    history.snapshot();
-    store.setBpm(bpm);
-  },
-  onLengthChange(beats: number) {
-    history.snapshot();
-    store.mutate(c => { c.totalBeats = beats; });
-    viewport.totalBeats = beats;
-    bgDirty = true;
-  },
-  onLoopToggle(enabled: boolean) {
-    playback.setLoop(enabled);
-  },
-  onZoomXChange(z: number) {
-    viewport.setZoomX(z);
-    bgDirty = true;
-  },
-  onZoomYChange(z: number) {
-    viewport.setZoomY(z);
-    bgDirty = true;
-  },
 });
+
+// ── Transport controls (in track panel) ────────────────────────
+const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
+const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
+const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
+const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
+const lengthInput = document.getElementById('input-length') as HTMLInputElement;
+const lengthTimeSpan = document.getElementById('length-time') as HTMLElement;
+const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
+
+function updatePlayState(playing: boolean) {
+  btnPlay.disabled = playing;
+  btnPause.disabled = !playing;
+}
+
+function updateLengthDisplay() {
+  const beats = Number(lengthInput.value);
+  const bpm = Number(bpmInput.value) || 120;
+  const seconds = beats * 60 / bpm;
+  const min = Math.floor(seconds / 60);
+  const sec = Math.floor(seconds % 60);
+  lengthTimeSpan.textContent = `${min}:${String(sec).padStart(2, '0')}`;
+}
+
+function updateBpm(bpm: number) {
+  bpmInput.value = String(bpm);
+  updateLengthDisplay();
+}
+
+function updateLength(beats: number) {
+  lengthInput.value = String(beats);
+  updateLengthDisplay();
+}
+
+btnPlay.addEventListener('click', () => {
+  if (previewActive) { preview.stopAll(); previewActive = false; }
+  const state = store.getState();
+  playback.play(state.composition, state.playback.positionBeats);
+  store.setPlaybackState('playing');
+  updatePlayState(true);
+});
+
+btnPause.addEventListener('click', () => {
+  playback.pause();
+  store.setPlaybackState('paused');
+  updatePlayState(false);
+});
+
+btnStop.addEventListener('click', () => {
+  playback.stop();
+  store.setPlaybackState('stopped');
+  store.setPlaybackPosition(0);
+  updatePlayState(false);
+});
+
+bpmInput.addEventListener('change', () => {
+  const bpm = Math.max(20, Math.min(300, Number(bpmInput.value)));
+  bpmInput.value = String(bpm);
+  history.snapshot();
+  store.setBpm(bpm);
+});
+
+lengthInput.addEventListener('change', () => {
+  const beats = Math.max(MIN_TOTAL_BEATS, Math.min(MAX_TOTAL_BEATS, Math.round(Number(lengthInput.value))));
+  lengthInput.value = String(beats);
+  updateLengthDisplay();
+  history.snapshot();
+  store.mutate(c => { c.totalBeats = beats; });
+  viewport.totalBeats = beats;
+  bgDirty = true;
+});
+
+bpmInput.addEventListener('change', updateLengthDisplay);
+updateLengthDisplay();
+
+loopToggle.addEventListener('change', () => playback.setLoop(loopToggle.checked));
+
+// ── Zoom controls (on canvas) ──────────────────────────────────
+const zoomX = document.getElementById('zoom-x') as HTMLInputElement;
+const zoomY = document.getElementById('zoom-y') as HTMLInputElement;
+
+zoomX.addEventListener('input', () => { viewport.setZoomX(Number(zoomX.value)); bgDirty = true; });
+zoomY.addEventListener('input', () => { viewport.setZoomY(Number(zoomY.value)); bgDirty = true; });
+
+function updateZoom() {
+  zoomX.value = String(viewport.state.zoomX);
+  zoomY.value = String(viewport.state.zoomY);
+}
 
 // ── Composition name field (prepended to toolbar) ──────────────
 const toolbarRow = toolbarContainer.querySelector('.toolbar-row')!;
@@ -213,6 +292,107 @@ nameInput.addEventListener('change', () => {
 nameGroup.appendChild(nameInput);
 toolbarRow.insertBefore(nameGroup, toolbarRow.firstChild);
 
+// ── File dropdown menu ────────────────────────────────────────
+const fileGroup = document.createElement('div');
+fileGroup.className = 'toolbar-group file-menu-wrapper';
+
+const fileBtn = document.createElement('button');
+fileBtn.className = 'tb-btn';
+fileBtn.textContent = 'File \u25BE';
+fileBtn.title = 'File operations';
+fileGroup.appendChild(fileBtn);
+
+const fileDropdown = document.createElement('div');
+fileDropdown.className = 'file-menu-dropdown';
+fileDropdown.hidden = true;
+fileGroup.appendChild(fileDropdown);
+
+const fileOverlay = document.createElement('div');
+fileOverlay.className = 'file-menu-overlay';
+fileOverlay.hidden = true;
+document.body.appendChild(fileOverlay);
+
+function closeFileMenu() {
+  fileDropdown.hidden = true;
+  fileOverlay.hidden = true;
+}
+
+fileBtn.addEventListener('click', () => {
+  const open = fileDropdown.hidden;
+  fileDropdown.hidden = !open;
+  fileOverlay.hidden = !open;
+});
+
+fileOverlay.addEventListener('click', closeFileMenu);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !fileDropdown.hidden) closeFileMenu();
+});
+
+function addFileMenuItem(label: string, handler: () => void) {
+  const item = document.createElement('button');
+  item.className = 'file-menu-item';
+  item.textContent = label;
+  item.addEventListener('click', () => {
+    closeFileMenu();
+    handler();
+  });
+  fileDropdown.appendChild(item);
+}
+
+addFileMenuItem('Save Composition', () => {
+  const comp = store.getComposition();
+  const json = serializeComposition(comp);
+  downloadFile(json, `${comp.name || 'composition'}.json`);
+});
+
+addFileMenuItem('Load Composition', async () => {
+  try {
+    const json = await openFile('.json');
+    const comp = deserializeComposition(json);
+    history.snapshot();
+    playback.stop();
+    store.loadComposition(comp);
+    viewport.totalBeats = comp.totalBeats;
+    updateLength(comp.totalBeats);
+    updatePlayState(false);
+    nameInput.value = comp.name || 'Untitled';
+  } catch (e) {
+    console.error('Failed to load:', e);
+  }
+});
+
+addFileMenuItem('Import MIDI', async () => {
+  try {
+    const buffer = await openBinaryFile('.mid,.midi');
+    const comp = midiToComposition(buffer);
+    history.snapshot();
+    playback.stop();
+    store.loadComposition(comp);
+    viewport.totalBeats = comp.totalBeats;
+    updateLength(comp.totalBeats);
+    updatePlayState(false);
+    nameInput.value = comp.name || 'Untitled';
+  } catch (e) {
+    console.error('MIDI import failed:', e);
+  }
+});
+
+addFileMenuItem('Export WAV', async () => {
+  const comp = store.getComposition();
+  try {
+    await exportWav(comp);
+  } catch (e) {
+    console.error('WAV export failed:', e);
+  }
+});
+
+addFileMenuItem('User Manual (?)', () => {
+  window.open('/help.html', '_blank');
+});
+
+toolbarRow.insertBefore(fileGroup, nameGroup.nextSibling);
+
 // ── Save / Load / Export buttons (added to toolbar) ─────────────
 
 function addToolbarButton(label: string, title: string, onClick: () => void): HTMLButtonElement {
@@ -227,53 +407,6 @@ function addToolbarButton(label: string, title: string, onClick: () => void): HT
   toolbarRow.appendChild(group);
   return btn;
 }
-
-addToolbarButton('Save', 'Save composition (JSON)', () => {
-  const comp = store.getComposition();
-  const json = serializeComposition(comp);
-  downloadFile(json, `${comp.name || 'composition'}.json`);
-});
-
-addToolbarButton('Load', 'Load composition (JSON)', async () => {
-  try {
-    const json = await openFile('.json');
-    const comp = deserializeComposition(json);
-    history.snapshot();
-    playback.stop();
-    store.loadComposition(comp);
-    viewport.totalBeats = comp.totalBeats;
-    toolbar.updateLength(comp.totalBeats);
-    toolbar.updatePlayState(false);
-    nameInput.value = comp.name || 'Untitled';
-  } catch (e) {
-    console.error('Failed to load:', e);
-  }
-});
-
-addToolbarButton('WAV', 'Export as WAV audio file', async () => {
-  const comp = store.getComposition();
-  try {
-    await exportWav(comp);
-  } catch (e) {
-    console.error('WAV export failed:', e);
-  }
-});
-
-addToolbarButton('MIDI', 'Import MIDI file', async () => {
-  try {
-    const buffer = await openBinaryFile('.mid,.midi');
-    const comp = midiToComposition(buffer);
-    history.snapshot();
-    playback.stop();
-    store.loadComposition(comp);
-    viewport.totalBeats = comp.totalBeats;
-    toolbar.updateLength(comp.totalBeats);
-    toolbar.updatePlayState(false);
-    nameInput.value = comp.name || 'Untitled';
-  } catch (e) {
-    console.error('MIDI import failed:', e);
-  }
-});
 
 // ── Join helper ────────────────────────────────────────────────
 function performJoin() {
@@ -299,7 +432,6 @@ function performJoin() {
   store.setSelectedPoint(null);
   interaction.transformBox = null;
 }
-
 // ── Undo / Redo buttons ────────────────────────────────────────
 function clearInteractionForUndo() {
   interaction.drawingCurve = null;
@@ -310,8 +442,6 @@ function clearInteractionForUndo() {
 const undoBtn = addToolbarButton('Undo', 'Undo (Ctrl+Z)', () => { clearInteractionForUndo(); history.undo(); });
 const redoBtn = addToolbarButton('Redo', 'Redo (Ctrl+Shift+Z)', () => { clearInteractionForUndo(); history.redo(); });
 
-addToolbarButton('Join', 'Join selected curves (Ctrl+J)', performJoin);
-addToolbarButton('?', 'User Guide (?)', () => { window.open('/help.html', '_blank'); });
 undoBtn.disabled = true;
 redoBtn.disabled = true;
 
@@ -424,11 +554,11 @@ window.addEventListener('keydown', (e) => {
         if (playback.isPlaying()) {
           playback.pause();
           store.setPlaybackState('paused');
-          toolbar.updatePlayState(false);
+          updatePlayState(false);
         } else {
           playback.play(state.composition, state.playback.positionBeats);
           store.setPlaybackState('playing');
-          toolbar.updatePlayState(true);
+          updatePlayState(true);
         }
       }
       break;
@@ -657,7 +787,7 @@ fgCanvas.addEventListener('wheel', (e) => {
 
   const rect2 = canvasContainer.getBoundingClientRect();
   viewport.clampOffset(rect2.width, rect2.height);
-  toolbar.updateZoom();
+  updateZoom();
   bgDirty = true;
 }, { passive: false });
 
@@ -786,8 +916,8 @@ store.subscribe(() => {
   const comp = store.getComposition();
   // Sync viewport and toolbar in case composition was loaded, undone, or changed
   viewport.totalBeats = comp.totalBeats;
-  toolbar.updateBpm(comp.bpm);
-  toolbar.updateLength(comp.totalBeats);
+  updateBpm(comp.bpm);
+  updateLength(comp.totalBeats);
   renderTrackList();
   renderPropertyPanel(document.getElementById('prop-content')!);
 });

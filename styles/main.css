@@ -76,6 +76,55 @@ body {
   outline: none;
 }
 
+/* ── File dropdown menu ──────────────────────────────────────── */
+.file-menu-wrapper {
+  position: relative;
+}
+
+.file-menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--bg-light);
+  border: 1px solid #446;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  min-width: 200px;
+  z-index: 950;
+  overflow: hidden;
+}
+
+.file-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 949;
+}
+
+.file-menu-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.file-menu-item:hover {
+  background: rgba(79, 195, 247, 0.12);
+}
+
+.file-menu-item + .file-menu-item {
+  border-top: 1px solid #335;
+}
+
 .toolbar-group label {
   font-size: 0.8rem;
   color: var(--text-dim);
@@ -90,11 +139,6 @@ body {
   padding: 3px 6px;
   width: 60px;
   font-size: 0.85rem;
-}
-
-.toolbar-group input[type="range"] {
-  width: 100px;
-  accent-color: var(--accent);
 }
 
 .toolbar-group select {
@@ -251,6 +295,42 @@ body {
   position: relative;
   overflow: hidden;
   background: var(--bg);
+}
+
+/* ── Zoom controls overlay ───────────────────────────────────── */
+
+#zoom-controls {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#zoom-controls > * {
+  pointer-events: auto;
+}
+
+.zoom-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+#zoom-x {
+  width: 100px;
+  accent-color: var(--accent);
+  margin-bottom: 2px;
+}
+
+#zoom-y {
+  width: 80px;
+  accent-color: var(--accent);
+  writing-mode: vertical-lr;
+  direction: rtl;
 }
 
 #bg-canvas,

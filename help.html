@@ -213,7 +213,7 @@
     <a href="#overview">Overview</a>
     <a href="#drawing">Drawing Curves</a>
     <a href="#selecting">Selecting & Editing</a>
-    <a href="#scissors">Scissors (Split)</a>
+    <a href="#scissors">Slice (Split)</a>
     <a href="#join">Join Curves</a>
     <a href="#transform">Transform Box</a>
     <a href="#playback">Playback & Transport</a>
@@ -224,7 +224,7 @@
     <a href="#viewport">Zoom & Pan</a>
     <a href="#clipboard">Copy, Paste & Duplicate</a>
     <a href="#undo">Undo & Redo</a>
-    <a href="#files">Save, Load & Export</a>
+    <a href="#files">File Menu</a>
     <a href="#shortcuts">Keyboard Shortcuts</a>
   </nav>
 </div>
@@ -288,15 +288,15 @@
     </div>
   </details>
 
-  <!-- Scissors -->
-  <h2 id="scissors">Scissors (Split Curve)</h2>
+  <!-- Slice -->
+  <h2 id="scissors">Slice (Split Curve)</h2>
   <p>
-    Select the <strong>Scissors</strong> tool (<kbd>C</kbd>) and click on a curve
+    Select the <strong>Slice</strong> tool (<kbd>C</kbd>) and click on a curve
     segment to split it into two independent curves at the click location. The visual
     shape is preserved exactly — the two halves look identical to the original.
   </p>
   <details>
-    <summary>Scissors details</summary>
+    <summary>Slice details</summary>
     <div class="detail-body">
       <ul>
         <li>A red preview dot shows where the cut will happen as you hover over a curve.</li>
@@ -453,8 +453,8 @@
     <summary>Navigation controls</summary>
     <div class="detail-body">
       <ul>
-        <li><strong>Zoom X</strong> (time) — toolbar slider or scroll wheel.</li>
-        <li><strong>Zoom Y</strong> (pitch) — toolbar slider or <kbd>Ctrl</kbd>+scroll wheel.</li>
+        <li><strong>Zoom X</strong> (time) — horizontal slider at bottom-right of canvas, or scroll wheel.</li>
+        <li><strong>Zoom Y</strong> (pitch) — vertical slider at bottom-right of canvas, or <kbd>Ctrl</kbd>+scroll wheel.</li>
         <li><strong>Pan</strong> — <kbd>Alt</kbd>+click drag or middle-click drag.</li>
         <li>Zoom is centered on the cursor position.</li>
       </ul>
@@ -490,16 +490,17 @@
   </details>
 
   <!-- File I/O -->
-  <h2 id="files">Save, Load & Export</h2>
+  <h2 id="files">File Menu</h2>
   <details>
     <summary>File operations</summary>
     <div class="detail-body">
       <ul>
         <li><strong>Composition name</strong> — the editable text field at the top-left of the toolbar sets the composition name, which is used as the filename when saving.</li>
-        <li><strong>Save</strong> — downloads the composition as a JSON file named after the composition.</li>
-        <li><strong>Load</strong> — opens a JSON composition file (the name field updates to match).</li>
-        <li><strong>WAV</strong> — renders the composition to a 16-bit stereo WAV file (44100 Hz).</li>
-        <li><strong>MIDI</strong> — imports a MIDI file, converting notes to Bezier curves with pitch bends.</li>
+        <li>Click the <strong>File</strong> button next to the composition name to open the file menu.</li>
+        <li><strong>File &gt; Save Composition</strong> — downloads the composition as a JSON file named after the composition.</li>
+        <li><strong>File &gt; Load Composition</strong> — opens a JSON composition file (the name field updates to match).</li>
+        <li><strong>File &gt; Import MIDI</strong> — imports a MIDI file, converting notes to Bezier curves with pitch bends.</li>
+        <li><strong>File &gt; Export WAV</strong> — renders the composition to a 16-bit stereo WAV file (44100 Hz).</li>
       </ul>
     </div>
   </details>
@@ -513,7 +514,7 @@
     <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>
     <tr><td><kbd>V</kbd></td><td>Select tool</td></tr>
     <tr><td><kbd>X</kbd></td><td>Delete tool</td></tr>
-    <tr><td><kbd>C</kbd></td><td>Scissors tool (split curve)</td></tr>
+    <tr><td><kbd>C</kbd></td><td>Slice tool (split curve)</td></tr>
     <tr><td><kbd>S</kbd></td><td>Toggle snap</td></tr>
     <tr><td><kbd>Escape</kbd> / <kbd>Enter</kbd></td><td>Finish drawing</td></tr>
     <tr><td><kbd>Ctrl</kbd> (hold in Draw)</td><td>Temporary Select</td></tr>
