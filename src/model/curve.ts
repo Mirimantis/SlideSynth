@@ -57,7 +57,15 @@ export function movePoint(curve: BezierCurve, index: number, newPos: Vec2): void
   point.position.y = newPos.y;
 }
 
-/** Set a control handle (relative to anchor). */
+/**
+ * Set a control handle (relative to anchor), clamping X so the cubic
+ * Bezier segment stays monotonic in time.
+ *
+ * - handleOut.x is clamped to [0, nextPoint.x - point.x]
+ *   (must point forward, can't reach past the next anchor)
+ * - handleIn.x  is clamped to [prevPoint.x - point.x, 0]
+ *   (must point backward, can't reach past the previous anchor)
+ */
 export function setHandle(
   curve: BezierCurve,
   index: number,
@@ -66,6 +74,20 @@ export function setHandle(
 ): void {
   const point = curve.points[index];
   if (!point) return;
+
+  if (handle) {
+    if (which === 'out') {
+      // handleOut must not go backwards (x >= 0) or past the next anchor
+      const next = curve.points[index + 1];
+      const maxX = next ? next.position.x - point.position.x : Infinity;
+      handle = { x: Math.max(0, Math.min(maxX, handle.x)), y: handle.y };
+    } else {
+      // handleIn must not go forwards (x <= 0) or past the previous anchor
+      const prev = curve.points[index - 1];
+      const minX = prev ? prev.position.x - point.position.x : -Infinity;
+      handle = { x: Math.min(0, Math.max(minX, handle.x)), y: handle.y };
+    }
+  }
 
   if (which === 'in') {
     point.handleIn = handle;
