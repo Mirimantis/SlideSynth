@@ -252,6 +252,14 @@ body {
   border-left: 1px solid #335;
 }
 
+#tool-prop-content {
+  border-bottom: 1px solid #262636;
+}
+
+#prop-content {
+  flex: 1;
+}
+
 .panel-header {
   font-size: 0.85rem;
   font-weight: 600;

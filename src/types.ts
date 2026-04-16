@@ -104,6 +104,8 @@ export interface AppState {
   snapEnabled: boolean;
   scaleRoot: number | null;    // 0-11, or null = no scale
   scaleId: string | null;      // ScaleDefinition.id, or null
+  drawPreviewMode: 'tone' | 'composition';   // Draw-tool spacebar preview scope
+  bezierAutoSmooth: boolean;                  // Draw-tool: click-placed points get horizontal handles
 }
 
 // ── Transform Box ──────────────────────────────────────────────

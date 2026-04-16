@@ -243,11 +243,13 @@
   </p>
   <p>
     The workspace has three columns: a <strong>track panel</strong> on the left,
-    the <strong>canvas</strong> in the centre, and a <strong>property panel</strong>
-    on the right. A toolbar across the top shows the <strong>composition name</strong>
-    (editable) followed by transport, tool selection, zoom, snap, scale controls,
-    and file operations. A <strong>ruler bar</strong> along the top of the canvas
-    displays measure numbers and beat/subdivision ticks.
+    the <strong>canvas</strong> in the centre, and a <strong>properties panel</strong>
+    on the right. The right-hand panel is split into <strong>Tool Properties</strong>
+    (variable settings for the active tool) on top and <strong>Object Properties</strong>
+    (context for the selected track or point) below. A toolbar across the top shows the
+    <strong>composition name</strong> (editable) followed by transport, tool selection,
+    zoom, snap, scale controls, and file operations. A <strong>ruler bar</strong> along
+    the top of the canvas displays measure numbers and beat/subdivision ticks.
   </p>
 
   <!-- Drawing -->
@@ -265,6 +267,11 @@
         <li>Click on an existing point to reset its handles, then drag to reshape.</li>
         <li>Press <kbd>Escape</kbd> or <kbd>Enter</kbd> to finish drawing the current curve.</li>
         <li>While in Draw mode, hold <kbd>Ctrl</kbd> to temporarily switch to Select mode.</li>
+        <li><strong>Bezier Auto-Smoothing</strong> (Tool Properties) — when on, a single
+            click to place a point (second point onward) gives it horizontal handles
+            sized at 50% of the neighbouring segment length, producing a smooth curve
+            without needing to drag. The first point of a new curve is unaffected.
+            If you drag after clicking, the drag defines the handles as usual.</li>
       </ul>
     </div>
   </details>
@@ -397,8 +404,17 @@
     <div class="detail-body">
       <ul>
         <li><strong>Draw preview</strong> — in Draw mode, hold <kbd>Space</kbd> with the cursor
-            over the canvas. You'll hear the current track's tone at the cursor's pitch.
-            Move the cursor up and down to modulate pitch in real time.</li>
+            over the canvas. The <strong>Tool Properties</strong> panel offers two modes:
+            <ul>
+              <li><strong>Tone only</strong> (default) — hear the current track's tone at
+                  the cursor's pitch. Move the cursor up and down to modulate pitch in real time.</li>
+              <li><strong>Composition + tone</strong> — hear all existing curves evaluated at
+                  the cursor's X position <em>together with</em> the cursor tone at the cursor's
+                  Y pitch. This previews what the composition would sound like if a point were
+                  placed at the cursor. Move left/right to scrub through time and up/down to
+                  audition the new pitch against the rest of the composition.</li>
+            </ul>
+        </li>
         <li><strong>Scrub preview</strong> — while click-dragging in the ruler to scrub,
             hold <kbd>Space</kbd> to hear all active curves at the current playhead position.
             Drag left/right to hear how the composition sounds at each point in time.</li>

@@ -10,6 +10,7 @@ import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
 import { createPlaybackEngine } from './audio/playback';
 import { renderPropertyPanel } from './ui/property-panel';
+import { renderToolPropertyPanel } from './ui/tool-property-panel';
 import { openToneBuilder } from './ui/tone-builder';
 import { openTonePicker } from './ui/tone-picker';
 import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile } from './export/json-export';
@@ -70,7 +71,9 @@ app.innerHTML = `
       </div>
     </div>
     <div id="property-panel">
-      <div class="panel-header">Properties</div>
+      <div class="panel-header">Tool Properties</div>
+      <div id="tool-prop-content"></div>
+      <div class="panel-header">Object Properties</div>
       <div id="prop-content">
         <p class="placeholder-text">Select a point to edit properties</p>
       </div>
@@ -130,13 +133,17 @@ const interaction = createInteraction(fgCanvas, viewport, {
       }
     }
   },
-  onCursorMove(_worldX, worldY, _screenY) {
-    if (previewActive && preview.isDrawPreviewActive()) {
+  onCursorMove(worldX, worldY, _screenY) {
+    if (!previewActive) return;
+    if (preview.isDrawPreviewActive()) {
       preview.updateDrawPitch(worldY);
+    }
+    if (preview.isScrubPreviewActive() && store.getState().activeTool === 'draw') {
+      preview.updateScrubPosition(worldX, store.getComposition());
     }
   },
   onCursorLeave() {
-    if (previewActive && preview.isDrawPreviewActive()) {
+    if (previewActive && store.getState().activeTool === 'draw') {
       preview.stopAll();
       previewActive = false;
     }
@@ -161,7 +168,7 @@ const toolbar = createToolbar(toolbarContainer, {
     if (tool !== 'draw' && interaction.drawingCurve) {
       interaction.drawingCurve = null;
     }
-    if (tool !== 'draw' && previewActive && preview.isDrawPreviewActive()) {
+    if (tool !== 'draw' && previewActive) {
       preview.stopAll();
       previewActive = false;
     }
@@ -169,6 +176,9 @@ const toolbar = createToolbar(toolbarContainer, {
       interaction.transformBox = null;
       store.setSelectedCurve(null);
       store.setSelectedPoint(null);
+    } else if (tool === 'draw') {
+      // Clear the transform box but keep the curve selection so Draw extends it.
+      interaction.transformBox = null;
     }
   },
   onJoin() {
@@ -537,10 +547,19 @@ window.addEventListener('keydown', (e) => {
       const inScrubContext = interaction.scrubbing;
 
       if (inDrawContext) {
-        // Start draw preview — play tone at cursor pitch
         const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
         const tone = track ? state.composition.toneLibrary.find(t => t.id === track.toneId) : null;
-        if (tone && interaction.cursorWorld) {
+        if (state.drawPreviewMode === 'composition' && interaction.cursorWorld) {
+          // Preview what the composition would sound like if a point were placed here:
+          // play all existing curves at cursor X, plus the cursor tone at cursor Y.
+          preview.startScrubPreview(state.composition);
+          preview.updateScrubPosition(interaction.cursorWorld.x, state.composition);
+          if (tone) {
+            preview.startDrawPreview(tone, interaction.cursorWorld.y);
+          }
+          previewActive = true;
+        } else if (tone && interaction.cursorWorld) {
+          // Tone-only preview — play the track's tone at cursor pitch.
           preview.startDrawPreview(tone, interaction.cursorWorld.y);
           previewActive = true;
         }
@@ -566,6 +585,7 @@ window.addEventListener('keydown', (e) => {
     case 'd':
       store.setTool('draw');
       toolbar.updateTool('draw');
+      interaction.transformBox = null;
       break;
     case 'v':
       store.setTool('select');
@@ -920,6 +940,7 @@ store.subscribe(() => {
   updateLength(comp.totalBeats);
   renderTrackList();
   renderPropertyPanel(document.getElementById('prop-content')!);
+  renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
 });
 
 // ── Initialization ──────────────────────────────────────────────
@@ -928,4 +949,5 @@ window.addEventListener('resize', resizeCanvases);
 resizeCanvases();
 renderTrackList();
 renderPropertyPanel(document.getElementById('prop-content')!);
+renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
 requestAnimationFrame(render);
