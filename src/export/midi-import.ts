@@ -116,7 +116,6 @@ export function midiToComposition(buffer: ArrayBuffer): Composition {
   // Build composition
   const toneLibrary = createDefaultToneLibrary();
   const tracks = [];
-  let maxBeat = 0;
   let toneIndex = 0;
 
   // Sort keys for deterministic track order
@@ -139,22 +138,18 @@ export function midiToComposition(buffer: ArrayBuffer): Composition {
       addPointToCurve(curve, p1);
       addPointToCurve(curve, p2);
       track.curves.push(curve);
-
-      if (note.endBeat > maxBeat) maxBeat = note.endBeat;
     }
 
     tracks.push(track);
   }
 
-  // Round up totalBeats to next whole beat
-  const totalBeats = Math.max(4, Math.ceil(maxBeat));
+  // Length is derived dynamically from the points themselves.
 
   return {
     version: 1,
     name: 'Imported MIDI',
     bpm,
     beatsPerMeasure: DEFAULT_BEATS_PER_MEASURE,
-    totalBeats,
     tracks,
     toneLibrary,
   };

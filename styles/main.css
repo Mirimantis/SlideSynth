@@ -76,6 +76,15 @@ body {
   outline: none;
 }
 
+.comp-length-display {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  padding: 0 4px;
+  min-width: 32px;
+  user-select: none;
+}
+
 /* ── File dropdown menu ──────────────────────────────────────── */
 .file-menu-wrapper {
   position: relative;

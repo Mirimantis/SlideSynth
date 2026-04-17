@@ -1,5 +1,6 @@
 import type { Composition } from '../types';
 import { sampleCurve, getCurveTimeRange } from '../audio/curve-sampler';
+import { getCompositionLength } from '../model/composition';
 
 /**
  * Render a composition to a WAV file using OfflineAudioContext.
@@ -9,7 +10,9 @@ export async function exportWav(composition: Composition): Promise<void> {
   const sampleRate = 44100;
   const channels = 2; // stereo
   const bpm = composition.bpm;
-  const totalSeconds = composition.totalBeats * 60 / bpm;
+  const lengthBeats = getCompositionLength(composition);
+  if (lengthBeats <= 0) return; // nothing to render
+  const totalSeconds = lengthBeats * 60 / bpm;
   const totalSamples = Math.ceil(totalSeconds * sampleRate);
 
   const offline = new OfflineAudioContext(channels, totalSamples, sampleRate);

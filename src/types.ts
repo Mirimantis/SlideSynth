@@ -64,7 +64,6 @@ export interface Composition {
   name: string;
   bpm: number;
   beatsPerMeasure: number;
-  totalBeats: number;
   tracks: Track[];
   toneLibrary: ToneDefinition[];
 }
