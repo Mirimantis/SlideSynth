@@ -97,6 +97,47 @@ export function setHandle(
   }
 }
 
+/**
+ * Re-clamp all handles affected by a point at `index` changing position
+ * (inserted, moved, etc.): the point's own in/out handles against its neighbors,
+ * the previous point's handleOut against this point, and the next point's
+ * handleIn against this point. Uses setHandle so existing monotonicity rules
+ * apply. Handles that are currently null are left null.
+ */
+export function reclampHandlesAround(curve: BezierCurve, index: number): void {
+  const pt = curve.points[index];
+  if (!pt) return;
+  if (pt.handleIn) setHandle(curve, index, 'in', pt.handleIn);
+  if (pt.handleOut) setHandle(curve, index, 'out', pt.handleOut);
+  const prev = curve.points[index - 1];
+  if (prev?.handleOut) setHandle(curve, index - 1, 'out', prev.handleOut);
+  const next = curve.points[index + 1];
+  if (next?.handleIn) setHandle(curve, index + 1, 'in', next.handleIn);
+}
+
+/**
+ * Apply horizontal auto-smooth handles at a point, sized at 50% of neighbor
+ * segment X lengths. Does nothing for the first point (no previous segment).
+ * handleOut falls back to the same length as handleIn when no next point exists.
+ */
+export function applyAutoSmoothHandles(curve: BezierCurve, index: number): void {
+  const pt = curve.points[index];
+  if (!pt || index === 0) return;
+  const prev = curve.points[index - 1];
+  if (!prev) return;
+
+  const segmentLenBack = pt.position.x - prev.position.x;
+  if (segmentLenBack <= 0) return;
+
+  setHandle(curve, index, 'in', { x: -0.5 * segmentLenBack, y: 0 });
+
+  const next = curve.points[index + 1];
+  const segmentLenForward = next ? next.position.x - pt.position.x : segmentLenBack;
+  if (segmentLenForward > 0) {
+    setHandle(curve, index, 'out', { x: 0.5 * segmentLenForward, y: 0 });
+  }
+}
+
 /** Set volume at a control point. */
 export function setPointVolume(curve: BezierCurve, index: number, volume: number): void {
   const point = curve.points[index];

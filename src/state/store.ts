@@ -24,6 +24,8 @@ function createInitialState(): AppState {
     snapEnabled: true,
     scaleRoot: null,
     scaleId: null,
+    drawPreviewMode: 'tone',
+    bezierAutoSmooth: false,
   };
 }
 
@@ -113,6 +115,16 @@ class Store {
 
   setTool(tool: ToolMode) {
     this.state.activeTool = tool;
+    this.notify();
+  }
+
+  setDrawPreviewMode(mode: 'tone' | 'composition') {
+    this.state.drawPreviewMode = mode;
+    this.notify();
+  }
+
+  setBezierAutoSmooth(enabled: boolean) {
+    this.state.bezierAutoSmooth = enabled;
     this.notify();
   }
 

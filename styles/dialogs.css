@@ -238,6 +238,20 @@
   color: var(--text-dim);
 }
 
+.prop-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.prop-radio input[type="radio"] {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
 /* ── Tone Picker Popup ───────────────────────────────────────── */
 
 .tone-picker-overlay {

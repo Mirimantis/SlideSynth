@@ -2,7 +2,7 @@ import type { Vec2, BezierCurve, ControlPoint, Track, TransformBoxState } from '
 import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
-import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, deepCopyPoints, applyTransformToCurve, splitCurveAtSegment, splitCurveAtPoint } from '../model/curve';
+import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, deepCopyPoints, applyTransformToCurve, splitCurveAtSegment, splitCurveAtPoint, applyAutoSmoothHandles, reclampHandlesAround } from '../model/curve';
 import { snapToGrid, getAdaptiveSubdivisions } from '../utils/snap';
 import type { SnapConfig } from '../utils/snap';
 import { getScaleById } from '../utils/scales';
@@ -352,6 +352,9 @@ export function createInteraction(
     if (e.key === 'Control' && istate.ctrlSwitchedTool) {
       istate.ctrlSwitchedTool = false;
       store.setTool('draw');
+      // Draw doesn't use the transform box — drop it, but keep curve selection
+      // so Draw extends the curve that was selected during the temp-Select.
+      istate.transformBox = null;
     }
   });
 
@@ -412,6 +415,9 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
       istate.drawingCurve = targetCurve;
       const point = createControlPoint(worldPt.x, worldPt.y);
       const idx = addPointToCurve(targetCurve, point);
+      // Re-clamp neighboring handles so they don't extend past the new point.
+      reclampHandlesAround(targetCurve, idx);
+      if (state.bezierAutoSmooth) applyAutoSmoothHandles(targetCurve, idx);
       store.setSelectedPoint(idx);
 
       // Start dragging handle
@@ -445,6 +451,9 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
     history.snapshot();
     const point = createControlPoint(worldPt.x, worldPt.y);
     const idx = addPointToCurve(istate.drawingCurve, point);
+    // Re-clamp neighboring handles so they don't extend past the new point.
+    reclampHandlesAround(istate.drawingCurve, idx);
+    if (state.bezierAutoSmooth) applyAutoSmoothHandles(istate.drawingCurve, idx);
     store.setSelectedPoint(idx);
 
     // Start dragging handle for new point
@@ -710,6 +719,8 @@ function handleDrag(istate: InteractionState, snapped: { wx: number; wy: number 
   store.mutate(() => {
     if (istate.dragging === 'point') {
       movePoint(curve, istate.dragPointIndex, { x: snapped.wx, y: snapped.wy });
+      // Re-clamp neighboring handles so they don't extend past the moved point.
+      reclampHandlesAround(curve, istate.dragPointIndex);
     } else if (istate.dragging === 'handleOut' || istate.dragging === 'handleIn') {
       const pt = curve.points[istate.dragPointIndex];
       if (!pt) return;
