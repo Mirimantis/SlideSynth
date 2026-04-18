@@ -12,7 +12,7 @@ interface TrackPlayback {
   lastScheduledTime: number;
 }
 
-interface PlaybackEngine {
+export interface PlaybackEngine {
   /**
    * @param startBeat where the playhead enters playback (may be anywhere in the loop range).
    * @param endBeat loop/auto-stop boundary; defaults to composition length.

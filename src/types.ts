@@ -90,6 +90,35 @@ export interface PlaybackInfo {
 
 export type ToolMode = 'draw' | 'select' | 'delete' | 'scissors';
 
+// ── App Mode ────────────────────────────────────────────────────
+
+export type AppMode = 'composition' | 'glissandograph';
+
+// ── Glissandograph ──────────────────────────────────────────────
+
+// Voice identifier — MVP only uses 'primary'. Harmonic Prism adds 'harmony-0', 'harmony-1', etc.
+export type VoiceId = string;
+
+export type GlissandographPhase = 'idle' | 'countdown' | 'playing';
+
+export interface PlanchetteState {
+  voiceId: VoiceId;
+  trackId: string | null;
+  cursorWorldY: number | null;
+  snappedWorldY: number | null;
+  lastCrossedAt: number;
+}
+
+export interface GlissandographState {
+  phase: GlissandographPhase;
+  recordArmed: boolean;
+  countdownStartedAt: number;
+  lmbSounding: boolean;
+  lastActivityAt: number;
+  planchettes: PlanchetteState[];
+  currentRecordedCurveIds: Record<VoiceId, string | null>;
+}
+
 // ── App State ───────────────────────────────────────────────────
 
 export interface AppState {
@@ -98,6 +127,8 @@ export interface AppState {
   selectedCurveIds: Set<string>;
   selectedPointIndex: number | null;
   activeTool: ToolMode;
+  activeMode: AppMode;
+  glissandograph: GlissandographState;
   viewport: ViewportState;
   playback: PlaybackInfo;
   snapEnabled: boolean;

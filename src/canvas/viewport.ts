@@ -28,8 +28,12 @@ export interface Viewport {
   /** Set zoom levels directly (for sliders) */
   setZoomX(z: number): void;
   setZoomY(z: number): void;
-  /** Clamp the viewport offset so it doesn't scroll past composition bounds */
-  clampOffset(canvasWidth: number, canvasHeight: number): void;
+  /**
+   * Clamp the viewport offset so it doesn't scroll past composition bounds.
+   * `minOffsetX` defaults to 0 (compose mode: beat 0 at or past left edge).
+   * Glissandograph scrolling-play passes a negative value so beat 0 can sit at the planchette.
+   */
+  clampOffset(canvasWidth: number, canvasHeight: number, minOffsetX?: number): void;
 }
 
 export function createViewport(): Viewport {
@@ -86,10 +90,11 @@ export function createViewport(): Viewport {
       state.zoomY = clamp(z, vp.minZoomY, MAX_ZOOM_Y);
     },
 
-    clampOffset(canvasWidth: number, canvasHeight: number) {
-      // X: can't scroll before beat 0, can't scroll past the canvas extent
+    clampOffset(canvasWidth: number, canvasHeight: number, minOffsetX: number = 0) {
+      // X: can't scroll before minOffsetX (default 0), can't scroll past the canvas extent.
       const visibleBeats = canvasWidth / state.zoomX;
-      state.offsetX = clamp(state.offsetX, 0, Math.max(0, vp.canvasExtent - visibleBeats));
+      const maxOffsetX = Math.max(minOffsetX, vp.canvasExtent - visibleBeats);
+      state.offsetX = clamp(state.offsetX, minOffsetX, maxOffsetX);
 
       // Y: can't scroll past the note range plus a small margin for edge work.
       // The top band (rulers) is reserved, so the highest pannable note sits below it.
