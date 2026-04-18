@@ -13,12 +13,20 @@ interface TrackPlayback {
 }
 
 interface PlaybackEngine {
-  play(composition: Composition, startBeat: number): void;
+  /**
+   * @param startBeat where the playhead enters playback (may be anywhere in the loop range).
+   * @param endBeat loop/auto-stop boundary; defaults to composition length.
+   * @param loopStart where loop restarts jump to; defaults to 0. This is separate
+   * from `startBeat` so resuming from a paused position doesn't corrupt the loop start.
+   */
+  play(composition: Composition, startBeat: number, endBeat?: number, loopStart?: number): void;
   pause(): void;
   stop(): void;
   getPositionBeats(): number;
   isPlaying(): boolean;
   setLoop(enabled: boolean): void;
+  /** Update the active loop/auto-stop range mid-playback (e.g. when selection changes). */
+  setPlayRange(loopStart: number, loopEnd: number): void;
 }
 
 export function createPlaybackEngine(
@@ -32,6 +40,9 @@ export function createPlaybackEngine(
   let trackPlaybacks: TrackPlayback[] = [];
   let currentComposition: Composition | null = null;
   let loopEnabled = false;
+  let playStartBeat = 0;
+  let playEndBeat = 0;
+  let restartingLoop = false;
 
   function getPositionBeats(): number {
     if (!playing) return startBeatOffset;
@@ -112,19 +123,21 @@ export function createPlaybackEngine(
     const currentPosition = getPositionBeats();
     onPositionUpdate(currentPosition);
 
-    // End of composition (position of rightmost point across all curves)
-    if (currentComposition) {
-      const endBeat = getCompositionLength(currentComposition);
-      if (currentPosition >= endBeat) {
-        if (loopEnabled) {
-          // Restart from the beginning
-          const comp = currentComposition;
-          stop();
-          play(comp, 0);
-          onPositionUpdate(0);
-        } else {
-          stop();
-        }
+    // End of play range (selection end, or composition end if no selection)
+    if (currentComposition && currentPosition >= playEndBeat) {
+      if (loopEnabled) {
+        const comp = currentComposition;
+        const loopStart = playStartBeat;
+        const loopEnd = playEndBeat;
+        // Suppress the transient onPositionUpdate(0) from stop() so the host UI
+        // doesn't see a fake "auto-stopped" blip between loop iterations.
+        restartingLoop = true;
+        stop();
+        play(comp, loopStart, loopEnd, loopStart);
+        restartingLoop = false;
+        onPositionUpdate(loopStart);
+      } else {
+        stop();
       }
     }
   }
@@ -177,12 +190,20 @@ export function createPlaybackEngine(
     trackPlaybacks = [];
   }
 
-  function play(composition: Composition, startBeat: number): void {
+  function play(composition: Composition, startBeat: number, endBeat?: number, loopStart?: number): void {
     if (playing) stop();
 
     // Nothing to play in an empty composition
-    if (getCompositionLength(composition) <= 0) {
+    const compLength = getCompositionLength(composition);
+    if (compLength <= 0) {
       onPositionUpdate(0);
+      return;
+    }
+
+    const resolvedEnd = endBeat ?? compLength;
+    const resolvedLoopStart = loopStart ?? 0;
+    if (resolvedEnd <= startBeat) {
+      onPositionUpdate(startBeat);
       return;
     }
 
@@ -193,6 +214,8 @@ export function createPlaybackEngine(
     currentBpm = composition.bpm;
     startBeatOffset = startBeat;
     startAudioTime = ctx.currentTime;
+    playStartBeat = resolvedLoopStart;
+    playEndBeat = resolvedEnd;
     playing = true;
 
     createTrackSynths(composition);
@@ -226,7 +249,7 @@ export function createPlaybackEngine(
       schedulerInterval = null;
     }
     disposeTrackSynths();
-    onPositionUpdate(0);
+    if (!restartingLoop) onPositionUpdate(0);
   }
 
   return {
@@ -236,5 +259,10 @@ export function createPlaybackEngine(
     getPositionBeats,
     isPlaying: () => playing,
     setLoop(enabled: boolean) { loopEnabled = enabled; },
+    setPlayRange(startBeat: number, endBeat: number) {
+      if (endBeat <= startBeat) return;
+      playStartBeat = startBeat;
+      playEndBeat = endBeat;
+    },
   };
 }
