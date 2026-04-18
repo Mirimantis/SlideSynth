@@ -344,7 +344,7 @@
   <!-- Transform box -->
   <h2 id="transform">Transform Box</h2>
   <p>
-    Select multiple curves (via <kbd>Shift</kbd>+click) or double-click a single curve
+    Select multiple curves (via <kbd>Shift</kbd>+click) or click a single curve
     to activate a transform box with 8 resize handles.
   </p>
   <details>
@@ -373,6 +373,7 @@
         <li><strong>Length</strong> — derived automatically from the rightmost point in any curve and shown as <code>M:SS</code> next to the composition name. Playback stops at that point (or loops back to the start if Loop is on). With no points, playback is a no-op.</li>
         <li><strong>Canvas extent</strong> — the grid, staff, and rulers render everywhere you pan or zoom, with a generous buffer of open space past the last point so you can keep drawing outward. A memory-safe cap limits total pan range.</li>
         <li><strong>Loop</strong> (<kbd>L</kbd>) — loops playback from beginning.</li>
+        <li><strong>Play selection</strong> — when one or more curves are selected, pressing Play starts at the earliest selected point and stops at the latest; Loop (if enabled) loops within that range. The transform box stays visible during play, so you can drag handles to move, scale, or octave-shift the selected curves and hear the updated sound on the next loop — the loop range tracks the curves as they move. Changing or clearing the selection mid-playback updates the range live; clearing it reverts to the full composition. Deleting the selected curve(s) reverts to the full composition if any playable curves remain (muted tracks don't count), or stops playback if nothing is left to play. With no selection, the whole composition plays as usual.</li>
         <li><strong>Ruler</strong> — two stacked strips at the top of the canvas: a <strong>seconds ruler</strong> (adapts tick spacing to zoom; labels decimal seconds when zoomed in and <code>M:SS</code> for larger steps) and a <strong>beat / measure ruler</strong> with subdivision ticks. The seconds ruler also reflects BPM changes.</li>
         <li><strong>Scrubbing</strong> — click and drag anywhere in the ruler bar (either strip) to position the playhead. Scrubbing is allowed into empty grid past the last point.</li>
       </ul>

@@ -22,6 +22,7 @@ import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, co
 import { createTrack } from './model/track';
 import { getCompositionLength } from './model/composition';
 import { computeMultiCurveBBox, deepCopyPoints, joinCurves } from './model/curve';
+import { getCurveTimeRange } from './audio/curve-sampler';
 import { getScaleById } from './utils/scales';
 import type { ToolMode, ControlPoint } from './types';
 
@@ -217,13 +218,54 @@ function updateBpm(bpm: number) {
   bpmInput.value = String(bpm);
 }
 
-btnPlay.addEventListener('click', () => {
+/** Resolve the {start, end} play range, preferring the selected curves' span. */
+function getSelectionPlayRange(): { start: number; end: number } | null {
+  const state = store.getState();
+  if (state.selectedCurveIds.size === 0) return null;
+  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  if (!track) return null;
+  let start = Infinity;
+  let end = -Infinity;
+  for (const id of state.selectedCurveIds) {
+    const curve = track.curves.find(c => c.id === id);
+    if (!curve) continue;
+    const range = getCurveTimeRange(curve);
+    if (!range) continue;
+    if (range.start < start) start = range.start;
+    if (range.end > end) end = range.end;
+  }
+  if (!isFinite(start) || !isFinite(end) || end <= start) return null;
+  return { start, end };
+}
+
+/** Start playback, using the selection range if any; hide transform box during play. */
+function startPlayback() {
   if (previewActive) { preview.stopAll(); previewActive = false; }
   const state = store.getState();
-  playback.play(state.composition, state.playback.positionBeats);
-  if (!playback.isPlaying()) return; // empty composition — nothing to play
+  const pos = state.playback.positionBeats;
+  const selRange = getSelectionPlayRange();
+  let startBeat: number;
+  let endBeat: number | undefined;
+  let loopStart: number | undefined;
+  if (selRange) {
+    // Resume from current position if paused within the selection window; else from selection start.
+    startBeat = (pos > selRange.start && pos < selRange.end) ? pos : selRange.start;
+    endBeat = selRange.end;
+    loopStart = selRange.start;
+  } else {
+    startBeat = pos;
+    endBeat = undefined;
+    loopStart = 0;
+  }
+  playback.play(state.composition, startBeat, endBeat, loopStart);
+  if (!playback.isPlaying()) return;
+  lastSelectionKey = [...state.selectedCurveIds].sort().join(',');
   store.setPlaybackState('playing');
   updatePlayState(true);
+}
+
+btnPlay.addEventListener('click', () => {
+  startPlayback();
 });
 
 btnPause.addEventListener('click', () => {
@@ -246,7 +288,10 @@ bpmInput.addEventListener('change', () => {
   store.setBpm(bpm);
 });
 
-loopToggle.addEventListener('change', () => playback.setLoop(loopToggle.checked));
+loopToggle.addEventListener('change', () => {
+  playback.setLoop(loopToggle.checked);
+  loopToggle.blur();
+});
 
 // ── Zoom controls (on canvas) ──────────────────────────────────
 const zoomX = document.getElementById('zoom-x') as HTMLInputElement;
@@ -254,6 +299,10 @@ const zoomY = document.getElementById('zoom-y') as HTMLInputElement;
 
 zoomX.addEventListener('input', () => { viewport.setZoomX(Number(zoomX.value)); bgDirty = true; });
 zoomY.addEventListener('input', () => { viewport.setZoomY(Number(zoomY.value)); bgDirty = true; });
+// Release focus after the user finishes adjusting so hotkeys (e.g. Space) don't
+// get captured by the range input.
+zoomX.addEventListener('change', () => zoomX.blur());
+zoomY.addEventListener('change', () => zoomY.blur());
 
 function updateZoom() {
   zoomX.value = String(viewport.state.zoomX);
@@ -552,11 +601,7 @@ window.addEventListener('keydown', (e) => {
           store.setPlaybackState('paused');
           updatePlayState(false);
         } else {
-          playback.play(state.composition, state.playback.positionBeats);
-          if (playback.isPlaying()) {
-            store.setPlaybackState('playing');
-            updatePlayState(true);
-          }
+          startPlayback();
         }
       }
       break;
@@ -925,6 +970,7 @@ function syncCompositionDerived() {
 }
 
 // ── Store subscription ──────────────────────────────────────────
+let lastSelectionKey = '';
 store.subscribe(() => {
   bgDirty = true;
   const comp = store.getComposition();
@@ -933,6 +979,39 @@ store.subscribe(() => {
   renderTrackList();
   renderPropertyPanel(document.getElementById('prop-content')!);
   renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
+
+  // Keep the active loop/auto-stop range in sync with the current selection
+  // and curve positions mid-playback. If a delete removed the last playable
+  // curve, stop entirely. Otherwise the scheduler's end-of-range logic will
+  // handle playhead-past-end (loop restart or stop, per the loop toggle).
+  if (playback.isPlaying()) {
+    const state = store.getState();
+    const selKey = [...state.selectedCurveIds].sort().join(',');
+    const selectionChanged = selKey !== lastSelectionKey;
+    if (selectionChanged) {
+      const prevIds = lastSelectionKey ? lastSelectionKey.split(',') : [];
+      lastSelectionKey = selKey;
+      const allCurveIds = new Set<string>();
+      for (const t of state.composition.tracks) for (const c of t.curves) allCurveIds.add(c.id);
+      const wasDelete = prevIds.some(id => id && !allCurveIds.has(id));
+      const hasPlayable = state.composition.tracks.some(t =>
+        !t.muted && t.curves.some(c => c.points.length > 0),
+      );
+      if (wasDelete && !hasPlayable) {
+        playback.stop();
+        store.setPlaybackState('stopped');
+        store.setPlaybackPosition(0);
+        updatePlayState(false);
+        return;
+      }
+    }
+    const selRange = getSelectionPlayRange();
+    if (selRange) {
+      playback.setPlayRange(selRange.start, selRange.end);
+    } else {
+      playback.setPlayRange(0, getCompositionLength(state.composition));
+    }
+  }
 });
 
 // ── Initialization ──────────────────────────────────────────────

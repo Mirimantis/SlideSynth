@@ -104,10 +104,12 @@ export function createToolbar(
       callbacks.onScaleRootChange(Number(val));
       callbacks.onScaleIdChange(scaleTypeSelect.value);
     }
+    scaleRootSelect.blur();
   });
 
   scaleTypeSelect.addEventListener('change', () => {
     callbacks.onScaleIdChange(scaleTypeSelect.value);
+    scaleTypeSelect.blur();
   });
 
   return {
