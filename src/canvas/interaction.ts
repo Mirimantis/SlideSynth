@@ -10,7 +10,9 @@ import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { distToPoint, nearestPointOnCubic, nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
 
-export const RULER_HEIGHT = 24;
+export const SECONDS_RULER_HEIGHT = 16;
+export const BEAT_RULER_HEIGHT = 24;
+export const RULER_HEIGHT = SECONDS_RULER_HEIGHT + BEAT_RULER_HEIGHT;
 
 export interface InteractionCallbacks {
   onPlayheadScrub?(beats: number, phase: 'start' | 'move' | 'end'): void;
@@ -77,7 +79,7 @@ export function createInteraction(
     if (istate.scrubbing) {
       const snap = buildSnapConfig(vp.state.zoomX);
       const snappedBeat = snap.enabled ? snapToGrid(raw.wx, 0, snap).wx : raw.wx;
-      const beat = Math.max(0, Math.min(snappedBeat, vp.totalBeats));
+      const beat = Math.max(0, snappedBeat);
       callbacks?.onPlayheadScrub?.(beat, 'move');
       return;
     }
@@ -208,7 +210,7 @@ export function createInteraction(
     if (sy < RULER_HEIGHT && !e.altKey) {
       const snap = buildSnapConfig(vp.state.zoomX);
       const snappedBeat = snap.enabled ? snapToGrid(world.wx, 0, snap).wx : world.wx;
-      const beat = Math.max(0, Math.min(snappedBeat, vp.totalBeats));
+      const beat = Math.max(0, snappedBeat);
       istate.scrubbing = true;
       callbacks?.onPlayheadScrub?.(beat, 'start');
       return;

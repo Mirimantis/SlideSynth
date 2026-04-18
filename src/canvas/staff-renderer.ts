@@ -17,7 +17,6 @@ export function renderStaff(
   vp: Viewport,
   width: number,
   height: number,
-  totalBeats: number,
   beatsPerMeasure: number = DEFAULT_BEATS_PER_MEASURE,
   scaleRoot: number | null = null,
   scale: ScaleDefinition | null = null,
@@ -144,7 +143,7 @@ export function renderStaff(
   const showEighths = vp.state.zoomX >= 35;
 
   const startBeat = Math.max(0, minBeat);
-  const endBeat = Math.min(totalBeats, maxBeat);
+  const endBeat = maxBeat;
 
   for (let b = startBeat; b <= endBeat; b++) {
     // Draw subdivisions within this beat

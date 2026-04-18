@@ -247,9 +247,14 @@
     on the right. The right-hand panel is split into <strong>Tool Properties</strong>
     (variable settings for the active tool) on top and <strong>Object Properties</strong>
     (context for the selected track or point) below. A toolbar across the top shows the
-    <strong>composition name</strong> (editable) followed by transport, tool selection,
-    zoom, snap, scale controls, and file operations. A <strong>ruler bar</strong> along
-    the top of the canvas displays measure numbers and beat/subdivision ticks.
+    <strong>composition name</strong> (editable) alongside the <strong>composition length</strong>
+    (auto-derived from the rightmost point, shown as <code>M:SS</code>), followed by tool
+    selection, zoom, snap, scale controls, and file operations. A <strong>ruler bar</strong>
+    along the top of the canvas has two stacked strips: a <strong>seconds ruler</strong>
+    on top that adapts its tick interval to zoom (sub-second decimals when zoomed in,
+    whole seconds or larger when zoomed out) and a <strong>beat ruler</strong> below
+    showing measure numbers and beat/subdivision ticks. Both strips are part of the
+    playhead scrub zone.
   </p>
 
   <!-- Drawing -->
@@ -365,10 +370,11 @@
       <ul>
         <li><strong>Play / Pause / Stop</strong> — toolbar buttons or <kbd>Space</kbd> to toggle.</li>
         <li><strong>BPM</strong> — adjustable from 20 to 300.</li>
-        <li><strong>Length</strong> — composition length in beats (4 &ndash; 3000). Time display updates automatically.</li>
+        <li><strong>Length</strong> — derived automatically from the rightmost point in any curve and shown as <code>M:SS</code> next to the composition name. Playback stops at that point (or loops back to the start if Loop is on). With no points, playback is a no-op.</li>
+        <li><strong>Canvas extent</strong> — the grid, staff, and rulers render everywhere you pan or zoom, with a generous buffer of open space past the last point so you can keep drawing outward. A memory-safe cap limits total pan range.</li>
         <li><strong>Loop</strong> (<kbd>L</kbd>) — loops playback from beginning.</li>
-        <li><strong>Ruler</strong> — a visual ruler bar at the top of the canvas shows measure numbers, beat ticks, and subdivision ticks that adapt to the current zoom level.</li>
-        <li><strong>Scrubbing</strong> — click and drag in the ruler bar to position the playhead.</li>
+        <li><strong>Ruler</strong> — two stacked strips at the top of the canvas: a <strong>seconds ruler</strong> (adapts tick spacing to zoom; labels decimal seconds when zoomed in and <code>M:SS</code> for larger steps) and a <strong>beat / measure ruler</strong> with subdivision ticks. The seconds ruler also reflects BPM changes.</li>
+        <li><strong>Scrubbing</strong> — click and drag anywhere in the ruler bar (either strip) to position the playhead. Scrubbing is allowed into empty grid past the last point.</li>
       </ul>
     </div>
   </details>

@@ -1,5 +1,5 @@
 import { createViewport } from './canvas/viewport';
-import { MIN_TOTAL_BEATS, MAX_TOTAL_BEATS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y } from './constants';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
@@ -20,6 +20,7 @@ import { store } from './state/store';
 import { history } from './state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
+import { getCompositionLength } from './model/composition';
 import { computeMultiCurveBBox, deepCopyPoints, joinCurves } from './model/curve';
 import { getScaleById } from './utils/scales';
 import type { ToolMode, ControlPoint } from './types';
@@ -47,11 +48,6 @@ app.innerHTML = `
         <div class="transport-row">
           <label>BPM</label>
           <input type="number" id="input-bpm" value="120" min="20" max="300" step="1" />
-        </div>
-        <div class="transport-row">
-          <label>Length</label>
-          <input type="number" id="input-length" value="${viewport.totalBeats}" min="${MIN_TOTAL_BEATS}" max="${MAX_TOTAL_BEATS}" step="1" title="Composition length in beats" />
-          <span id="length-time" class="toolbar-time-display"></span>
         </div>
       </div>
       <div class="panel-header">Tracks</div>
@@ -202,8 +198,6 @@ const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
 const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
 const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
-const lengthInput = document.getElementById('input-length') as HTMLInputElement;
-const lengthTimeSpan = document.getElementById('length-time') as HTMLElement;
 const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
 
 function updatePlayState(playing: boolean) {
@@ -211,29 +205,23 @@ function updatePlayState(playing: boolean) {
   btnPause.disabled = !playing;
 }
 
-function updateLengthDisplay() {
-  const beats = Number(lengthInput.value);
-  const bpm = Number(bpmInput.value) || 120;
-  const seconds = beats * 60 / bpm;
+/** Format a length in beats + BPM as "M:SS" for the toolbar title display. */
+function formatLengthMMSS(lengthBeats: number, bpm: number): string {
+  const seconds = bpm > 0 ? lengthBeats * 60 / bpm : 0;
   const min = Math.floor(seconds / 60);
   const sec = Math.floor(seconds % 60);
-  lengthTimeSpan.textContent = `${min}:${String(sec).padStart(2, '0')}`;
+  return `${min}:${String(sec).padStart(2, '0')}`;
 }
 
 function updateBpm(bpm: number) {
   bpmInput.value = String(bpm);
-  updateLengthDisplay();
-}
-
-function updateLength(beats: number) {
-  lengthInput.value = String(beats);
-  updateLengthDisplay();
 }
 
 btnPlay.addEventListener('click', () => {
   if (previewActive) { preview.stopAll(); previewActive = false; }
   const state = store.getState();
   playback.play(state.composition, state.playback.positionBeats);
+  if (!playback.isPlaying()) return; // empty composition — nothing to play
   store.setPlaybackState('playing');
   updatePlayState(true);
 });
@@ -257,19 +245,6 @@ bpmInput.addEventListener('change', () => {
   history.snapshot();
   store.setBpm(bpm);
 });
-
-lengthInput.addEventListener('change', () => {
-  const beats = Math.max(MIN_TOTAL_BEATS, Math.min(MAX_TOTAL_BEATS, Math.round(Number(lengthInput.value))));
-  lengthInput.value = String(beats);
-  updateLengthDisplay();
-  history.snapshot();
-  store.mutate(c => { c.totalBeats = beats; });
-  viewport.totalBeats = beats;
-  bgDirty = true;
-});
-
-bpmInput.addEventListener('change', updateLengthDisplay);
-updateLengthDisplay();
 
 loopToggle.addEventListener('change', () => playback.setLoop(loopToggle.checked));
 
@@ -300,6 +275,12 @@ nameInput.addEventListener('change', () => {
   store.mutate(c => { c.name = nameInput.value || 'Untitled'; });
 });
 nameGroup.appendChild(nameInput);
+const lengthDisplay = document.createElement('span');
+lengthDisplay.id = 'comp-length';
+lengthDisplay.className = 'comp-length-display';
+lengthDisplay.title = 'Composition length (derived from last point)';
+lengthDisplay.textContent = '0:00';
+nameGroup.appendChild(lengthDisplay);
 toolbarRow.insertBefore(nameGroup, toolbarRow.firstChild);
 
 // ── File dropdown menu ────────────────────────────────────────
@@ -363,8 +344,6 @@ addFileMenuItem('Load Composition', async () => {
     history.snapshot();
     playback.stop();
     store.loadComposition(comp);
-    viewport.totalBeats = comp.totalBeats;
-    updateLength(comp.totalBeats);
     updatePlayState(false);
     nameInput.value = comp.name || 'Untitled';
   } catch (e) {
@@ -379,8 +358,6 @@ addFileMenuItem('Import MIDI', async () => {
     history.snapshot();
     playback.stop();
     store.loadComposition(comp);
-    viewport.totalBeats = comp.totalBeats;
-    updateLength(comp.totalBeats);
     updatePlayState(false);
     nameInput.value = comp.name || 'Untitled';
   } catch (e) {
@@ -576,8 +553,10 @@ window.addEventListener('keydown', (e) => {
           updatePlayState(false);
         } else {
           playback.play(state.composition, state.playback.positionBeats);
-          store.setPlaybackState('playing');
-          updatePlayState(true);
+          if (playback.isPlaying()) {
+            store.setPlaybackState('playing');
+            updatePlayState(true);
+          }
         }
       }
       break;
@@ -821,8 +800,8 @@ function render() {
     const rect = canvasContainer.getBoundingClientRect();
     const scaleRoot = state.scaleRoot;
     const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
-    renderStaff(bgCtx, viewport, rect.width, rect.height, comp.totalBeats, comp.beatsPerMeasure, scaleRoot, scale);
-    renderRuler(bgCtx, viewport, rect.width, comp.totalBeats, comp.beatsPerMeasure);
+    renderStaff(bgCtx, viewport, rect.width, rect.height, comp.beatsPerMeasure, scaleRoot, scale);
+    renderRuler(bgCtx, viewport, rect.width, comp.beatsPerMeasure, comp.bpm);
     bgDirty = false;
   }
 
@@ -930,21 +909,34 @@ function render() {
   requestAnimationFrame(render);
 }
 
+/**
+ * Sync derived values from the composition: canvas extent (viewport pan bound)
+ * and the M:SS length display next to the title. Called on every store change.
+ */
+function syncCompositionDerived() {
+  const comp = store.getComposition();
+  const length = getCompositionLength(comp);
+  const extent = Math.min(
+    MAX_CANVAS_EXTENT,
+    Math.max(MIN_CANVAS_EXTENT, length) + SCROLL_BUFFER,
+  );
+  viewport.canvasExtent = extent;
+  lengthDisplay.textContent = formatLengthMMSS(length, comp.bpm);
+}
+
 // ── Store subscription ──────────────────────────────────────────
 store.subscribe(() => {
   bgDirty = true;
   const comp = store.getComposition();
-  // Sync viewport and toolbar in case composition was loaded, undone, or changed
-  viewport.totalBeats = comp.totalBeats;
   updateBpm(comp.bpm);
-  updateLength(comp.totalBeats);
+  syncCompositionDerived();
   renderTrackList();
   renderPropertyPanel(document.getElementById('prop-content')!);
   renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
 });
 
 // ── Initialization ──────────────────────────────────────────────
-viewport.totalBeats = store.getComposition().totalBeats;
+syncCompositionDerived();
 window.addEventListener('resize', resizeCanvases);
 resizeCanvases();
 renderTrackList();

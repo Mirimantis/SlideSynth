@@ -3,6 +3,7 @@ import { getAudioContext, getMasterGain, ensureResumed } from './engine';
 import { createToneSynth, type ToneSynth } from './tone-synth';
 import { sampleCurve, getCurveTimeRange } from './curve-sampler';
 import { SCHEDULER_INTERVAL_MS, SCHEDULER_LOOKAHEAD_S } from '../constants';
+import { getCompositionLength } from '../model/composition';
 
 interface TrackPlayback {
   trackId: string;
@@ -111,16 +112,19 @@ export function createPlaybackEngine(
     const currentPosition = getPositionBeats();
     onPositionUpdate(currentPosition);
 
-    // End of composition
-    if (currentComposition && currentPosition >= currentComposition.totalBeats) {
-      if (loopEnabled) {
-        // Restart from the beginning
-        const comp = currentComposition;
-        stop();
-        play(comp, 0);
-        onPositionUpdate(0);
-      } else {
-        stop();
+    // End of composition (position of rightmost point across all curves)
+    if (currentComposition) {
+      const endBeat = getCompositionLength(currentComposition);
+      if (currentPosition >= endBeat) {
+        if (loopEnabled) {
+          // Restart from the beginning
+          const comp = currentComposition;
+          stop();
+          play(comp, 0);
+          onPositionUpdate(0);
+        } else {
+          stop();
+        }
       }
     }
   }
@@ -175,6 +179,12 @@ export function createPlaybackEngine(
 
   function play(composition: Composition, startBeat: number): void {
     if (playing) stop();
+
+    // Nothing to play in an empty composition
+    if (getCompositionLength(composition) <= 0) {
+      onPositionUpdate(0);
+      return;
+    }
 
     ensureResumed();
     const ctx = getAudioContext();

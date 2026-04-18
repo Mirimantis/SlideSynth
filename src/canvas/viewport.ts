@@ -4,13 +4,13 @@ import {
   MIN_ZOOM_X, MAX_ZOOM_X,
   MIN_ZOOM_Y, MAX_ZOOM_Y,
   MIN_NOTE, MAX_NOTE,
-  DEFAULT_TOTAL_BEATS,
+  MIN_CANVAS_EXTENT, SCROLL_BUFFER,
 } from '../constants';
 
 export interface Viewport {
   state: ViewportState;
-  /** Total beats in composition — used for clamping */
-  totalBeats: number;
+  /** Rightmost beat the viewport may pan to — derived from composition length + buffer. */
+  canvasExtent: number;
   /** World (beats, noteNumber) → screen pixels */
   worldToScreen(wx: number, wy: number): { sx: number; sy: number };
   /** Screen pixels → world (beats, noteNumber) */
@@ -38,7 +38,7 @@ export function createViewport(): Viewport {
 
   const vp: Viewport = {
     state,
-    totalBeats: DEFAULT_TOTAL_BEATS,
+    canvasExtent: MIN_CANVAS_EXTENT + SCROLL_BUFFER,
 
     worldToScreen(wx: number, wy: number) {
       // X: beats → pixels (left = beat 0)
@@ -81,9 +81,9 @@ export function createViewport(): Viewport {
     },
 
     clampOffset(canvasWidth: number, canvasHeight: number) {
-      // X: can't scroll before beat 0, can't scroll past totalBeats
+      // X: can't scroll before beat 0, can't scroll past the canvas extent
       const visibleBeats = canvasWidth / state.zoomX;
-      state.offsetX = clamp(state.offsetX, 0, Math.max(0, vp.totalBeats - visibleBeats));
+      state.offsetX = clamp(state.offsetX, 0, Math.max(0, vp.canvasExtent - visibleBeats));
 
       // Y: can't scroll past note range
       const visibleNotes = canvasHeight / state.zoomY;
