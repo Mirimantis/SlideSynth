@@ -4,6 +4,8 @@ import type { ToneDefinition } from './types';
 // C0 (MIDI 12) through C9 (MIDI 120) — 9 octaves, 109 note lines
 export const MIN_NOTE = 12;  // C0
 export const MAX_NOTE = 120; // C9
+// Extra room past MIN_NOTE / MAX_NOTE for working comfortably near the edges.
+export const Y_PAN_MARGIN = 6; // semitones (half an octave)
 
 // ── Note names ──────────────────────────────────────────────────
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
@@ -53,7 +55,7 @@ export const DEFAULT_ZOOM_Y = 14;   // pixels per semitone
 export const MIN_ZOOM_X = 30;
 export const MAX_ZOOM_X = 600;
 export const MIN_ZOOM_Y = 4;
-export const MAX_ZOOM_Y = 40;
+export const MAX_ZOOM_Y = 140;
 
 // ── Playback ────────────────────────────────────────────────────
 export const SCHEDULER_INTERVAL_MS = 25;

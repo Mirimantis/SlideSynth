@@ -3,7 +3,7 @@ import {
   DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y,
   MIN_ZOOM_X, MAX_ZOOM_X,
   MIN_ZOOM_Y, MAX_ZOOM_Y,
-  MIN_NOTE, MAX_NOTE,
+  MIN_NOTE, MAX_NOTE, Y_PAN_MARGIN,
   MIN_CANVAS_EXTENT, SCROLL_BUFFER,
 } from '../constants';
 
@@ -11,6 +11,10 @@ export interface Viewport {
   state: ViewportState;
   /** Rightmost beat the viewport may pan to — derived from composition length + buffer. */
   canvasExtent: number;
+  /** Lower bound for zoomY clamping. Updated on resize so the widest zoom fits the full note range. */
+  minZoomY: number;
+  /** Reserved top band (e.g. for rulers) so panning leaves notes visible below it. */
+  topInset: number;
   /** World (beats, noteNumber) → screen pixels */
   worldToScreen(wx: number, wy: number): { sx: number; sy: number };
   /** Screen pixels → world (beats, noteNumber) */
@@ -39,6 +43,8 @@ export function createViewport(): Viewport {
   const vp: Viewport = {
     state,
     canvasExtent: MIN_CANVAS_EXTENT + SCROLL_BUFFER,
+    minZoomY: MIN_ZOOM_Y,
+    topInset: 0,
 
     worldToScreen(wx: number, wy: number) {
       // X: beats → pixels (left = beat 0)
@@ -63,7 +69,7 @@ export function createViewport(): Viewport {
 
     zoomYAt(factor: number, screenY: number) {
       const worldY = state.offsetY - screenY / state.zoomY;
-      state.zoomY = clamp(state.zoomY * factor, MIN_ZOOM_Y, MAX_ZOOM_Y);
+      state.zoomY = clamp(state.zoomY * factor, vp.minZoomY, MAX_ZOOM_Y);
       state.offsetY = worldY + screenY / state.zoomY;
     },
 
@@ -77,7 +83,7 @@ export function createViewport(): Viewport {
     },
 
     setZoomY(z: number) {
-      state.zoomY = clamp(z, MIN_ZOOM_Y, MAX_ZOOM_Y);
+      state.zoomY = clamp(z, vp.minZoomY, MAX_ZOOM_Y);
     },
 
     clampOffset(canvasWidth: number, canvasHeight: number) {
@@ -85,10 +91,11 @@ export function createViewport(): Viewport {
       const visibleBeats = canvasWidth / state.zoomX;
       state.offsetX = clamp(state.offsetX, 0, Math.max(0, vp.canvasExtent - visibleBeats));
 
-      // Y: can't scroll past note range
+      // Y: can't scroll past the note range plus a small margin for edge work.
+      // The top band (rulers) is reserved, so the highest pannable note sits below it.
       const visibleNotes = canvasHeight / state.zoomY;
-      const minOffsetY = MIN_NOTE + visibleNotes;
-      const maxOffsetY = MAX_NOTE;
+      const minOffsetY = (MIN_NOTE - Y_PAN_MARGIN) + visibleNotes;
+      const maxOffsetY = MAX_NOTE + Y_PAN_MARGIN + vp.topInset / state.zoomY;
       state.offsetY = clamp(state.offsetY, minOffsetY, maxOffsetY);
     },
   };

@@ -1,5 +1,5 @@
 import { createViewport } from './canvas/viewport';
-import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y } from './constants';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_NOTE, MAX_NOTE, Y_PAN_MARGIN } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
@@ -28,6 +28,7 @@ import type { ToolMode, ControlPoint } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
+viewport.topInset = RULER_HEIGHT;
 
 // ── DOM layout ──────────────────────────────────────────────────
 const app = document.getElementById('app')!;
@@ -99,6 +100,14 @@ function resizeCanvases() {
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
     canvas.getContext('2d')!.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // Widest Y zoom must fit the entire playable note range plus pan margin
+  // within the area below the top rulers.
+  const usableH = h - viewport.topInset;
+  if (usableH > 0) {
+    viewport.minZoomY = usableH / (MAX_NOTE - MIN_NOTE + 2 * Y_PAN_MARGIN);
+    viewport.setZoomY(viewport.state.zoomY);
   }
 
   bgDirty = true;
@@ -297,8 +306,47 @@ loopToggle.addEventListener('change', () => {
 const zoomX = document.getElementById('zoom-x') as HTMLInputElement;
 const zoomY = document.getElementById('zoom-y') as HTMLInputElement;
 
-zoomX.addEventListener('input', () => { viewport.setZoomX(Number(zoomX.value)); bgDirty = true; });
-zoomY.addEventListener('input', () => { viewport.setZoomY(Number(zoomY.value)); bgDirty = true; });
+/** Anchor for slider zoom: center of selection bbox if any selected, else canvas center. */
+function getSliderZoomAnchor(): { sx: number; sy: number } {
+  const rect = canvasContainer.getBoundingClientRect();
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+  const state = store.getState();
+  if (state.selectedCurveIds.size === 0) return { sx: cx, sy: cy };
+  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  if (!track) return { sx: cx, sy: cy };
+  const selected = track.curves.filter(c => state.selectedCurveIds.has(c.id));
+  if (selected.length === 0) return { sx: cx, sy: cy };
+  const bbox = computeMultiCurveBBox(selected);
+  const wx = (bbox.minX + bbox.maxX) / 2;
+  const wy = (bbox.minY + bbox.maxY) / 2;
+  return viewport.worldToScreen(wx, wy);
+}
+
+zoomX.addEventListener('input', () => {
+  const target = Number(zoomX.value);
+  const factor = target / viewport.state.zoomX;
+  if (factor !== 1 && isFinite(factor)) {
+    viewport.zoomXAt(factor, getSliderZoomAnchor().sx);
+  } else {
+    viewport.setZoomX(target);
+  }
+  const rect = canvasContainer.getBoundingClientRect();
+  viewport.clampOffset(rect.width, rect.height);
+  bgDirty = true;
+});
+zoomY.addEventListener('input', () => {
+  const target = Number(zoomY.value);
+  const factor = target / viewport.state.zoomY;
+  if (factor !== 1 && isFinite(factor)) {
+    viewport.zoomYAt(factor, getSliderZoomAnchor().sy);
+  } else {
+    viewport.setZoomY(target);
+  }
+  const rect = canvasContainer.getBoundingClientRect();
+  viewport.clampOffset(rect.width, rect.height);
+  bgDirty = true;
+});
 // Release focus after the user finishes adjusting so hotkeys (e.g. Space) don't
 // get captured by the range input.
 zoomX.addEventListener('change', () => zoomX.blur());
@@ -306,6 +354,7 @@ zoomY.addEventListener('change', () => zoomY.blur());
 
 function updateZoom() {
   zoomX.value = String(viewport.state.zoomX);
+  zoomY.min = String(viewport.minZoomY);
   zoomY.value = String(viewport.state.zoomY);
 }
 
@@ -824,9 +873,9 @@ fgCanvas.addEventListener('wheel', (e) => {
   const factor = e.deltaY > 0 ? 0.9 : 1.1;
 
   if (e.ctrlKey) {
-    viewport.zoomYAt(factor, sy);
-  } else {
     viewport.zoomXAt(factor, sx);
+  } else {
+    viewport.zoomYAt(factor, sy);
   }
 
   const rect2 = canvasContainer.getBoundingClientRect();
@@ -1016,8 +1065,24 @@ store.subscribe(() => {
 
 // ── Initialization ──────────────────────────────────────────────
 syncCompositionDerived();
-window.addEventListener('resize', resizeCanvases);
+window.addEventListener('resize', () => { resizeCanvases(); updateZoom(); });
 resizeCanvases();
+
+// Default view: zoomed all the way out in X, middle 3 octaves in Y
+// (within the area below the top rulers).
+{
+  const rect = canvasContainer.getBoundingClientRect();
+  const midNote = (MIN_NOTE + MAX_NOTE) / 2;          // F#4 for the 12–120 range
+  const visibleSemitones = 36;                         // 3 octaves
+  viewport.setZoomX(MIN_ZOOM_X);
+  viewport.setZoomY((rect.height - viewport.topInset) / visibleSemitones);
+  viewport.state.offsetX = 0;
+  viewport.state.offsetY = midNote + visibleSemitones / 2 + viewport.topInset / viewport.state.zoomY;
+  viewport.clampOffset(rect.width, rect.height);
+  updateZoom();
+  bgDirty = true;
+}
+
 renderTrackList();
 renderPropertyPanel(document.getElementById('prop-content')!);
 renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
