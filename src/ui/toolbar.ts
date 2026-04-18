@@ -1,8 +1,9 @@
-import type { ToolMode } from '../types';
+import type { AppMode, ToolMode } from '../types';
 import { SCALE_CATALOG, getScaleGroups } from '../utils/scales';
 
 export interface ToolbarCallbacks {
   onToolChange(tool: ToolMode): void;
+  onModeChange(mode: AppMode): void;
   onJoin(): void;
   onSnapToggle(enabled: boolean): void;
   onScaleRootChange(root: number | null): void;
@@ -17,6 +18,7 @@ export function createToolbar(
   updateScaleRoot(root: number | null): void;
   updateScaleId(scaleId: string | null): void;
   updateTool(tool: ToolMode): void;
+  updateMode(mode: AppMode): void;
 } {
   // Build scale type <optgroup> options
   const groups = getScaleGroups();
@@ -31,6 +33,10 @@ export function createToolbar(
 
   container.innerHTML = `
     <div class="toolbar-row">
+      <div class="toolbar-group modes">
+        <button id="mode-composition" class="mode-btn active" data-mode="composition" title="Composition mode">Compose</button>
+        <button id="mode-glissandograph" class="mode-btn" data-mode="glissandograph" title="Harmonic Glissandograph mode">Glissandograph</button>
+      </div>
       <div class="toolbar-group tools">
         <button id="tool-draw" class="tool-btn active" data-tool="draw" title="Draw (D)">Draw</button>
         <button id="tool-select" class="tool-btn" data-tool="select" title="Select (V)">Select</button>
@@ -66,6 +72,16 @@ export function createToolbar(
       </div>
     </div>
   `;
+
+  // Mode buttons (Compose / Glissandograph)
+  const modeBtns = container.querySelectorAll('.mode-btn[data-mode]');
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.getAttribute('data-mode') as AppMode;
+      modeBtns.forEach(b => b.classList.toggle('active', b === btn));
+      callbacks.onModeChange(mode);
+    });
+  });
 
   // Tool select — only buttons with data-tool, not snap toggle
   const toolBtns = container.querySelectorAll('.tool-btn[data-tool]');
@@ -126,6 +142,9 @@ export function createToolbar(
     },
     updateTool(tool: ToolMode) {
       toolBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-tool') === tool));
+    },
+    updateMode(mode: AppMode) {
+      modeBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-mode') === mode));
     },
   };
 }

@@ -9,6 +9,8 @@ import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
 import { createPlaybackEngine } from './audio/playback';
+import { createGlissandograph } from './canvas/glissandograph';
+import { renderPlanchettes } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
 import { renderToolPropertyPanel } from './ui/tool-property-panel';
 import { openToneBuilder } from './ui/tone-builder';
@@ -24,7 +26,7 @@ import { getCompositionLength } from './model/composition';
 import { computeMultiCurveBBox, deepCopyPoints, joinCurves } from './model/curve';
 import { getCurveTimeRange } from './audio/curve-sampler';
 import { getScaleById } from './utils/scales';
-import type { ToolMode, ControlPoint } from './types';
+import type { AppMode, ToolMode, ControlPoint } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -67,6 +69,12 @@ app.innerHTML = `
         <input type="range" id="zoom-x" min="${MIN_ZOOM_X}" max="${MAX_ZOOM_X}" value="${viewport.state.zoomX}" step="1" title="Zoom X (time)" />
         <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="1" title="Zoom Y (pitch)" />
       </div>
+      <div id="gliss-screen" hidden>
+        <canvas id="gliss-bg"></canvas>
+        <canvas id="gliss-fg"></canvas>
+        <div id="gliss-hud"></div>
+        <div id="countdown-overlay" hidden></div>
+      </div>
     </div>
     <div id="property-panel">
       <div class="panel-header">Tool Properties</div>
@@ -86,6 +94,12 @@ const fgCanvas = document.getElementById('fg-canvas') as HTMLCanvasElement;
 const bgCtx = bgCanvas.getContext('2d')!;
 const fgCtx = fgCanvas.getContext('2d')!;
 
+const glissScreen = document.getElementById('gliss-screen')!;
+const glissBgCanvas = document.getElementById('gliss-bg') as HTMLCanvasElement;
+const glissFgCanvas = document.getElementById('gliss-fg') as HTMLCanvasElement;
+const glissBgCtx = glissBgCanvas.getContext('2d')!;
+const glissFgCtx = glissFgCanvas.getContext('2d')!;
+
 let bgDirty = true;
 
 function resizeCanvases() {
@@ -94,7 +108,7 @@ function resizeCanvases() {
   const w = Math.floor(rect.width);
   const h = Math.floor(rect.height);
 
-  for (const canvas of [bgCanvas, fgCanvas]) {
+  for (const canvas of [bgCanvas, fgCanvas, glissBgCanvas, glissFgCanvas]) {
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     canvas.style.width = `${w}px`;
@@ -163,11 +177,60 @@ const playback = createPlaybackEngine((beats) => {
   if (!playback.isPlaying() && store.getState().playback.state === 'playing') {
     store.setPlaybackState('stopped');
     updatePlayState(false);
+    // If we were in glissandograph playing phase, return to idle too.
+    if (store.getState().activeMode === 'glissandograph'
+        && store.getState().glissandograph.phase === 'playing') {
+      store.setGlissPhase('idle');
+    }
   }
 });
 
+// ── Glissandograph controller ───────────────────────────────────
+const gliss = createGlissandograph(viewport, playback, preview, () => { bgDirty = true; });
+
 // ── Toolbar ─────────────────────────────────────────────────────
 const toolbarContainer = document.getElementById('toolbar')!;
+
+function switchToMode(mode: AppMode) {
+  const prev = store.getState().activeMode;
+  if (prev === mode) return;
+  // Stop preview & any in-progress interaction state.
+  preview.stopAll();
+  previewActive = false;
+  if (prev === 'glissandograph') {
+    // Leaving gliss mode: stop any active gliss session and playback.
+    gliss.stop();
+    if (playback.isPlaying()) {
+      playback.pause();
+      store.setPlaybackState('paused');
+      updatePlayState(false);
+    }
+  } else {
+    // Entering gliss mode: stop any compose-mode playback/scrub and clear transient state.
+    if (playback.isPlaying()) {
+      playback.pause();
+      store.setPlaybackState('paused');
+      updatePlayState(false);
+    }
+    interaction.drawingCurve = null;
+    interaction.transformBox = null;
+    interaction.scrubbing = false;
+  }
+  store.setActiveMode(mode);
+  // DOM toggle
+  canvasContainer.querySelector<HTMLElement>('#zoom-controls')?.style.setProperty('display', mode === 'composition' ? '' : 'none');
+  if (mode === 'glissandograph') {
+    glissScreen.removeAttribute('hidden');
+    bgCanvas.style.display = 'none';
+    fgCanvas.style.display = 'none';
+  } else {
+    glissScreen.setAttribute('hidden', '');
+    bgCanvas.style.display = '';
+    fgCanvas.style.display = '';
+  }
+  bgDirty = true;
+}
+
 const toolbar = createToolbar(toolbarContainer, {
   onToolChange(tool: ToolMode) {
     store.setTool(tool);
@@ -186,6 +249,9 @@ const toolbar = createToolbar(toolbarContainer, {
       // Clear the transform box but keep the curve selection so Draw extends it.
       interaction.transformBox = null;
     }
+  },
+  onModeChange(mode: AppMode) {
+    switchToMode(mode);
   },
   onJoin() {
     performJoin();
@@ -274,6 +340,11 @@ function startPlayback() {
 }
 
 btnPlay.addEventListener('click', () => {
+  if (store.getState().activeMode === 'glissandograph') {
+    gliss.startPlayback();
+    updatePlayState(true);
+    return;
+  }
   startPlayback();
 });
 
@@ -281,10 +352,17 @@ btnPause.addEventListener('click', () => {
   playback.pause();
   store.setPlaybackState('paused');
   updatePlayState(false);
+  if (store.getState().activeMode === 'glissandograph') {
+    store.setGlissPhase('idle');
+  }
 });
 
 btnStop.addEventListener('click', () => {
-  playback.stop();
+  if (store.getState().activeMode === 'glissandograph') {
+    gliss.stop();
+  } else {
+    playback.stop();
+  }
   store.setPlaybackState('stopped');
   store.setPlaybackPosition(0);
   updatePlayState(false);
@@ -615,6 +693,20 @@ window.addEventListener('keydown', (e) => {
       if (e.repeat) break; // prevent rapid toggling when holding space
 
       const state = store.getState();
+
+      // Glissandograph mode: Space toggles scrolling play.
+      if (state.activeMode === 'glissandograph') {
+        if (state.glissandograph.phase === 'playing') {
+          gliss.stop();
+          store.setPlaybackState('stopped');
+          updatePlayState(false);
+        } else {
+          gliss.startPlayback();
+          updatePlayState(true);
+        }
+        break;
+      }
+
       const inDrawContext = state.activeTool === 'draw'
         && interaction.cursorInCanvas
         && interaction.cursorScreenY >= RULER_HEIGHT
@@ -884,14 +976,91 @@ fgCanvas.addEventListener('wheel', (e) => {
   bgDirty = true;
 }, { passive: false });
 
+// ── Glissandograph mouse handlers ───────────────────────────────
+function glissMouseCoords(e: MouseEvent): { sx: number; sy: number; w: number; h: number } {
+  const rect = glissFgCanvas.getBoundingClientRect();
+  return { sx: e.clientX - rect.left, sy: e.clientY - rect.top, w: rect.width, h: rect.height };
+}
+
+glissFgCanvas.addEventListener('mousedown', (e) => {
+  if (store.getState().activeMode !== 'glissandograph') return;
+  const { sx, sy, w, h } = glissMouseCoords(e);
+  gliss.onMouseDown(e, sx, sy, w, h);
+  e.preventDefault();
+});
+
+glissFgCanvas.addEventListener('mousemove', (e) => {
+  if (store.getState().activeMode !== 'glissandograph') return;
+  const { sx, sy, w, h } = glissMouseCoords(e);
+  gliss.onMouseMove(e, sx, sy, w, h);
+});
+
+// Mouseup is attached to window so LMB release outside canvas still stops the tone.
+window.addEventListener('mouseup', (e) => {
+  if (store.getState().activeMode === 'glissandograph') {
+    gliss.onMouseUp(e);
+  }
+});
+
+glissFgCanvas.addEventListener('mouseleave', () => {
+  if (store.getState().activeMode !== 'glissandograph') return;
+  gliss.onMouseLeave();
+});
+
+// Wheel in gliss mode: Ctrl+wheel is Y-zoom; plain wheel is disabled during scrolling play.
+glissFgCanvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (store.getState().activeMode !== 'glissandograph') return;
+  const rect = glissFgCanvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const factor = e.deltaY > 0 ? 0.9 : 1.1;
+  if (gliss.isScrolling() && !e.ctrlKey) return; // plain wheel disabled during scroll
+  if (e.ctrlKey) {
+    viewport.zoomXAt(factor, sx);
+  } else {
+    viewport.zoomYAt(factor, sy);
+  }
+  const rect2 = canvasContainer.getBoundingClientRect();
+  viewport.clampOffset(rect2.width, rect2.height);
+  updateZoom();
+  bgDirty = true;
+}, { passive: false });
+
 // ── Render loop ─────────────────────────────────────────────────
 function render() {
   const state = store.getState();
   const comp = state.composition;
+  const rect = canvasContainer.getBoundingClientRect();
+
+  // Glissandograph mode: per-frame viewport scroll, render against gliss canvases, skip compose chrome.
+  if (state.activeMode === 'glissandograph') {
+    gliss.tick(rect.width, rect.height);
+    const scaleRoot = state.scaleRoot;
+    const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
+    // BG: staff + ruler. Redraw every frame while scrolling so the grid slides smoothly.
+    if (bgDirty || gliss.isScrolling()) {
+      glissBgCtx.clearRect(0, 0, rect.width, rect.height);
+      renderStaff(glissBgCtx, viewport, rect.width, rect.height, comp.beatsPerMeasure, scaleRoot, scale);
+      renderRuler(glissBgCtx, viewport, rect.width, comp.beatsPerMeasure, comp.bpm);
+      bgDirty = false;
+    }
+    // FG: curves (from composition) + planchette. No tool previews, no compose-mode playhead.
+    glissFgCtx.clearRect(0, 0, rect.width, rect.height);
+    for (const track of comp.tracks) {
+      if (track.muted) continue;
+      const tone = comp.toneLibrary.find(t => t.id === track.toneId);
+      if (!tone) continue;
+      const emptySet = new Set<string>();
+      renderCurves(glissFgCtx, viewport, track.curves, tone, emptySet, null, null);
+    }
+    renderPlanchettes(glissFgCtx, viewport, rect.width, rect.height, state.glissandograph.planchettes);
+    requestAnimationFrame(render);
+    return;
+  }
 
   // Background: staff grid
   if (bgDirty) {
-    const rect = canvasContainer.getBoundingClientRect();
     const scaleRoot = state.scaleRoot;
     const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
     renderStaff(bgCtx, viewport, rect.width, rect.height, comp.beatsPerMeasure, scaleRoot, scale);
@@ -909,7 +1078,6 @@ function render() {
   }
 
   // Foreground: curves + playhead + interaction
-  const rect = canvasContainer.getBoundingClientRect();
   fgCtx.clearRect(0, 0, rect.width, rect.height);
 
   // Transform box (rendered behind curves so unselected curves remain clickable)

@@ -1,8 +1,18 @@
-import type { AppState, Composition, ToolMode, PlaybackState, ViewportState } from '../types';
+import type { AppState, AppMode, Composition, GlissandographPhase, PlanchetteState, ToolMode, PlaybackState, ViewportState } from '../types';
 import { createComposition } from '../model/composition';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_NOTE } from '../constants';
 
 type Listener = () => void;
+
+function createInitialPrimaryPlanchette(trackId: string | null): PlanchetteState {
+  return {
+    voiceId: 'primary',
+    trackId,
+    cursorWorldY: null,
+    snappedWorldY: null,
+    lastCrossedAt: 0,
+  };
+}
 
 function createInitialState(): AppState {
   return {
@@ -11,6 +21,16 @@ function createInitialState(): AppState {
     selectedCurveIds: new Set(),
     selectedPointIndex: null,
     activeTool: 'draw',
+    activeMode: 'composition',
+    glissandograph: {
+      phase: 'idle',
+      recordArmed: false,
+      countdownStartedAt: 0,
+      lmbSounding: false,
+      lastActivityAt: 0,
+      planchettes: [createInitialPrimaryPlanchette(null)],
+      currentRecordedCurveIds: { primary: null },
+    },
     viewport: {
       offsetX: 0,
       offsetY: MAX_NOTE,
@@ -39,6 +59,7 @@ class Store {
     const firstTrack = this.state.composition.tracks[0];
     if (firstTrack) {
       this.state.selectedTrackId = firstTrack.id;
+      this.state.glissandograph.planchettes[0]!.trackId = firstTrack.id;
     }
   }
 
@@ -65,6 +86,9 @@ class Store {
     this.state.selectedTrackId = trackId;
     this.state.selectedCurveIds = new Set();
     this.state.selectedPointIndex = null;
+    // Keep the primary planchette pointing at the selected track for recording/sounding.
+    const primary = this.state.glissandograph.planchettes.find(p => p.voiceId === 'primary');
+    if (primary) primary.trackId = trackId;
     this.notify();
   }
 
@@ -116,6 +140,54 @@ class Store {
   setTool(tool: ToolMode) {
     this.state.activeTool = tool;
     this.notify();
+  }
+
+  setActiveMode(mode: AppMode) {
+    if (this.state.activeMode === mode) return;
+    this.state.activeMode = mode;
+    this.notify();
+  }
+
+  setGlissPhase(phase: GlissandographPhase) {
+    this.state.glissandograph.phase = phase;
+    this.notify();
+  }
+
+  setGlissArmed(on: boolean) {
+    this.state.glissandograph.recordArmed = on;
+    this.notify();
+  }
+
+  setGlissLmbSounding(on: boolean) {
+    this.state.glissandograph.lmbSounding = on;
+    this.notify();
+  }
+
+  setGlissCountdownStartedAt(t: number) {
+    this.state.glissandograph.countdownStartedAt = t;
+    this.notify();
+  }
+
+  setGlissLastActivityAt(t: number) {
+    this.state.glissandograph.lastActivityAt = t;
+  }
+
+  setPlanchetteY(voiceId: string, cursorWorldY: number | null, snappedWorldY: number | null) {
+    const p = this.state.glissandograph.planchettes.find(pl => pl.voiceId === voiceId);
+    if (!p) return;
+    p.cursorWorldY = cursorWorldY;
+    p.snappedWorldY = snappedWorldY;
+    // No notify — called every frame during mouse-move; render loop already ticks each frame.
+  }
+
+  markPlanchetteCrossed(voiceId: string, t: number) {
+    const p = this.state.glissandograph.planchettes.find(pl => pl.voiceId === voiceId);
+    if (!p) return;
+    p.lastCrossedAt = t;
+  }
+
+  setGlissCurrentCurve(voiceId: string, curveId: string | null) {
+    this.state.glissandograph.currentRecordedCurveIds[voiceId] = curveId;
   }
 
   setDrawPreviewMode(mode: 'tone' | 'composition') {
