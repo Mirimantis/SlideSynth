@@ -415,6 +415,33 @@ body {
   display: none;
 }
 
+/* Record button (Glissandograph) */
+.record-btn {
+  background: var(--surface);
+  color: #ff6464;
+  border: 1px solid #335;
+}
+
+.record-btn[hidden] {
+  display: none;
+}
+
+.record-btn.armed {
+  color: #fff;
+  background: #c62828;
+  animation: recordPulse 1s infinite;
+}
+
+.record-btn.recording {
+  color: #fff;
+  background: #e53935;
+}
+
+@keyframes recordPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 /* Mode switch buttons */
 .mode-btn {
   background: var(--surface);

@@ -23,7 +23,7 @@ function renderDrawToolProps(
 ) {
   container.innerHTML = `
     <div class="prop-section">
-      <div class="prop-label">Spacebar Preview</div>
+      <div class="prop-label">Draw Preview</div>
       <label class="prop-radio"><input type="radio" name="draw-preview-mode" value="tone" ${mode === 'tone' ? 'checked' : ''}/> Tone only</label>
       <label class="prop-radio"><input type="radio" name="draw-preview-mode" value="composition" ${mode === 'composition' ? 'checked' : ''}/> Composition + tone</label>
     </div>

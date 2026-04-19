@@ -211,6 +211,7 @@
   <h1>SlideSynth Guide</h1>
   <nav>
     <a href="#overview">Overview</a>
+    <a href="#glissandograph">Glissandograph Mode</a>
     <a href="#drawing">Drawing Curves</a>
     <a href="#selecting">Selecting & Editing</a>
     <a href="#scissors">Slice (Split)</a>
@@ -256,6 +257,40 @@
     showing measure numbers and beat/subdivision ticks. Both strips are part of the
     playhead scrub zone.
   </p>
+
+  <!-- Glissandograph -->
+  <h2 id="glissandograph">Glissandograph Mode</h2>
+  <p class="dev-notice">
+    <em>This mode is under active development — behaviour may change.</em>
+  </p>
+  <p>
+    A performance mode where you play the canvas like an instrument. A stationary
+    <strong>planchette</strong> sits at the middle of the canvas; the music scrolls past it.
+    Switch modes via the <strong>Compose</strong> / <strong>Glissandograph</strong> pill
+    buttons in the toolbar. Toolbar, tracks, snap, key, and scale all behave the same in both modes.
+  </p>
+
+  <h3>Playing</h3>
+  <ul>
+    <li><strong>Mouse Y</strong> drives the planchette's pitch (snapped to scale/semitone if snap is on).</li>
+    <li><strong>Hold LMB</strong> to sound the selected track's tone at the planchette pitch — release to stop. While idle, the <em>Draw Preview</em> mode (Tool Properties panel) decides whether "Composition + tone" also plays existing curves at that spot so you can hear the chord.</li>
+    <li><strong>Space</strong> starts/stops scrolling play. The canvas slides right-to-left past the planchette at the composition's BPM.</li>
+    <li>During play, holding LMB plays along but does not record (unless Record is armed).</li>
+  </ul>
+
+  <h3>Recording</h3>
+  <ul>
+    <li><strong>R</strong> or the red <strong>Record</strong> button arms recording with a 3-second countdown, then starts scrolling play.</li>
+    <li>While recording, each LMB press/release captures a curve onto the selected track. The curve is simplified and auto-smoothed on release, so the result is fully editable back in Compose mode.</li>
+    <li><strong>Escape</strong> during the countdown cancels.</li>
+    <li>Recording continues past the composition end so you can extend phrases or capture silence; an AFK timeout stops it after a minute of inactivity.</li>
+  </ul>
+
+  <h3>Panning and zooming</h3>
+  <ul>
+    <li><strong>Middle-click drag</strong> pans. When idle, both X and Y pan freely; during play/record, only Y pans (X is owned by the scrolling playhead).</li>
+    <li>Beat 0 can sit at the planchette — scroll or pan past the left edge to align it.</li>
+  </ul>
 
   <!-- Drawing -->
   <h2 id="drawing">Drawing Curves</h2>
@@ -532,7 +567,9 @@
   <h2 id="shortcuts">Keyboard Shortcuts</h2>
   <table>
     <tr><th>Key</th><th>Action</th></tr>
-    <tr><td><kbd>Space</kbd></td><td>Play / Pause (or hold for live audio preview in Draw mode / while scrubbing)</td></tr>
+    <tr><td><kbd>Space</kbd></td><td>Play / Pause (or scrolling play in Glissandograph; hold for live preview in Draw mode / while scrubbing)</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Arm / disarm Record (Glissandograph only)</td></tr>
+    <tr><td><kbd>Escape</kbd></td><td>Cancel countdown / stop recording (Glissandograph)</td></tr>
     <tr><td><kbd>L</kbd></td><td>Toggle loop</td></tr>
     <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>
     <tr><td><kbd>V</kbd></td><td>Select tool</td></tr>
@@ -542,7 +579,8 @@
     <tr><td><kbd>Escape</kbd> / <kbd>Enter</kbd></td><td>Finish drawing</td></tr>
     <tr><td><kbd>Ctrl</kbd> (hold in Draw)</td><td>Temporary Select</td></tr>
     <tr><td><kbd>Shift</kbd> (hold while dragging)</td><td>Constrain to axis</td></tr>
-    <tr><td><kbd>Alt</kbd>+drag</td><td>Pan canvas</td></tr>
+    <tr><td><kbd>Alt</kbd>+drag</td><td>Pan canvas (Compose)</td></tr>
+    <tr><td>Middle-click drag</td><td>Pan canvas (Glissandograph: Y-only during play/record)</td></tr>
     <tr><td><kbd>Alt</kbd>+drag (transform)</td><td>Duplicate before transform</td></tr>
     <tr><td>Scroll wheel</td><td>Zoom Y</td></tr>
     <tr><td><kbd>Ctrl</kbd>+scroll</td><td>Zoom X</td></tr>

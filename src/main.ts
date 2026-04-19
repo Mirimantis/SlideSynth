@@ -44,6 +44,7 @@ app.innerHTML = `
           <button id="btn-play" title="Play (Space)">&#9654;</button>
           <button id="btn-pause" title="Pause" disabled>&#10074;&#10074;</button>
           <button id="btn-stop" title="Stop">&#9632;</button>
+          <button id="btn-record" class="record-btn" title="Record (R) — Glissandograph only" hidden>&#9679;</button>
           <label class="toolbar-loop-label" title="Loop playback (L)">
             <input type="checkbox" id="loop-toggle" />
             <span>Loop</span>
@@ -273,12 +274,27 @@ const toolbar = createToolbar(toolbarContainer, {
 const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
 const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
+const btnRecord = document.getElementById('btn-record') as HTMLButtonElement;
 const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
 const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
+const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement;
 
 function updatePlayState(playing: boolean) {
   btnPlay.disabled = playing;
   btnPause.disabled = !playing;
+}
+
+function updateRecordButtonVisuals() {
+  const st = store.getState();
+  if (st.activeMode !== 'glissandograph') {
+    btnRecord.setAttribute('hidden', '');
+    return;
+  }
+  btnRecord.removeAttribute('hidden');
+  const g = st.glissandograph;
+  btnRecord.classList.toggle('armed', g.recordArmed && g.phase !== 'playing');
+  btnRecord.classList.toggle('recording', g.recordArmed && g.phase === 'playing');
+  btnRecord.disabled = st.selectedTrackId === null;
 }
 
 /** Format a length in beats + BPM as "M:SS" for the toolbar title display. */
@@ -366,6 +382,13 @@ btnStop.addEventListener('click', () => {
   store.setPlaybackState('stopped');
   store.setPlaybackPosition(0);
   updatePlayState(false);
+});
+
+btnRecord.addEventListener('click', () => {
+  if (store.getState().activeMode !== 'glissandograph') return;
+  if (store.getState().selectedTrackId === null) return; // no track to record onto
+  gliss.toggleArmed();
+  updateRecordButtonVisuals();
 });
 
 bpmInput.addEventListener('change', () => {
@@ -616,6 +639,27 @@ history.subscribe(() => {
 // ── Keyboard shortcuts ──────────────────────────────────────────
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+
+  // Glissandograph-only shortcuts (keep early so they don't get shadowed by compose-mode keys)
+  if (store.getState().activeMode === 'glissandograph') {
+    if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      if (e.repeat) return;
+      if (store.getState().selectedTrackId === null) return;
+      gliss.toggleArmed();
+      return;
+    }
+    if (e.key === 'Escape') {
+      const g = store.getState().glissandograph;
+      if (g.phase === 'countdown' || g.recordArmed) {
+        e.preventDefault();
+        gliss.stop();
+        store.setPlaybackState('stopped');
+        updatePlayState(false);
+        return;
+      }
+    }
+  }
 
   // Undo / Redo
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -982,8 +1026,19 @@ function glissMouseCoords(e: MouseEvent): { sx: number; sy: number; w: number; h
   return { sx: e.clientX - rect.left, sy: e.clientY - rect.top, w: rect.width, h: rect.height };
 }
 
+// Middle-click pan in gliss mode: full X+Y when idle, Y-only when active (scrolling play/record).
+let isGlissPanning = false;
+let lastGlissMouse = { x: 0, y: 0 };
+
 glissFgCanvas.addEventListener('mousedown', (e) => {
   if (store.getState().activeMode !== 'glissandograph') return;
+  if (e.button === 1) {
+    isGlissPanning = true;
+    lastGlissMouse = { x: e.clientX, y: e.clientY };
+    glissFgCanvas.style.cursor = 'grabbing';
+    e.preventDefault();
+    return;
+  }
   const { sx, sy, w, h } = glissMouseCoords(e);
   gliss.onMouseDown(e, sx, sy, w, h);
   e.preventDefault();
@@ -995,9 +1050,28 @@ glissFgCanvas.addEventListener('mousemove', (e) => {
   gliss.onMouseMove(e, sx, sy, w, h);
 });
 
+// Global mouse handlers for gliss: mouseup releases LMB/pan, mousemove tracks pan off-canvas.
+window.addEventListener('mousemove', (e) => {
+  if (!isGlissPanning) return;
+  const dx = gliss.isActive() ? 0 : (e.clientX - lastGlissMouse.x);
+  const dy = e.clientY - lastGlissMouse.y;
+  viewport.panBy(dx, dy);
+  const rect = canvasContainer.getBoundingClientRect();
+  // Allow X to go negative enough for beat 0 to sit at the planchette, matching scrolling-play.
+  const minOffsetX = -(rect.width * 0.5) / viewport.state.zoomX;
+  viewport.clampOffset(rect.width, rect.height, minOffsetX);
+  lastGlissMouse = { x: e.clientX, y: e.clientY };
+  bgDirty = true;
+});
+
 // Mouseup is attached to window so LMB release outside canvas still stops the tone.
 window.addEventListener('mouseup', (e) => {
   if (store.getState().activeMode === 'glissandograph') {
+    if (isGlissPanning && e.button === 1) {
+      isGlissPanning = false;
+      glissFgCanvas.style.cursor = '';
+      return;
+    }
     gliss.onMouseUp(e);
   }
 });
@@ -1005,6 +1079,11 @@ window.addEventListener('mouseup', (e) => {
 glissFgCanvas.addEventListener('mouseleave', () => {
   if (store.getState().activeMode !== 'glissandograph') return;
   gliss.onMouseLeave();
+});
+
+// Prevent the browser's default middle-click auto-scroll cursor in gliss.
+glissFgCanvas.addEventListener('auxclick', (e) => {
+  if (store.getState().activeMode === 'glissandograph' && e.button === 1) e.preventDefault();
 });
 
 // Wheel in gliss mode: Ctrl+wheel is Y-zoom; plain wheel is disabled during scrolling play.
@@ -1055,6 +1134,15 @@ function render() {
       renderCurves(glissFgCtx, viewport, track.curves, tone, emptySet, null, null);
     }
     renderPlanchettes(glissFgCtx, viewport, rect.width, rect.height, state.glissandograph.planchettes);
+    // Countdown overlay (DOM): update label, show/hide based on phase.
+    if (state.glissandograph.phase === 'countdown') {
+      const label = gliss.getCountdownLabel();
+      if (label && countdownOverlay.textContent !== label) countdownOverlay.textContent = label;
+      countdownOverlay.removeAttribute('hidden');
+    } else if (!countdownOverlay.hasAttribute('hidden')) {
+      countdownOverlay.setAttribute('hidden', '');
+      countdownOverlay.textContent = '';
+    }
     requestAnimationFrame(render);
     return;
   }
@@ -1196,12 +1284,14 @@ store.subscribe(() => {
   renderTrackList();
   renderPropertyPanel(document.getElementById('prop-content')!);
   renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
+  updateRecordButtonVisuals();
 
   // Keep the active loop/auto-stop range in sync with the current selection
   // and curve positions mid-playback. If a delete removed the last playable
   // curve, stop entirely. Otherwise the scheduler's end-of-range logic will
   // handle playhead-past-end (loop restart or stop, per the loop toggle).
-  if (playback.isPlaying()) {
+  // Skip in glissandograph mode: its play range is owned by gliss.startPlayback().
+  if (playback.isPlaying() && store.getState().activeMode === 'composition') {
     const state = store.getState();
     const selKey = [...state.selectedCurveIds].sort().join(',');
     const selectionChanged = selKey !== lastSelectionKey;

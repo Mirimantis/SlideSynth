@@ -328,6 +328,90 @@ export function computeMultiCurveBBox(curves: BezierCurve[]): BoundingBox {
   };
 }
 
+/** Sample captured during a glissandograph recording. */
+export interface RecordedSample {
+  beat: number;
+  note: number;
+  volume: number;
+}
+
+/** Perpendicular distance from p to line a-b, measured in anisotropic tolerance units. */
+function anisotropicPerpDist(
+  p: RecordedSample, a: RecordedSample, b: RecordedSample,
+  tx: number, ty: number,
+): number {
+  const ax = a.beat / tx, ay = a.note / ty;
+  const bx = b.beat / tx, by = b.note / ty;
+  const px = p.beat / tx, py = p.note / ty;
+  const dx = bx - ax, dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-12) return Math.hypot(px - ax, py - ay);
+  const cross = dx * (py - ay) - dy * (px - ax);
+  return Math.abs(cross) / Math.sqrt(lenSq);
+}
+
+/** Ramer-Douglas-Peucker simplification with anisotropic X/Y tolerances. */
+function rdpSimplify(
+  samples: RecordedSample[], toleranceBeats: number, toleranceSemis: number,
+): RecordedSample[] {
+  if (samples.length <= 2) return [...samples];
+  const first = samples[0]!;
+  const last = samples[samples.length - 1]!;
+  let maxDist = 0;
+  let maxIdx = 0;
+  for (let i = 1; i < samples.length - 1; i++) {
+    const d = anisotropicPerpDist(samples[i]!, first, last, toleranceBeats, toleranceSemis);
+    if (d > maxDist) { maxDist = d; maxIdx = i; }
+  }
+  if (maxDist > 1) {
+    const left = rdpSimplify(samples.slice(0, maxIdx + 1), toleranceBeats, toleranceSemis);
+    const right = rdpSimplify(samples.slice(maxIdx), toleranceBeats, toleranceSemis);
+    return [...left.slice(0, -1), ...right];
+  }
+  return [first, last];
+}
+
+/**
+ * Build an editable BezierCurve from glissandograph recording samples.
+ * Runs RDP simplification with separate beat/semitone tolerances, enforces
+ * monotonic X (>= 0.001 apart), applies horizontal auto-smooth handles.
+ * Returns null if the gesture was too short (< 0.05 beats) or yielded < 2 points.
+ */
+export function curveFromRecording(
+  samples: RecordedSample[],
+  toleranceBeats: number = 0.03,
+  toleranceSemis: number = 0.15,
+): BezierCurve | null {
+  if (samples.length < 2) return null;
+  const duration = samples[samples.length - 1]!.beat - samples[0]!.beat;
+  if (duration < 0.05) return null;
+
+  const simplified = rdpSimplify(samples, toleranceBeats, toleranceSemis);
+
+  // Enforce monotonic X (drop points too close to their predecessor)
+  const cleaned: RecordedSample[] = [];
+  for (const s of simplified) {
+    const prev = cleaned[cleaned.length - 1];
+    if (!prev || s.beat - prev.beat >= 0.001) cleaned.push(s);
+  }
+  if (cleaned.length < 2) return null;
+
+  const curve = createCurve();
+  for (const s of cleaned) {
+    curve.points.push({
+      position: { x: s.beat, y: s.note },
+      handleIn: null,
+      handleOut: null,
+      volume: s.volume,
+    });
+  }
+  // applyAutoSmoothHandles handles indices >= 1; index 0 keeps null handles.
+  for (let i = 1; i < curve.points.length; i++) {
+    applyAutoSmoothHandles(curve, i);
+  }
+  return curve;
+}
+
 /** Deep copy an array of control points. */
 export function deepCopyPoints(points: ControlPoint[]): ControlPoint[] {
   return points.map(pt => ({

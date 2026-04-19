@@ -193,9 +193,10 @@ export function createPlaybackEngine(
   function play(composition: Composition, startBeat: number, endBeat?: number, loopStart?: number): void {
     if (playing) stop();
 
-    // Nothing to play in an empty composition
+    // Nothing to play in an empty composition — unless the caller explicitly asked for a
+    // range (e.g. Glissandograph recording, which needs to scroll/record into an empty canvas).
     const compLength = getCompositionLength(composition);
-    if (compLength <= 0) {
+    if (compLength <= 0 && endBeat === undefined) {
       onPositionUpdate(0);
       return;
     }
