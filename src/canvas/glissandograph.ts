@@ -17,6 +17,8 @@ const COUNTDOWN_SECONDS = 3;
 const AFK_TIMEOUT_MS = 60_000;
 const RECORDING_BUFFER_MAX = 3600; // ~1 minute at 60fps
 const PLAY_END_BUFFER_BEATS = 10_000; // "effectively infinite" for recording without loop
+const LOOP_DEFAULT_MEASURES = 2;     // empty-composition loop defaults to this many measures
+const LOOP_WRAP_THRESHOLD_BEATS = 0.5; // position jump-backward detection
 
 export interface GlissandographController {
   /** Called every frame from the render loop — drives scrolling viewport + countdown + recording. */
@@ -41,6 +43,9 @@ export interface GlissandographController {
 
   /** Countdown overlay label: '', '3', '2', '1', or 'Go'. */
   getCountdownLabel(): string;
+
+  /** performance.now() of the last loop-wrap event; drives the planchette pulse. */
+  getLastLoopWrapAt(): number;
 }
 
 export function createGlissandograph(
@@ -54,6 +59,9 @@ export function createGlissandograph(
   const recBuffers = new Map<VoiceId, RecordedSample[]>();
   // Set true before the first curve committed in a session so we only snapshot once.
   let sessionHistorySnapshotted = false;
+  // Track position across frames for loop-wrap detection.
+  let lastTickBeat: number | null = null;
+  let lastLoopWrapAt = 0;
 
   function getPrimaryTrack() {
     const st = store.getState();
@@ -196,15 +204,30 @@ export function createGlissandograph(
     const comp = st.composition;
     const compLength = getCompositionLength(comp);
     const startBeat = st.playback.positionBeats;
-    // When recording, extend play range so the canvas can scroll past composition end.
     const recording = st.glissandograph.recordArmed;
-    const endBeat = recording
-      ? Math.max(compLength, startBeat) + PLAY_END_BUFFER_BEATS
-      : Math.max(compLength, startBeat + 1);
+    const looping = playback.isLoopEnabled();
+
+    // With Loop on: use a finite loop end so the playback engine's wrap mechanism
+    // kicks in and re-reads the composition on each pass (picking up newly-recorded
+    // curves — the looper overdub mechanic). Minimum 2 measures at default BPM so
+    // an empty-composition record session has somewhere to loop.
+    // With Loop off: extend end-of-range far past current content so the canvas
+    // keeps scrolling during recording (lets you record past composition end).
+    let endBeat: number;
+    if (looping) {
+      const minLoop = LOOP_DEFAULT_MEASURES * comp.beatsPerMeasure;
+      endBeat = Math.max(compLength, minLoop);
+    } else if (recording) {
+      endBeat = Math.max(compLength, startBeat) + PLAY_END_BUFFER_BEATS;
+    } else {
+      endBeat = Math.max(compLength, startBeat + 1);
+    }
+
     playback.play(comp, startBeat, endBeat, 0);
     store.setPlaybackState('playing');
     store.setGlissPhase('playing');
     store.setGlissLastActivityAt(performance.now());
+    lastTickBeat = null;
   }
 
   return {
@@ -221,6 +244,17 @@ export function createGlissandograph(
       }
 
       if (g.phase === 'playing' && playback.isPlaying()) {
+        const beat = playback.getPositionBeats();
+        // Loop-wrap detection: a backward jump > threshold means playback looped.
+        // If we were recording, finalize the current curve so the next pass starts a fresh one.
+        if (lastTickBeat != null && beat < lastTickBeat - LOOP_WRAP_THRESHOLD_BEATS) {
+          lastLoopWrapAt = performance.now();
+          if (g.recordArmed && lmbDown) {
+            finalizeCurrentCurve();
+          }
+        }
+        lastTickBeat = beat;
+
         scrollViewportToPlayhead(canvasWidth, canvasHeight);
         captureRecordingSample();
 
@@ -321,6 +355,7 @@ export function createGlissandograph(
       store.setGlissCountdownStartedAt(0);
       store.setGlissLmbSounding(false);
       sessionHistorySnapshotted = false;
+      lastTickBeat = null;
     },
 
     isActive() {
@@ -341,6 +376,10 @@ export function createGlissandograph(
       if (remaining <= 1) return '1';
       if (remaining <= 2) return '2';
       return '3';
+    },
+
+    getLastLoopWrapAt() {
+      return lastLoopWrapAt;
     },
   };
 }

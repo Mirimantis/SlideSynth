@@ -288,6 +288,7 @@ function updateRecordButtonVisuals() {
   const st = store.getState();
   if (st.activeMode !== 'glissandograph') {
     btnRecord.setAttribute('hidden', '');
+    loopToggle.disabled = false;
     return;
   }
   btnRecord.removeAttribute('hidden');
@@ -295,6 +296,9 @@ function updateRecordButtonVisuals() {
   btnRecord.classList.toggle('armed', g.recordArmed && g.phase !== 'playing');
   btnRecord.classList.toggle('recording', g.recordArmed && g.phase === 'playing');
   btnRecord.disabled = st.selectedTrackId === null;
+  // Lock the loop toggle while actively recording so a mid-pass disable can't
+  // corrupt overdub semantics (stops the scroll wrap mid-session).
+  loopToggle.disabled = g.recordArmed && g.phase === 'playing';
 }
 
 /** Format a length in beats + BPM as "M:SS" for the toolbar title display. */
@@ -1133,7 +1137,7 @@ function render() {
       const emptySet = new Set<string>();
       renderCurves(glissFgCtx, viewport, track.curves, tone, emptySet, null, null);
     }
-    renderPlanchettes(glissFgCtx, viewport, rect.width, rect.height, state.glissandograph.planchettes);
+    renderPlanchettes(glissFgCtx, viewport, rect.width, rect.height, state.glissandograph.planchettes, gliss.getLastLoopWrapAt());
     // Countdown overlay (DOM): update label, show/hide based on phase.
     if (state.glissandograph.phase === 'countdown') {
       const label = gliss.getCountdownLabel();
@@ -1285,6 +1289,9 @@ store.subscribe(() => {
   renderPropertyPanel(document.getElementById('prop-content')!);
   renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
   updateRecordButtonVisuals();
+  // Keep Play/Pause buttons in sync with playback state — covers transitions that
+  // don't flow through startPlayback() (e.g. gliss countdown → playing).
+  updatePlayState(store.getState().playback.state === 'playing');
 
   // Keep the active loop/auto-stop range in sync with the current selection
   // and curve positions mid-playback. If a delete removed the last playable

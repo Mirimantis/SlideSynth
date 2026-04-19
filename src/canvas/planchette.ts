@@ -5,9 +5,11 @@ import { RULER_HEIGHT } from './interaction';
 export const PLANCHETTE_SCREEN_X_RATIO = 0.5;
 
 const PULSE_DURATION_MS = 200;
+const LOOP_WRAP_FLASH_MS = 250;
 const PRIMARY_COLOR = '#f44336';
 const GHOST_COLOR = 'rgba(244, 67, 54, 0.35)';
 const PULSE_COLOR = '#ffeb3b';
+const LOOP_FLASH_COLOR = '#ffffff';
 
 /**
  * Render all planchettes (stationary vertical marker + per-voice Y indicator).
@@ -19,17 +21,25 @@ export function renderPlanchettes(
   canvasWidth: number,
   canvasHeight: number,
   planchettes: PlanchetteState[],
+  lastLoopWrapAt: number = 0,
 ): void {
   const screenX = canvasWidth * PLANCHETTE_SCREEN_X_RATIO;
   const topY = RULER_HEIGHT;
+
+  // Loop-wrap flash: white over the planchette line, fades out.
+  const loopWrapAge = performance.now() - lastLoopWrapAt;
+  const loopFlashing = lastLoopWrapAt > 0 && loopWrapAge < LOOP_WRAP_FLASH_MS;
+  const loopFlashAlpha = loopFlashing ? 1 - loopWrapAge / LOOP_WRAP_FLASH_MS : 0;
 
   // Vertical planchette track line (shared across all voices)
   ctx.beginPath();
   ctx.moveTo(screenX, topY);
   ctx.lineTo(screenX, canvasHeight);
-  ctx.strokeStyle = PRIMARY_COLOR;
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = loopFlashing ? LOOP_FLASH_COLOR : PRIMARY_COLOR;
+  ctx.lineWidth = loopFlashing ? 4 : 2;
+  if (loopFlashing) ctx.globalAlpha = Math.max(0.3, loopFlashAlpha);
   ctx.stroke();
+  ctx.globalAlpha = 1;
 
   // Triangle cap at top
   ctx.beginPath();

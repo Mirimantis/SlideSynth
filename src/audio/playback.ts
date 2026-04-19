@@ -25,6 +25,7 @@ export interface PlaybackEngine {
   getPositionBeats(): number;
   isPlaying(): boolean;
   setLoop(enabled: boolean): void;
+  isLoopEnabled(): boolean;
   /** Update the active loop/auto-stop range mid-playback (e.g. when selection changes). */
   setPlayRange(loopStart: number, loopEnd: number): void;
 }
@@ -260,6 +261,7 @@ export function createPlaybackEngine(
     getPositionBeats,
     isPlaying: () => playing,
     setLoop(enabled: boolean) { loopEnabled = enabled; },
+    isLoopEnabled: () => loopEnabled,
     setPlayRange(startBeat: number, endBeat: number) {
       if (endBeat <= startBeat) return;
       playStartBeat = startBeat;
