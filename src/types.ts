@@ -138,6 +138,7 @@ export interface AppState {
   scaleId: string | null;      // ScaleDefinition.id, or null
   drawPreviewMode: 'tone' | 'composition';   // Draw-tool spacebar preview scope
   bezierAutoSmooth: boolean;                  // Draw-tool: click-placed points get horizontal handles
+  scrollCanvasEnabled: boolean;               // Compose Playback view preference (localStorage-backed)
 }
 
 // ── Transform Box ──────────────────────────────────────────────
