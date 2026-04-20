@@ -11,6 +11,7 @@ import { curveFromRecording, type RecordedSample } from '../model/curve';
 import { getAudioContext, ensureResumed } from '../audio/engine';
 import { PLANCHETTE_SCREEN_X_RATIO } from './planchette';
 import { RULER_HEIGHT } from './interaction';
+import { scrollViewportToBeat } from './scrolling-play';
 
 const PRIMARY_VOICE: VoiceId = 'primary';
 const COUNTDOWN_SECONDS = 3;
@@ -206,11 +207,7 @@ export function createGlissandograph(
   }
 
   function scrollViewportToPlayhead(canvasWidth: number, canvasHeight: number) {
-    const beat = playback.getPositionBeats();
-    const planchetteScreenX = canvasWidth * PLANCHETTE_SCREEN_X_RATIO;
-    viewport.state.offsetX = beat - planchetteScreenX / viewport.state.zoomX;
-    const minOffsetX = -planchetteScreenX / viewport.state.zoomX;
-    viewport.clampOffset(canvasWidth, canvasHeight, minOffsetX);
+    scrollViewportToBeat(viewport, playback.getPositionBeats(), canvasWidth, canvasHeight);
     onViewportChanged();
   }
 

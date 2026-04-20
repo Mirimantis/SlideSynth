@@ -5,6 +5,7 @@ import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
 import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers, hitTestLoopMarkers } from './canvas/loop-markers';
+import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, getAdaptiveSubdivisions } from './utils/snap';
 import { createInteraction, rebuildTransformBox, RULER_HEIGHT } from './canvas/interaction';
 import { createPreviewManager } from './audio/preview';
@@ -49,6 +50,12 @@ app.innerHTML = `
           <label class="toolbar-loop-label" title="Loop playback (L)">
             <input type="checkbox" id="loop-toggle" />
             <span>Loop</span>
+          </label>
+        </div>
+        <div class="transport-row">
+          <label id="scroll-canvas-label" class="toolbar-loop-label" title="Scroll the canvas past a centered playhead during Playback (Compose only; Gliss always scrolls)">
+            <input type="checkbox" id="scroll-canvas-toggle" />
+            <span>Scroll Canvas</span>
           </label>
         </div>
         <div class="transport-row">
@@ -303,6 +310,13 @@ const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
 const btnRecord = document.getElementById('btn-record') as HTMLButtonElement;
 const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
 const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
+const scrollCanvasToggle = document.getElementById('scroll-canvas-toggle') as HTMLInputElement;
+const scrollCanvasLabel = document.getElementById('scroll-canvas-label') as HTMLLabelElement;
+scrollCanvasToggle.checked = store.getState().scrollCanvasEnabled;
+scrollCanvasToggle.addEventListener('change', () => {
+  store.setScrollCanvas(scrollCanvasToggle.checked);
+  scrollCanvasToggle.blur();
+});
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement;
 
 function updatePlayState(playing: boolean) {
@@ -315,9 +329,14 @@ function updateRecordButtonVisuals() {
   if (st.activeMode !== 'glissandograph') {
     btnRecord.setAttribute('hidden', '');
     loopToggle.disabled = false;
+    scrollCanvasLabel.removeAttribute('hidden');
+    // Reflect the persisted preference when returning to Compose.
+    scrollCanvasToggle.checked = st.scrollCanvasEnabled;
     return;
   }
   btnRecord.removeAttribute('hidden');
+  // Scroll Canvas is a Compose-only view option; Gliss is always Performance/scrolling.
+  scrollCanvasLabel.setAttribute('hidden', '');
   const g = st.glissandograph;
   btnRecord.classList.toggle('armed', g.recordArmed && g.phase !== 'playing');
   btnRecord.classList.toggle('recording', g.recordArmed && g.phase === 'playing');
@@ -368,6 +387,13 @@ function startPlayback() {
   if (!playback.isPlaying()) return;
   store.setPlaybackState('playing');
   updatePlayState(true);
+  // Snap the viewport on the first frame of scrolling playback so there's no flash
+  // of the old static offset before the render loop takes over.
+  if (state.scrollCanvasEnabled) {
+    const r = canvasContainer.getBoundingClientRect();
+    scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
+    bgDirty = true;
+  }
 }
 
 btnPlay.addEventListener('click', () => {
@@ -1008,7 +1034,10 @@ fgCanvas.addEventListener('mousedown', (e) => {
 
 window.addEventListener('mousemove', (e) => {
   if (isPanning) {
-    const dx = e.clientX - lastMouse.x;
+    // During scrolling Playback the X offset is owned by the scroll formula — a
+    // user pan in X would fight it each frame. Allow only Y.
+    const scrollingPlayback = store.getState().scrollCanvasEnabled && playback.isPlaying();
+    const dx = scrollingPlayback ? 0 : (e.clientX - lastMouse.x);
     const dy = e.clientY - lastMouse.y;
     viewport.panBy(dx, dy);
     const rect = canvasContainer.getBoundingClientRect();
@@ -1031,6 +1060,11 @@ fgCanvas.addEventListener('wheel', (e) => {
   const sx = e.clientX - rect.left;
   const sy = e.clientY - rect.top;
   const factor = e.deltaY > 0 ? 0.9 : 1.1;
+
+  // During scrolling Playback, Ctrl+wheel X-zoom would be overwritten by the
+  // scroll formula next frame; suppress so the interaction stays honest.
+  const scrollingPlayback = store.getState().scrollCanvasEnabled && playback.isPlaying();
+  if (scrollingPlayback && e.ctrlKey) return;
 
   if (e.ctrlKey) {
     viewport.zoomXAt(factor, sx);
@@ -1247,6 +1281,15 @@ function render() {
     }
     requestAnimationFrame(render);
     return;
+  }
+
+  // Compose "Scroll Canvas" view: when the toggle is on during Playback, scroll
+  // the viewport each frame so the playhead sits centred like the Gliss rail.
+  // Toggle off → classic static canvas with the playhead moving across.
+  const composeScrolling = state.scrollCanvasEnabled && playback.isPlaying();
+  if (composeScrolling) {
+    scrollViewportToBeat(viewport, playback.getPositionBeats(), rect.width, rect.height);
+    bgDirty = true;
   }
 
   // Background: staff grid

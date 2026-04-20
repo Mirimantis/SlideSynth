@@ -14,6 +14,18 @@ function createInitialPrimaryPlanchette(trackId: string | null): PlanchetteState
   };
 }
 
+const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollCanvas';
+
+function loadScrollCanvasPref(): boolean {
+  try {
+    const raw = localStorage.getItem(SCROLL_CANVAS_STORAGE_KEY);
+    if (raw === null) return true;
+    return raw === 'true';
+  } catch {
+    return true;
+  }
+}
+
 function createInitialState(): AppState {
   return {
     composition: createComposition(),
@@ -46,6 +58,7 @@ function createInitialState(): AppState {
     scaleId: null,
     drawPreviewMode: 'tone',
     bezierAutoSmooth: false,
+    scrollCanvasEnabled: loadScrollCanvasPref(),
   };
 }
 
@@ -197,6 +210,17 @@ class Store {
 
   setBezierAutoSmooth(enabled: boolean) {
     this.state.bezierAutoSmooth = enabled;
+    this.notify();
+  }
+
+  setScrollCanvas(enabled: boolean) {
+    if (this.state.scrollCanvasEnabled === enabled) return;
+    this.state.scrollCanvasEnabled = enabled;
+    try {
+      localStorage.setItem(SCROLL_CANVAS_STORAGE_KEY, enabled ? 'true' : 'false');
+    } catch {
+      // Silently ignore — preference just won't persist.
+    }
     this.notify();
   }
 
