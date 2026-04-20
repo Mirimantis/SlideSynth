@@ -1,4 +1,4 @@
-import type { AppState, AppMode, Composition, GlissandographPhase, PlanchetteState, ToolMode, PlaybackState, ViewportState } from '../types';
+import type { AppState, AppMode, Composition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState } from '../types';
 import { createComposition } from '../model/composition';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_NOTE } from '../constants';
 
@@ -15,14 +15,23 @@ function createInitialPrimaryPlanchette(trackId: string | null): PlanchetteState
 }
 
 const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollCanvas';
+const PITCH_HUD_STORAGE_KEY = 'slidesynth.pitchHud';
 
-function loadScrollCanvasPref(): boolean {
+function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
-    const raw = localStorage.getItem(SCROLL_CANVAS_STORAGE_KEY);
-    if (raw === null) return true;
+    const raw = localStorage.getItem(key);
+    if (raw === null) return defaultValue;
     return raw === 'true';
   } catch {
-    return true;
+    return defaultValue;
+  }
+}
+
+function saveBoolPref(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, value ? 'true' : 'false');
+  } catch {
+    // Silently ignore — preference just won't persist.
   }
 }
 
@@ -34,7 +43,7 @@ function createInitialState(): AppState {
     selectedPointIndex: null,
     activeTool: 'draw',
     activeMode: 'composition',
-    glissandograph: {
+    performance: {
       phase: 'idle',
       recordArmed: false,
       countdownStartedAt: 0,
@@ -58,7 +67,8 @@ function createInitialState(): AppState {
     scaleId: null,
     drawPreviewMode: 'tone',
     bezierAutoSmooth: false,
-    scrollCanvasEnabled: loadScrollCanvasPref(),
+    scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, true),
+    pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
   };
 }
 
@@ -72,7 +82,7 @@ class Store {
     const firstTrack = this.state.composition.tracks[0];
     if (firstTrack) {
       this.state.selectedTrackId = firstTrack.id;
-      this.state.glissandograph.planchettes[0]!.trackId = firstTrack.id;
+      this.state.performance.planchettes[0]!.trackId = firstTrack.id;
     }
   }
 
@@ -100,7 +110,7 @@ class Store {
     this.state.selectedCurveIds = new Set();
     this.state.selectedPointIndex = null;
     // Keep the primary planchette pointing at the selected track for recording/sounding.
-    const primary = this.state.glissandograph.planchettes.find(p => p.voiceId === 'primary');
+    const primary = this.state.performance.planchettes.find(p => p.voiceId === 'primary');
     if (primary) primary.trackId = trackId;
     this.notify();
   }
@@ -161,32 +171,32 @@ class Store {
     this.notify();
   }
 
-  setGlissPhase(phase: GlissandographPhase) {
-    this.state.glissandograph.phase = phase;
+  setPerformPhase(phase: PerformancePhase) {
+    this.state.performance.phase = phase;
     this.notify();
   }
 
-  setGlissArmed(on: boolean) {
-    this.state.glissandograph.recordArmed = on;
+  setPerformArmed(on: boolean) {
+    this.state.performance.recordArmed = on;
     this.notify();
   }
 
-  setGlissLmbSounding(on: boolean) {
-    this.state.glissandograph.lmbSounding = on;
+  setPerformLmbSounding(on: boolean) {
+    this.state.performance.lmbSounding = on;
     this.notify();
   }
 
-  setGlissCountdownStartedAt(t: number) {
-    this.state.glissandograph.countdownStartedAt = t;
+  setPerformCountdownStartedAt(t: number) {
+    this.state.performance.countdownStartedAt = t;
     this.notify();
   }
 
-  setGlissLastActivityAt(t: number) {
-    this.state.glissandograph.lastActivityAt = t;
+  setPerformLastActivityAt(t: number) {
+    this.state.performance.lastActivityAt = t;
   }
 
   setPlanchetteY(voiceId: string, cursorWorldY: number | null, snappedWorldY: number | null) {
-    const p = this.state.glissandograph.planchettes.find(pl => pl.voiceId === voiceId);
+    const p = this.state.performance.planchettes.find(pl => pl.voiceId === voiceId);
     if (!p) return;
     p.cursorWorldY = cursorWorldY;
     p.snappedWorldY = snappedWorldY;
@@ -194,13 +204,13 @@ class Store {
   }
 
   markPlanchetteCrossed(voiceId: string, t: number) {
-    const p = this.state.glissandograph.planchettes.find(pl => pl.voiceId === voiceId);
+    const p = this.state.performance.planchettes.find(pl => pl.voiceId === voiceId);
     if (!p) return;
     p.lastCrossedAt = t;
   }
 
-  setGlissCurrentCurve(voiceId: string, curveId: string | null) {
-    this.state.glissandograph.currentRecordedCurveIds[voiceId] = curveId;
+  setPerformCurrentCurve(voiceId: string, curveId: string | null) {
+    this.state.performance.currentRecordedCurveIds[voiceId] = curveId;
   }
 
   setDrawPreviewMode(mode: 'tone' | 'composition') {
@@ -216,11 +226,14 @@ class Store {
   setScrollCanvas(enabled: boolean) {
     if (this.state.scrollCanvasEnabled === enabled) return;
     this.state.scrollCanvasEnabled = enabled;
-    try {
-      localStorage.setItem(SCROLL_CANVAS_STORAGE_KEY, enabled ? 'true' : 'false');
-    } catch {
-      // Silently ignore — preference just won't persist.
-    }
+    saveBoolPref(SCROLL_CANVAS_STORAGE_KEY, enabled);
+    this.notify();
+  }
+
+  setPitchHudVisible(visible: boolean) {
+    if (this.state.pitchHudVisible === visible) return;
+    this.state.pitchHudVisible = visible;
+    saveBoolPref(PITCH_HUD_STORAGE_KEY, visible);
     this.notify();
   }
 

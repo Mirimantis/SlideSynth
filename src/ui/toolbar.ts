@@ -19,6 +19,7 @@ export function createToolbar(
   updateScaleId(scaleId: string | null): void;
   updateTool(tool: ToolMode): void;
   updateMode(mode: AppMode): void;
+  setXYToolsDisabled(disabled: boolean): void;
 } {
   // Build scale type <optgroup> options
   const groups = getScaleGroups();
@@ -145,6 +146,15 @@ export function createToolbar(
     },
     updateMode(mode: AppMode) {
       modeBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-mode') === mode));
+    },
+    setXYToolsDisabled(disabled: boolean) {
+      toolBtns.forEach(b => {
+        const btn = b as HTMLButtonElement;
+        btn.disabled = disabled;
+      });
+      // Also dim the Join button since it's only meaningful for selected curves (XY territory).
+      const joinBtn = container.querySelector('#btn-join') as HTMLButtonElement | null;
+      if (joinBtn) joinBtn.disabled = disabled;
     },
   };
 }

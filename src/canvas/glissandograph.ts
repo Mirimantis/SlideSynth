@@ -121,7 +121,7 @@ export function createGlissandograph(
     }
     const { cursorWorldY, snappedWorldY } = computeCursorPitch(sy);
     const st = store.getState();
-    const prev = st.glissandograph.planchettes.find(p => p.voiceId === PRIMARY_VOICE);
+    const prev = st.performance.planchettes.find(p => p.voiceId === PRIMARY_VOICE);
     const prevSnapped = prev?.snappedWorldY ?? null;
     store.setPlanchetteY(PRIMARY_VOICE, cursorWorldY, snappedWorldY);
     if (prevSnapped != null && prevSnapped !== snappedWorldY) {
@@ -138,13 +138,13 @@ export function createGlissandograph(
     const tone = getPrimaryTone();
     if (!tone) return;
     const st = store.getState();
-    const planchette = st.glissandograph.planchettes.find(p => p.voiceId === PRIMARY_VOICE);
+    const planchette = st.performance.planchettes.find(p => p.voiceId === PRIMARY_VOICE);
     if (!planchette || planchette.snappedWorldY == null) return;
     preview.startDrawPreview(tone, planchette.snappedWorldY, PRIMARY_VOICE);
-    store.setGlissLmbSounding(true);
+    store.setPerformLmbSounding(true);
     // In idle, honour drawPreviewMode: 'composition' layers a scrub preview of all curves
     // at the planchette's current beat on top of the tone — so the user can hear the chord.
-    if (st.glissandograph.phase === 'idle' && st.drawPreviewMode === 'composition') {
+    if (st.performance.phase === 'idle' && st.drawPreviewMode === 'composition') {
       preview.startScrubPreview(st.composition);
       preview.updateScrubPosition(planchetteBeat(canvasWidth), st.composition);
     }
@@ -152,7 +152,7 @@ export function createGlissandograph(
 
   function updateSounding() {
     const st = store.getState();
-    const planchette = st.glissandograph.planchettes.find(p => p.voiceId === PRIMARY_VOICE);
+    const planchette = st.performance.planchettes.find(p => p.voiceId === PRIMARY_VOICE);
     if (!planchette || planchette.snappedWorldY == null) return;
     if (preview.isDrawPreviewActive(PRIMARY_VOICE)) {
       preview.updateDrawPitch(planchette.snappedWorldY, PRIMARY_VOICE);
@@ -163,7 +163,7 @@ export function createGlissandograph(
   function stopSounding() {
     preview.stopDrawPreview(PRIMARY_VOICE);
     if (preview.isScrubPreviewActive()) preview.stopScrubPreview();
-    store.setGlissLmbSounding(false);
+    store.setPerformLmbSounding(false);
   }
 
   /**
@@ -214,7 +214,7 @@ export function createGlissandograph(
   /** Add a frame sample to the recording buffer if we should be recording right now. */
   function captureRecordingSample() {
     const st = store.getState();
-    const g = st.glissandograph;
+    const g = st.performance;
     if (g.phase !== 'playing' || !g.recordArmed || !lmbDown) return;
     const planchette = g.planchettes.find(p => p.voiceId === PRIMARY_VOICE);
     if (!planchette || planchette.snappedWorldY == null) return;
@@ -228,7 +228,7 @@ export function createGlissandograph(
     // Cap to avoid unbounded growth on very long holds.
     while (buf.length > RECORDING_BUFFER_MAX) buf.shift();
     recBuffers.set(PRIMARY_VOICE, buf);
-    store.setGlissLastActivityAt(performance.now());
+    store.setPerformLastActivityAt(performance.now());
   }
 
   /** Commit the current primary buffer as a curve on the selected track. */
@@ -255,14 +255,14 @@ export function createGlissandograph(
     store.mutate(() => {
       track.curves.push(curve satisfies BezierCurve);
     });
-    store.setGlissCurrentCurve(PRIMARY_VOICE, curve.id);
+    store.setPerformCurrentCurve(PRIMARY_VOICE, curve.id);
   }
 
   function beginPlayingPhase() {
     const st = store.getState();
     const comp = st.composition;
     const compLength = getCompositionLength(comp);
-    const recording = st.glissandograph.recordArmed;
+    const recording = st.performance.recordArmed;
     const looping = playback.isLoopEnabled();
 
     // Start beat: whatever the planchette is hovering over right now.
@@ -293,8 +293,8 @@ export function createGlissandograph(
     playback.play(comp, startBeat, endBeat, loopStart);
     store.setPlaybackPosition(startBeat);
     store.setPlaybackState('playing');
-    store.setGlissPhase('playing');
-    store.setGlissLastActivityAt(performance.now());
+    store.setPerformPhase('playing');
+    store.setPerformLastActivityAt(performance.now());
     lastTickBeat = null;
   }
 
@@ -302,7 +302,7 @@ export function createGlissandograph(
     tick(canvasWidth, canvasHeight) {
       lastCanvasWidth = canvasWidth;
       const st = store.getState();
-      const g = st.glissandograph;
+      const g = st.performance;
 
       // Countdown → playing transition
       if (g.phase === 'countdown') {
@@ -365,7 +365,7 @@ export function createGlissandograph(
       lmbDown = false;
       stopSounding();
       // If we were recording, finalize the current curve.
-      const g = store.getState().glissandograph;
+      const g = store.getState().performance;
       if (g.phase === 'playing' && g.recordArmed) {
         finalizeCurrentCurve();
       } else {
@@ -382,44 +382,44 @@ export function createGlissandograph(
 
     startPlayback() {
       const st = store.getState();
-      if (st.glissandograph.phase !== 'idle') return;
+      if (st.performance.phase !== 'idle') return;
       beginPlayingPhase();
     },
 
     toggleArmed() {
       const st = store.getState();
-      const g = st.glissandograph;
+      const g = st.performance;
       if (g.phase === 'idle') {
         // Arm + start countdown. beginPlayingPhase() fires when countdown elapses.
         // ensureResumed() consumes the user gesture now (click/keypress) so the
         // audio context is running by the time countdown ends, 3 seconds later.
         ensureResumed();
-        store.setGlissArmed(true);
-        store.setGlissCountdownStartedAt(getAudioContext().currentTime);
-        store.setGlissPhase('countdown');
+        store.setPerformArmed(true);
+        store.setPerformCountdownStartedAt(getAudioContext().currentTime);
+        store.setPerformPhase('countdown');
         sessionHistorySnapshotted = false;
       } else if (g.phase === 'countdown') {
         // Cancel back to idle.
-        store.setGlissArmed(false);
-        store.setGlissCountdownStartedAt(0);
-        store.setGlissPhase('idle');
+        store.setPerformArmed(false);
+        store.setPerformCountdownStartedAt(0);
+        store.setPerformPhase('idle');
       } else if (g.phase === 'playing') {
         // Toggle armed mid-play; no countdown.
         if (g.recordArmed) {
           // Disarming: finalize any in-progress curve.
           if (lmbDown) finalizeCurrentCurve();
-          store.setGlissArmed(false);
+          store.setPerformArmed(false);
         } else {
-          store.setGlissArmed(true);
+          store.setPerformArmed(true);
           sessionHistorySnapshotted = false;
-          store.setGlissLastActivityAt(performance.now());
+          store.setPerformLastActivityAt(performance.now());
         }
       }
     },
 
     stop() {
       // If we're in the middle of recording a phrase, commit it before tearing down.
-      const g = store.getState().glissandograph;
+      const g = store.getState().performance;
       if (g.phase === 'playing' && g.recordArmed && lmbDown) {
         finalizeCurrentCurve();
       }
@@ -430,25 +430,25 @@ export function createGlissandograph(
       preview.stopDrawPreview(PRIMARY_VOICE);
       if (playback.isPlaying()) playback.stop();
       recBuffers.set(PRIMARY_VOICE, []);
-      store.setGlissPhase('idle');
-      store.setGlissArmed(false);
-      store.setGlissCountdownStartedAt(0);
-      store.setGlissLmbSounding(false);
+      store.setPerformPhase('idle');
+      store.setPerformArmed(false);
+      store.setPerformCountdownStartedAt(0);
+      store.setPerformLmbSounding(false);
       sessionHistorySnapshotted = false;
       lastTickBeat = null;
     },
 
     isActive() {
-      return store.getState().glissandograph.phase !== 'idle';
+      return store.getState().performance.phase !== 'idle';
     },
 
     isScrolling() {
-      const phase = store.getState().glissandograph.phase;
+      const phase = store.getState().performance.phase;
       return phase === 'playing' && playback.isPlaying();
     },
 
     getCountdownLabel() {
-      const g = store.getState().glissandograph;
+      const g = store.getState().performance;
       if (g.phase !== 'countdown') return '';
       const elapsed = getAudioContext().currentTime - g.countdownStartedAt;
       const remaining = COUNTDOWN_SECONDS - elapsed;

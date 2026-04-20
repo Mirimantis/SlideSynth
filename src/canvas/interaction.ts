@@ -74,6 +74,18 @@ export function createInteraction(
   };
 
   /**
+   * True when the Compose canvas is in a Scroll-Canvas Playback state that
+   * hands LMB to Perform. Tool handlers early-return in that case so they
+   * don't fire on the same mouse events.
+   */
+  function isComposePerformLocked(): boolean {
+    const st = store.getState();
+    return st.activeMode === 'composition'
+        && st.playback.state === 'playing'
+        && (st.scrollCanvasEnabled || st.performance.recordArmed);
+  }
+
+  /**
    * Snap a world beat to either the nearest curve control point X (within 8 screen pixels)
    * or the beat grid. Used during loop-marker drag.
    */
@@ -100,6 +112,7 @@ export function createInteraction(
   }
 
   canvas.addEventListener('mousemove', (e) => {
+    if (isComposePerformLocked()) return;
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
@@ -230,6 +243,7 @@ export function createInteraction(
   });
 
   canvas.addEventListener('mousedown', (e) => {
+    if (isComposePerformLocked()) return;
     if (e.button !== 0) return; // left click only
     // Alt is for panning, but allow through when a transform box is active
     // in select mode (alt-drag to duplicate)
@@ -342,6 +356,7 @@ export function createInteraction(
   });
 
   canvas.addEventListener('mouseup', () => {
+    if (isComposePerformLocked()) return;
     // End loop-marker drag
     if (istate.draggingLoopMarker) {
       const which = istate.draggingLoopMarker;
@@ -380,6 +395,7 @@ export function createInteraction(
   // Ctrl held in draw mode temporarily switches to select
   // Delete/Backspace deletes selected curve (when no point is selected)
   window.addEventListener('keydown', (e) => {
+    if (isComposePerformLocked()) return;
     const state = store.getState();
     const inDrawMode = state.activeTool === 'draw';
     const hasDrawTarget = istate.drawingCurve || store.getSelectedCurveId();
@@ -411,6 +427,7 @@ export function createInteraction(
   });
 
   window.addEventListener('keyup', (e) => {
+    if (isComposePerformLocked()) return;
     if (e.key === 'Control' && istate.ctrlSwitchedTool) {
       istate.ctrlSwitchedTool = false;
       store.setTool('draw');

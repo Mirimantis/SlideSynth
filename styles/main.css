@@ -386,7 +386,7 @@ body {
   cursor: crosshair;
 }
 
-#gliss-hud {
+#pitch-hud {
   position: absolute;
   top: 48px; /* below the ruler */
   right: 12px;
@@ -396,8 +396,22 @@ body {
   font-weight: 600;
   letter-spacing: 0.03em;
   text-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
-  z-index: 2;
+  z-index: 12; /* above gliss-screen's 10 */
   pointer-events: none;
+}
+#pitch-hud[hidden] { display: none; }
+
+/* Tool buttons disabled (Scroll-Canvas Playback hijacks LMB for Perform) */
+.tool-btn:disabled,
+.tool-btn[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.tool-btn.active:disabled,
+.tool-btn.active[disabled] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: normal;
 }
 
 #countdown-overlay {
@@ -410,7 +424,7 @@ body {
   font-weight: 700;
   color: var(--accent);
   text-shadow: 0 0 24px rgba(79, 195, 247, 0.6);
-  z-index: 3;
+  z-index: 13; /* above gliss-screen (10) and the pitch HUD (12) */
   pointer-events: none;
 }
 
