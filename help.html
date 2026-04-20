@@ -298,6 +298,14 @@
   <ul>
     <li><strong>Middle-click drag</strong> pans. When idle, both X and Y pan freely; during play/record, only Y pans (X is owned by the scrolling playhead).</li>
     <li>Beat 0 can sit at the rail — scroll or pan past the left edge to align it.</li>
+    <li><strong>Mouse wheel</strong> zooms Y (pitch axis), including during scrolling play. <kbd>Ctrl</kbd>+wheel zooms X when idle; it's disabled during scrolling play so the canvas keeps tracking the audio.</li>
+    <li><strong>Y auto-scroll</strong> — during play/record, if the planchette nears the top or bottom edge, the viewport pans in that direction so higher/lower notes come into view. Suspends briefly after an explicit Y-zoom so it doesn't fight your intent.</li>
+  </ul>
+
+  <h3>Heads-up display</h3>
+  <ul>
+    <li><strong>Pitch readout</strong> (top-right) shows the planchette's current pitch as a note name plus cents offset (e.g. <code>C#4 +12¢</code>). Out-of-tune cents appear only when the raw cursor pitch differs from the snapped pitch by more than a cent.</li>
+    <li><strong>Record button</strong> in the transport row pulses red when armed and glows solid red while recording.</li>
   </ul>
 
   <!-- Drawing -->

@@ -388,11 +388,14 @@ body {
 
 #gliss-hud {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  color: var(--text-dim);
-  font-size: 0.8rem;
-  font-family: monospace;
+  top: 48px; /* below the ruler */
+  right: 12px;
+  color: var(--accent);
+  font-size: 1.1rem;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
   z-index: 2;
   pointer-events: none;
 }
