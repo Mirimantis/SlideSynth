@@ -9,6 +9,7 @@ import { getScaleById } from '../utils/scales';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { distToPoint, nearestPointOnCubic, nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
+import { hitTestLoopMarkers } from './loop-markers';
 
 export const SECONDS_RULER_HEIGHT = 16;
 export const BEAT_RULER_HEIGHT = 24;
@@ -16,6 +17,7 @@ export const RULER_HEIGHT = SECONDS_RULER_HEIGHT + BEAT_RULER_HEIGHT;
 
 export interface InteractionCallbacks {
   onPlayheadScrub?(beats: number, phase: 'start' | 'move' | 'end'): void;
+  onLoopMarkerDrag?(which: 'start' | 'end', beats: number, phase: 'start' | 'move' | 'end'): void;
   onCursorMove?(worldX: number, worldY: number, screenY: number): void;
   onCursorLeave?(): void;
 }
@@ -39,6 +41,8 @@ export interface InteractionState {
   ctrlSwitchedTool: boolean;
   /** Whether we're currently scrubbing the playhead in the ruler zone. */
   scrubbing: boolean;
+  /** Which loop marker is being dragged in the ruler, if any. */
+  draggingLoopMarker: 'start' | 'end' | null;
   /** Screen Y of cursor (for ruler zone detection). */
   cursorScreenY: number;
   /** Whether the cursor is currently over the canvas element. */
@@ -63,10 +67,37 @@ export function createInteraction(
     altDuplicated: false,
     ctrlSwitchedTool: false,
     scrubbing: false,
+    draggingLoopMarker: null,
     cursorScreenY: 0,
     cursorInCanvas: false,
     scissorsPreview: null,
   };
+
+  /**
+   * Snap a world beat to either the nearest curve control point X (within 8 screen pixels)
+   * or the beat grid. Used during loop-marker drag.
+   */
+  function snapBeatForMarker(worldX: number): number {
+    const zoomX = vp.state.zoomX;
+    const comp = store.getComposition();
+    let bestPointX: number | null = null;
+    let bestDistPx = 8; // within 8 screen pixels
+    for (const track of comp.tracks) {
+      for (const curve of track.curves) {
+        for (const pt of curve.points) {
+          const distPx = Math.abs(pt.position.x - worldX) * zoomX;
+          if (distPx < bestDistPx) {
+            bestDistPx = distPx;
+            bestPointX = pt.position.x;
+          }
+        }
+      }
+    }
+    if (bestPointX !== null) return Math.max(0, bestPointX);
+    const snap = buildSnapConfig(zoomX);
+    const snapped = snap.enabled ? snapToGrid(worldX, 0, snap).wx : worldX;
+    return Math.max(0, snapped);
+  }
 
   canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
@@ -74,6 +105,13 @@ export function createInteraction(
     const sy = e.clientY - rect.top;
     const world = vp.screenToWorld(sx, sy);
     const raw = { wx: world.wx, wy: world.wy };
+
+    // Loop-marker drag — update marker position (snaps to curve points + grid)
+    if (istate.draggingLoopMarker) {
+      const beat = snapBeatForMarker(raw.wx);
+      callbacks?.onLoopMarkerDrag?.(istate.draggingLoopMarker, beat, 'move');
+      return;
+    }
 
     // Playhead scrubbing — update position and skip all other interaction
     if (istate.scrubbing) {
@@ -206,8 +244,22 @@ export function createInteraction(
     const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig(vp.state.zoomX));
     const snappedPt: Vec2 = { x: snapped.wx, y: snapped.wy };
 
-    // Ruler zone: click in top area to position/scrub playhead
+    // Ruler zone: first try loop-marker drag (if Loop is on), then fall through
+    // to playhead scrub.
     if (sy < RULER_HEIGHT && !e.altKey) {
+      const comp = state.composition;
+      // Hit-test loop markers only when Loop is currently enabled.
+      const loopOn = document.getElementById('loop-toggle') instanceof HTMLInputElement
+        && (document.getElementById('loop-toggle') as HTMLInputElement).checked;
+      if (loopOn) {
+        const which = hitTestLoopMarkers(vp, sx, comp.loopStartBeats, comp.loopEndBeats);
+        if (which) {
+          istate.draggingLoopMarker = which;
+          const beat = snapBeatForMarker(world.wx);
+          callbacks?.onLoopMarkerDrag?.(which, beat, 'start');
+          return;
+        }
+      }
       const snap = buildSnapConfig(vp.state.zoomX);
       const snappedBeat = snap.enabled ? snapToGrid(world.wx, 0, snap).wx : world.wx;
       const beat = Math.max(0, snappedBeat);
@@ -290,6 +342,14 @@ export function createInteraction(
   });
 
   canvas.addEventListener('mouseup', () => {
+    // End loop-marker drag
+    if (istate.draggingLoopMarker) {
+      const which = istate.draggingLoopMarker;
+      istate.draggingLoopMarker = null;
+      const comp = store.getComposition();
+      callbacks?.onLoopMarkerDrag?.(which, which === 'start' ? comp.loopStartBeats : comp.loopEndBeats, 'end');
+      return;
+    }
     // End playhead scrubbing
     if (istate.scrubbing) {
       istate.scrubbing = false;
