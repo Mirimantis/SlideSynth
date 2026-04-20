@@ -17,7 +17,6 @@ const COUNTDOWN_SECONDS = 3;
 const AFK_TIMEOUT_MS = 60_000;
 const RECORDING_BUFFER_MAX = 3600; // ~1 minute at 60fps
 const PLAY_END_BUFFER_BEATS = 10_000; // "effectively infinite" for recording without loop
-const LOOP_DEFAULT_MEASURES = 2;     // empty-composition loop defaults to this many measures
 const LOOP_WRAP_THRESHOLD_BEATS = 0.5; // position jump-backward detection
 
 export interface GlissandographController {
@@ -62,6 +61,8 @@ export function createGlissandograph(
   // Track position across frames for loop-wrap detection.
   let lastTickBeat: number | null = null;
   let lastLoopWrapAt = 0;
+  // Cached by tick(); used by beginPlayingPhase so it can compute the planchette world beat.
+  let lastCanvasWidth = 0;
 
   function getPrimaryTrack() {
     const st = store.getState();
@@ -203,27 +204,36 @@ export function createGlissandograph(
     const st = store.getState();
     const comp = st.composition;
     const compLength = getCompositionLength(comp);
-    const startBeat = st.playback.positionBeats;
     const recording = st.glissandograph.recordArmed;
     const looping = playback.isLoopEnabled();
 
-    // With Loop on: use a finite loop end so the playback engine's wrap mechanism
-    // kicks in and re-reads the composition on each pass (picking up newly-recorded
-    // curves — the looper overdub mechanic). Minimum 2 measures at default BPM so
-    // an empty-composition record session has somewhere to loop.
-    // With Loop off: extend end-of-range far past current content so the canvas
-    // keeps scrolling during recording (lets you record past composition end).
+    // Start beat: whatever the planchette is hovering over right now.
+    // Falls back to 0 on the first frame before tick() has run (no canvas width cached).
+    const planchetteScreenX = lastCanvasWidth * PLANCHETTE_SCREEN_X_RATIO;
+    let startBeat = lastCanvasWidth > 0
+      ? Math.max(0, viewport.screenToWorld(planchetteScreenX, 0).wx)
+      : Math.max(0, st.playback.positionBeats);
+
+    // With Loop on: use the composition's loop markers as the play range.
+    // Clamp startBeat into [loopStart, loopEnd] so wrap behaviour is predictable.
+    // With Loop off + recording: extend end-of-range far past current content so
+    // the canvas keeps scrolling during recording.
     let endBeat: number;
+    let loopStart = 0;
     if (looping) {
-      const minLoop = LOOP_DEFAULT_MEASURES * comp.beatsPerMeasure;
-      endBeat = Math.max(compLength, minLoop);
+      const lStart = comp.loopStartBeats;
+      const lEnd = comp.loopEndBeats;
+      if (startBeat < lStart || startBeat >= lEnd) startBeat = lStart;
+      endBeat = lEnd;
+      loopStart = lStart;
     } else if (recording) {
       endBeat = Math.max(compLength, startBeat) + PLAY_END_BUFFER_BEATS;
     } else {
       endBeat = Math.max(compLength, startBeat + 1);
     }
 
-    playback.play(comp, startBeat, endBeat, 0);
+    playback.play(comp, startBeat, endBeat, loopStart);
+    store.setPlaybackPosition(startBeat);
     store.setPlaybackState('playing');
     store.setGlissPhase('playing');
     store.setGlissLastActivityAt(performance.now());
@@ -232,6 +242,7 @@ export function createGlissandograph(
 
   return {
     tick(canvasWidth, canvasHeight) {
+      lastCanvasWidth = canvasWidth;
       const st = store.getState();
       const g = st.glissandograph;
 

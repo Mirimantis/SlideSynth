@@ -4,6 +4,8 @@ import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
 import { renderPlayhead } from './canvas/playhead';
+import { renderLoopMarkers, hitTestLoopMarkers } from './canvas/loop-markers';
+import { snapToGrid, getAdaptiveSubdivisions } from './utils/snap';
 import { createInteraction, rebuildTransformBox, RULER_HEIGHT } from './canvas/interaction';
 import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
@@ -24,7 +26,6 @@ import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, co
 import { createTrack } from './model/track';
 import { getCompositionLength } from './model/composition';
 import { computeMultiCurveBBox, deepCopyPoints, joinCurves } from './model/curve';
-import { getCurveTimeRange } from './audio/curve-sampler';
 import { getScaleById } from './utils/scales';
 import type { AppMode, ToolMode, ControlPoint } from './types';
 
@@ -168,6 +169,11 @@ const interaction = createInteraction(fgCanvas, viewport, {
       preview.stopAll();
       previewActive = false;
     }
+  },
+  onLoopMarkerDrag(which, beats, phase) {
+    if (phase === 'start') history.snapshot();
+    if (which === 'start') store.setLoopStart(beats);
+    else store.setLoopEnd(beats);
   },
 });
 
@@ -313,40 +319,26 @@ function updateBpm(bpm: number) {
   bpmInput.value = String(bpm);
 }
 
-/** Resolve the {start, end} play range, preferring the selected curves' span. */
-function getSelectionPlayRange(): { start: number; end: number } | null {
-  const state = store.getState();
-  if (state.selectedCurveIds.size === 0) return null;
-  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-  if (!track) return null;
-  let start = Infinity;
-  let end = -Infinity;
-  for (const id of state.selectedCurveIds) {
-    const curve = track.curves.find(c => c.id === id);
-    if (!curve) continue;
-    const range = getCurveTimeRange(curve);
-    if (!range) continue;
-    if (range.start < start) start = range.start;
-    if (range.end > end) end = range.end;
-  }
-  if (!isFinite(start) || !isFinite(end) || end <= start) return null;
-  return { start, end };
+/** Resolve the current loop range from the composition. */
+function getLoopRange(): { start: number; end: number } {
+  const comp = store.getComposition();
+  return { start: comp.loopStartBeats, end: comp.loopEndBeats };
 }
 
-/** Start playback, using the selection range if any; hide transform box during play. */
+/** Start playback. When Loop is on, use the composition's loop markers as the play range. */
 function startPlayback() {
   if (previewActive) { preview.stopAll(); previewActive = false; }
   const state = store.getState();
   const pos = state.playback.positionBeats;
-  const selRange = getSelectionPlayRange();
   let startBeat: number;
   let endBeat: number | undefined;
   let loopStart: number | undefined;
-  if (selRange) {
-    // Resume from current position if paused within the selection window; else from selection start.
-    startBeat = (pos > selRange.start && pos < selRange.end) ? pos : selRange.start;
-    endBeat = selRange.end;
-    loopStart = selRange.start;
+  if (playback.isLoopEnabled()) {
+    const range = getLoopRange();
+    // Resume from current position if it's inside the loop; else start at loopStart.
+    startBeat = (pos > range.start && pos < range.end) ? pos : range.start;
+    endBeat = range.end;
+    loopStart = range.start;
   } else {
     startBeat = pos;
     endBeat = undefined;
@@ -354,7 +346,6 @@ function startPlayback() {
   }
   playback.play(state.composition, startBeat, endBeat, loopStart);
   if (!playback.isPlaying()) return;
-  lastSelectionKey = [...state.selectedCurveIds].sort().join(',');
   store.setPlaybackState('playing');
   updatePlayState(true);
 }
@@ -404,6 +395,15 @@ bpmInput.addEventListener('change', () => {
 
 loopToggle.addEventListener('change', () => {
   playback.setLoop(loopToggle.checked);
+  // If toggling on mid-play in Compose, update the play range to the markers right away.
+  if (playback.isPlaying() && store.getState().activeMode === 'composition') {
+    const comp = store.getComposition();
+    if (loopToggle.checked) {
+      playback.setPlayRange(comp.loopStartBeats, comp.loopEndBeats);
+    } else {
+      playback.setPlayRange(0, getCompositionLength(comp));
+    }
+  }
   loopToggle.blur();
 });
 
@@ -1033,6 +1033,28 @@ function glissMouseCoords(e: MouseEvent): { sx: number; sy: number; w: number; h
 // Middle-click pan in gliss mode: full X+Y when idle, Y-only when active (scrolling play/record).
 let isGlissPanning = false;
 let lastGlissMouse = { x: 0, y: 0 };
+// Loop-marker drag state for the gliss canvas (compose has its own via interaction.ts).
+let glissDraggingLoopMarker: 'start' | 'end' | null = null;
+
+function snapBeatForGlissMarker(worldX: number): number {
+  const zoomX = viewport.state.zoomX;
+  const comp = store.getComposition();
+  let bestPointX: number | null = null;
+  let bestDistPx = 8;
+  for (const track of comp.tracks) {
+    for (const curve of track.curves) {
+      for (const pt of curve.points) {
+        const distPx = Math.abs(pt.position.x - worldX) * zoomX;
+        if (distPx < bestDistPx) { bestDistPx = distPx; bestPointX = pt.position.x; }
+      }
+    }
+  }
+  if (bestPointX !== null) return Math.max(0, bestPointX);
+  const subs = getAdaptiveSubdivisions(zoomX);
+  const snapConfig = { enabled: store.getState().snapEnabled, subdivisionsPerBeat: subs, scaleRoot: null, scale: null };
+  const snapped = snapConfig.enabled ? snapToGrid(worldX, 0, snapConfig).wx : worldX;
+  return Math.max(0, snapped);
+}
 
 glissFgCanvas.addEventListener('mousedown', (e) => {
   if (store.getState().activeMode !== 'glissandograph') return;
@@ -1044,12 +1066,35 @@ glissFgCanvas.addEventListener('mousedown', (e) => {
     return;
   }
   const { sx, sy, w, h } = glissMouseCoords(e);
+  // Ruler zone + Loop on: check loop-marker hit first.
+  if (sy < RULER_HEIGHT && e.button === 0 && playback.isLoopEnabled()) {
+    const comp = store.getComposition();
+    const which = hitTestLoopMarkers(viewport, sx, comp.loopStartBeats, comp.loopEndBeats);
+    if (which) {
+      glissDraggingLoopMarker = which;
+      const worldX = viewport.screenToWorld(sx, sy).wx;
+      const beat = snapBeatForGlissMarker(worldX);
+      history.snapshot();
+      if (which === 'start') store.setLoopStart(beat);
+      else store.setLoopEnd(beat);
+      e.preventDefault();
+      return;
+    }
+  }
   gliss.onMouseDown(e, sx, sy, w, h);
   e.preventDefault();
 });
 
 glissFgCanvas.addEventListener('mousemove', (e) => {
   if (store.getState().activeMode !== 'glissandograph') return;
+  if (glissDraggingLoopMarker) {
+    const { sx, sy } = glissMouseCoords(e);
+    const worldX = viewport.screenToWorld(sx, sy).wx;
+    const beat = snapBeatForGlissMarker(worldX);
+    if (glissDraggingLoopMarker === 'start') store.setLoopStart(beat);
+    else store.setLoopEnd(beat);
+    return;
+  }
   const { sx, sy, w, h } = glissMouseCoords(e);
   gliss.onMouseMove(e, sx, sy, w, h);
 });
@@ -1074,6 +1119,10 @@ window.addEventListener('mouseup', (e) => {
     if (isGlissPanning && e.button === 1) {
       isGlissPanning = false;
       glissFgCanvas.style.cursor = '';
+      return;
+    }
+    if (glissDraggingLoopMarker && e.button === 0) {
+      glissDraggingLoopMarker = null;
       return;
     }
     gliss.onMouseUp(e);
@@ -1136,6 +1185,9 @@ function render() {
       if (!tone) continue;
       const emptySet = new Set<string>();
       renderCurves(glissFgCtx, viewport, track.curves, tone, emptySet, null, null);
+    }
+    if (playback.isLoopEnabled()) {
+      renderLoopMarkers(glissFgCtx, viewport, comp.loopStartBeats, comp.loopEndBeats, rect.height);
     }
     renderPlanchettes(glissFgCtx, viewport, rect.width, rect.height, state.glissandograph.planchettes, gliss.getLastLoopWrapAt());
     // Countdown overlay (DOM): update label, show/hide based on phase.
@@ -1254,6 +1306,11 @@ function render() {
     fgCtx.stroke();
   }
 
+  // Loop markers (behind the playhead so it stays on top)
+  if (playback.isLoopEnabled()) {
+    renderLoopMarkers(fgCtx, viewport, comp.loopStartBeats, comp.loopEndBeats, rect.height);
+  }
+
   // Playhead
   const playheadBeat = playback.isPlaying()
     ? playback.getPositionBeats()
@@ -1279,7 +1336,6 @@ function syncCompositionDerived() {
 }
 
 // ── Store subscription ──────────────────────────────────────────
-let lastSelectionKey = '';
 store.subscribe(() => {
   bgDirty = true;
   const comp = store.getComposition();
@@ -1293,37 +1349,14 @@ store.subscribe(() => {
   // don't flow through startPlayback() (e.g. gliss countdown → playing).
   updatePlayState(store.getState().playback.state === 'playing');
 
-  // Keep the active loop/auto-stop range in sync with the current selection
-  // and curve positions mid-playback. If a delete removed the last playable
-  // curve, stop entirely. Otherwise the scheduler's end-of-range logic will
-  // handle playhead-past-end (loop restart or stop, per the loop toggle).
+  // Keep the active loop/auto-stop range in sync with the composition's loop markers
+  // (so dragging a marker mid-play takes effect on the next wrap).
   // Skip in glissandograph mode: its play range is owned by gliss.startPlayback().
   if (playback.isPlaying() && store.getState().activeMode === 'composition') {
-    const state = store.getState();
-    const selKey = [...state.selectedCurveIds].sort().join(',');
-    const selectionChanged = selKey !== lastSelectionKey;
-    if (selectionChanged) {
-      const prevIds = lastSelectionKey ? lastSelectionKey.split(',') : [];
-      lastSelectionKey = selKey;
-      const allCurveIds = new Set<string>();
-      for (const t of state.composition.tracks) for (const c of t.curves) allCurveIds.add(c.id);
-      const wasDelete = prevIds.some(id => id && !allCurveIds.has(id));
-      const hasPlayable = state.composition.tracks.some(t =>
-        !t.muted && t.curves.some(c => c.points.length > 0),
-      );
-      if (wasDelete && !hasPlayable) {
-        playback.stop();
-        store.setPlaybackState('stopped');
-        store.setPlaybackPosition(0);
-        updatePlayState(false);
-        return;
-      }
-    }
-    const selRange = getSelectionPlayRange();
-    if (selRange) {
-      playback.setPlayRange(selRange.start, selRange.end);
+    if (playback.isLoopEnabled()) {
+      playback.setPlayRange(comp.loopStartBeats, comp.loopEndBeats);
     } else {
-      playback.setPlayRange(0, getCompositionLength(state.composition));
+      playback.setPlayRange(0, getCompositionLength(comp));
     }
   }
 });

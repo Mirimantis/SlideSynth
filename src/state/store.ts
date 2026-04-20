@@ -238,6 +238,21 @@ class Store {
     this.notify();
   }
 
+  setLoopStart(beats: number) {
+    const comp = this.state.composition;
+    // Keep markers at least 0.5 beats apart and loopStart >= 0.
+    const clamped = Math.max(0, Math.min(beats, comp.loopEndBeats - 0.5));
+    comp.loopStartBeats = clamped;
+    this.notify();
+  }
+
+  setLoopEnd(beats: number) {
+    const comp = this.state.composition;
+    const clamped = Math.max(comp.loopStartBeats + 0.5, beats);
+    comp.loopEndBeats = clamped;
+    this.notify();
+  }
+
   /** Mutate composition directly and notify. Use for curve/track mutations. */
   mutate(fn: (comp: Composition) => void) {
     fn(this.state.composition);

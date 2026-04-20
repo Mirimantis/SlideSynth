@@ -14,6 +14,8 @@ export function createComposition(): Composition {
     beatsPerMeasure: DEFAULT_BEATS_PER_MEASURE,
     toneLibrary,
     tracks: [createTrack('Track 1', firstTone.id)],
+    loopStartBeats: 0,
+    loopEndBeats: 2 * DEFAULT_BEATS_PER_MEASURE,
   };
 }
 

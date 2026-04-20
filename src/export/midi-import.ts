@@ -152,6 +152,8 @@ export function midiToComposition(buffer: ArrayBuffer): Composition {
     beatsPerMeasure: DEFAULT_BEATS_PER_MEASURE,
     tracks,
     toneLibrary,
+    loopStartBeats: 0,
+    loopEndBeats: 2 * DEFAULT_BEATS_PER_MEASURE,
   };
 }
 

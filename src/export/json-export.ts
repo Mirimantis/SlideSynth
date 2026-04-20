@@ -19,6 +19,10 @@ export function deserializeComposition(json: string): Composition {
     throw new Error('Invalid composition file');
   }
 
+  // Backfill additive fields on older saves
+  if (typeof data.loopStartBeats !== 'number') data.loopStartBeats = 0;
+  if (typeof data.loopEndBeats !== 'number') data.loopEndBeats = 2 * data.beatsPerMeasure;
+
   // Future migration logic would go here
   // if (data.version < COMPOSITION_VERSION) { migrate(data); }
 

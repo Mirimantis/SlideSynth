@@ -66,6 +66,8 @@ export interface Composition {
   beatsPerMeasure: number;
   tracks: Track[];
   toneLibrary: ToneDefinition[];
+  loopStartBeats: number;
+  loopEndBeats: number;
 }
 
 // ── Viewport ────────────────────────────────────────────────────
