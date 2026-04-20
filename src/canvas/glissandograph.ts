@@ -19,6 +19,13 @@ const RECORDING_BUFFER_MAX = 3600; // ~1 minute at 60fps
 const PLAY_END_BUFFER_BEATS = 10_000; // "effectively infinite" for recording without loop
 const LOOP_WRAP_THRESHOLD_BEATS = 0.5; // position jump-backward detection
 
+// Y auto-scroll (when the planchette nears top/bottom of visible area during play/record)
+const AUTO_SCROLL_TOP_MARGIN_PX = 50;    // combined with RULER_HEIGHT
+const AUTO_SCROLL_BOTTOM_MARGIN_PX = 40;
+const AUTO_SCROLL_EASING = 0.15;         // fraction of distance-to-edge per frame
+const AUTO_SCROLL_MAX_SEMIS_PER_FRAME = 3;
+const AUTO_SCROLL_COOLDOWN_MS = 500;     // skip for this long after user Y-zoom
+
 export interface GlissandographController {
   /** Called every frame from the render loop — drives scrolling viewport + countdown + recording. */
   tick(canvasWidth: number, canvasHeight: number): void;
@@ -45,6 +52,9 @@ export interface GlissandographController {
 
   /** performance.now() of the last loop-wrap event; drives the planchette pulse. */
   getLastLoopWrapAt(): number;
+
+  /** Call when the user Y-zooms with the wheel; pauses auto-scroll briefly. */
+  noteYZoom(): void;
 }
 
 export function createGlissandograph(
@@ -63,6 +73,12 @@ export function createGlissandograph(
   let lastLoopWrapAt = 0;
   // Cached by tick(); used by beginPlayingPhase so it can compute the planchette world beat.
   let lastCanvasWidth = 0;
+  // Auto-scroll cooldown: don't fight user's explicit Y-zoom.
+  let lastYZoomAt = 0;
+  // Raw mouse screen-Y at the last pointer event. Used by auto-scroll directly so the
+  // viewport pan doesn't drift (going through planchette world-Y is stale after a pan).
+  // null means the cursor isn't currently over the canvas.
+  let lastCursorScreenY: number | null = null;
 
   function getPrimaryTrack() {
     const st = store.getState();
@@ -93,7 +109,12 @@ export function createGlissandograph(
   }
 
   function updatePlanchette(sy: number) {
-    if (sy < RULER_HEIGHT) {
+    // Hide the planchette when hovering in the ruler band during normal (no-LMB)
+    // movement — that zone is reserved for loop-marker interaction. But keep
+    // tracking when LMB is held: the cursor may legitimately ride above the
+    // canvas while auto-scroll chases it upward, and we still want the tone
+    // to follow pitch in that case.
+    if (sy < RULER_HEIGHT && !lmbDown) {
       store.setPlanchetteY(PRIMARY_VOICE, null, null);
       return;
     }
@@ -142,6 +163,46 @@ export function createGlissandograph(
     preview.stopDrawPreview(PRIMARY_VOICE);
     if (preview.isScrubPreviewActive()) preview.stopScrubPreview();
     store.setGlissLmbSounding(false);
+  }
+
+  /**
+   * If the mouse is near the top or bottom edge of the canvas, pan Y to follow.
+   * Uses the raw last-mouse-screen-Y directly (not a world-roundtrip) so the
+   * pan doesn't drift when snap pulls the planchette onto discrete scale notes.
+   * Skips for a short cooldown after the user explicitly Y-zoomed.
+   * After panning, refresh the stored planchette world-Y so the tone pitch,
+   * recording samples, and HUD reflect the new visible range.
+   */
+  function autoScrollY(canvasWidth: number, canvasHeight: number) {
+    if (lastCursorScreenY == null) return;
+    if (performance.now() - lastYZoomAt < AUTO_SCROLL_COOLDOWN_MS) return;
+
+    const sy = lastCursorScreenY;
+    const topThreshold = RULER_HEIGHT + AUTO_SCROLL_TOP_MARGIN_PX;
+    const bottomThreshold = canvasHeight - AUTO_SCROLL_BOTTOM_MARGIN_PX;
+    if (sy >= topThreshold && sy <= bottomThreshold) return;
+
+    const maxPx = AUTO_SCROLL_MAX_SEMIS_PER_FRAME * viewport.state.zoomY;
+    let dsy = 0;
+    if (sy < topThreshold) {
+      // Near top edge → reveal higher-pitch notes. panBy with positive dsy
+      // increases offsetY, which shifts the visible range up in pitch.
+      const dist = topThreshold - sy;
+      dsy = Math.min(dist * AUTO_SCROLL_EASING, maxPx);
+    } else {
+      const dist = sy - bottomThreshold;
+      dsy = -Math.min(dist * AUTO_SCROLL_EASING, maxPx);
+    }
+    const offsetYBefore = viewport.state.offsetY;
+    viewport.panBy(0, dsy);
+    viewport.clampOffset(canvasWidth, canvasHeight);
+    if (viewport.state.offsetY === offsetYBefore) return; // clamped — nothing changed
+    onViewportChanged();
+
+    // The viewport moved; re-evaluate the planchette at the mouse's screen Y so
+    // the tone, recording, and HUD reflect the newly-revealed range.
+    updatePlanchette(sy);
+    if (lmbDown) updateSounding();
   }
 
   function scrollViewportToPlayhead(canvasWidth: number, canvasHeight: number) {
@@ -277,11 +338,18 @@ export function createGlissandograph(
           }
         }
       }
+
+      // Y auto-scroll: during scrolling play/record, OR in idle when the user is
+      // sounding a tone with LMB (hard to hold LMB and middle-drag at the same time).
+      if ((g.phase === 'playing' && playback.isPlaying()) || (g.phase === 'idle' && lmbDown)) {
+        autoScrollY(canvasWidth, canvasHeight);
+      }
     },
 
     onMouseDown(e, _sx, sy, w, _h) {
       if (e.button !== 0) return;
       if (sy < RULER_HEIGHT) return;
+      lastCursorScreenY = sy;
       updatePlanchette(sy);
       lmbDown = true;
       startSounding(w);
@@ -289,6 +357,7 @@ export function createGlissandograph(
     },
 
     onMouseMove(_e, _sx, sy, _w, _h) {
+      lastCursorScreenY = sy;
       updatePlanchette(sy);
       if (lmbDown) updateSounding();
     },
@@ -308,7 +377,10 @@ export function createGlissandograph(
     },
 
     onMouseLeave() {
-      // Keep sounding even if cursor leaves canvas while LMB held — window mouseup handles release.
+      // Keep sounding when cursor leaves canvas while LMB held — window mouseup handles release.
+      // Only clear the cached screen-Y if LMB isn't held, so the window-level mousemove
+      // handler can keep driving auto-scroll while the cursor is off-canvas.
+      if (!lmbDown) lastCursorScreenY = null;
     },
 
     startPlayback() {
@@ -391,6 +463,10 @@ export function createGlissandograph(
 
     getLastLoopWrapAt() {
       return lastLoopWrapAt;
+    },
+
+    noteYZoom() {
+      lastYZoomAt = performance.now();
     },
   };
 }

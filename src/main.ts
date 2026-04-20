@@ -1,5 +1,5 @@
 import { createViewport } from './canvas/viewport';
-import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_NOTE, MAX_NOTE, Y_PAN_MARGIN } from './constants';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_NOTE, MAX_NOTE, Y_PAN_MARGIN, noteNumberToName } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
@@ -101,6 +101,26 @@ const glissBgCanvas = document.getElementById('gliss-bg') as HTMLCanvasElement;
 const glissFgCanvas = document.getElementById('gliss-fg') as HTMLCanvasElement;
 const glissBgCtx = glissBgCanvas.getContext('2d')!;
 const glissFgCtx = glissFgCanvas.getContext('2d')!;
+const glissHud = document.getElementById('gliss-hud') as HTMLDivElement;
+let lastGlissHudText = '';
+
+/** Format the primary planchette's current pitch for the HUD: "C#4 +12¢" or "G5". */
+function formatPlanchetteHud(snappedY: number | null, rawY: number | null): string {
+  if (snappedY == null) return '';
+  const nearest = Math.round(snappedY);
+  const cents = Math.round((snappedY - nearest) * 100);
+  const name = noteNumberToName(nearest);
+  const snapPart = cents === 0 ? name : `${name} ${cents > 0 ? '+' : ''}${cents}¢`;
+  if (rawY == null || Math.abs(rawY - snappedY) < 0.02) return snapPart;
+  // Raw can land outside the MIDI note range when the cursor is chasing auto-scroll
+  // past the clamp — skip the ghost reading in that case.
+  const rawNearest = Math.round(rawY);
+  if (rawNearest < MIN_NOTE || rawNearest > MAX_NOTE) return snapPart;
+  const rawCents = Math.round((rawY - rawNearest) * 100);
+  const rawName = noteNumberToName(rawNearest);
+  const rawPart = rawCents === 0 ? rawName : `${rawName} ${rawCents > 0 ? '+' : ''}${rawCents}¢`;
+  return `${snapPart}  ·  ${rawPart}`;
+}
 
 let bgDirty = true;
 
@@ -1113,6 +1133,22 @@ window.addEventListener('mousemove', (e) => {
   bgDirty = true;
 });
 
+// Off-canvas mouse-Y tracking while LMB is held in Gliss mode. Browsers keep firing
+// window.mousemove when a button is already pressed, even outside the browser window,
+// so auto-scroll and pitch tracking keep going until release.
+window.addEventListener('mousemove', (e) => {
+  const st = store.getState();
+  if (st.activeMode !== 'glissandograph') return;
+  if (!st.glissandograph.lmbSounding) return;
+  const rect = glissFgCanvas.getBoundingClientRect();
+  // If the pointer is over the canvas, the canvas's own mousemove handler runs — skip to avoid double-firing.
+  if (e.clientX >= rect.left && e.clientX <= rect.right
+      && e.clientY >= rect.top && e.clientY <= rect.bottom) return;
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  gliss.onMouseMove(e, sx, sy, rect.width, rect.height);
+});
+
 // Mouseup is attached to window so LMB release outside canvas still stops the tone.
 window.addEventListener('mouseup', (e) => {
   if (store.getState().activeMode === 'glissandograph') {
@@ -1139,7 +1175,9 @@ glissFgCanvas.addEventListener('auxclick', (e) => {
   if (store.getState().activeMode === 'glissandograph' && e.button === 1) e.preventDefault();
 });
 
-// Wheel in gliss mode: Ctrl+wheel is Y-zoom; plain wheel is disabled during scrolling play.
+// Wheel in gliss mode: plain wheel = Y-zoom (allowed even during scrolling play so
+// the user can see higher/lower notes); Ctrl+wheel = X-zoom (disabled during scrolling
+// play because X is owned by the playhead).
 glissFgCanvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   if (store.getState().activeMode !== 'glissandograph') return;
@@ -1147,11 +1185,12 @@ glissFgCanvas.addEventListener('wheel', (e) => {
   const sx = e.clientX - rect.left;
   const sy = e.clientY - rect.top;
   const factor = e.deltaY > 0 ? 0.9 : 1.1;
-  if (gliss.isScrolling() && !e.ctrlKey) return; // plain wheel disabled during scroll
+  if (gliss.isScrolling() && e.ctrlKey) return; // X-zoom disabled while scrolling
   if (e.ctrlKey) {
     viewport.zoomXAt(factor, sx);
   } else {
     viewport.zoomYAt(factor, sy);
+    gliss.noteYZoom();
   }
   const rect2 = canvasContainer.getBoundingClientRect();
   viewport.clampOffset(rect2.width, rect2.height);
@@ -1190,6 +1229,13 @@ function render() {
       renderLoopMarkers(glissFgCtx, viewport, comp.loopStartBeats, comp.loopEndBeats, rect.height);
     }
     renderPlanchettes(glissFgCtx, viewport, rect.width, rect.height, state.glissandograph.planchettes, gliss.getLastLoopWrapAt());
+    // Pitch HUD (top-right): note name + cents for the primary planchette.
+    const primary = state.glissandograph.planchettes.find(p => p.voiceId === 'primary');
+    const hudText = primary ? formatPlanchetteHud(primary.snappedWorldY, primary.cursorWorldY) : '';
+    if (hudText !== lastGlissHudText) {
+      glissHud.textContent = hudText;
+      lastGlissHudText = hudText;
+    }
     // Countdown overlay (DOM): update label, show/hide based on phase.
     if (state.glissandograph.phase === 'countdown') {
       const label = gliss.getCountdownLabel();
