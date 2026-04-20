@@ -92,16 +92,19 @@ export interface PlaybackInfo {
 
 export type ToolMode = 'draw' | 'select' | 'delete' | 'scissors';
 
+/** Tools that own cursor X motion in Idle (i.e. placing / picking / slicing curves). */
+export const XY_TOOLS: readonly ToolMode[] = ['draw', 'select', 'delete', 'scissors'];
+
 // ── App Mode ────────────────────────────────────────────────────
 
 export type AppMode = 'composition' | 'glissandograph';
 
-// ── Glissandograph ──────────────────────────────────────────────
+// ── Performance (Perform / Record state, shared by both modes) ──
 
 // Voice identifier — MVP only uses 'primary'. Harmonic Prism adds 'harmony-0', 'harmony-1', etc.
 export type VoiceId = string;
 
-export type GlissandographPhase = 'idle' | 'countdown' | 'playing';
+export type PerformancePhase = 'idle' | 'countdown' | 'playing';
 
 export interface PlanchetteState {
   voiceId: VoiceId;
@@ -111,8 +114,8 @@ export interface PlanchetteState {
   lastCrossedAt: number;
 }
 
-export interface GlissandographState {
-  phase: GlissandographPhase;
+export interface PerformanceState {
+  phase: PerformancePhase;
   recordArmed: boolean;
   countdownStartedAt: number;
   lmbSounding: boolean;
@@ -130,7 +133,7 @@ export interface AppState {
   selectedPointIndex: number | null;
   activeTool: ToolMode;
   activeMode: AppMode;
-  glissandograph: GlissandographState;
+  performance: PerformanceState;
   viewport: ViewportState;
   playback: PlaybackInfo;
   snapEnabled: boolean;
@@ -139,6 +142,7 @@ export interface AppState {
   drawPreviewMode: 'tone' | 'composition';   // Draw-tool spacebar preview scope
   bezierAutoSmooth: boolean;                  // Draw-tool: click-placed points get horizontal handles
   scrollCanvasEnabled: boolean;               // Compose Playback view preference (localStorage-backed)
+  pitchHudVisible: boolean;                   // Pitch HUD user preference (localStorage-backed)
 }
 
 // ── Transform Box ──────────────────────────────────────────────
