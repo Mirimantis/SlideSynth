@@ -546,9 +546,36 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
   const track = getSelectedTrack();
   if (!track) return;
 
-  const hitRadiusX = 8 / vp.state.zoomX;
-  const hitRadiusY = 8 / vp.state.zoomY;
+  const hitRadiusX = 4 / vp.state.zoomX;
+  const hitRadiusY = 4 / vp.state.zoomY;
   const hitRadius = Math.max(hitRadiusX, hitRadiusY);
+
+  // Hit-test anchor points on all curves first — anchors override handles
+  // when overlapping, so the user can always grab the point even if a bezier
+  // handle happens to land within the hit radius.
+  for (const curve of track.curves) {
+    for (let i = 0; i < curve.points.length; i++) {
+      const pt = curve.points[i]!;
+      if (distToPoint(worldPt, pt.position) < hitRadius) {
+        if (shiftKey) {
+          // Shift+click on a point: toggle the curve in selection
+          store.toggleSelectedCurve(curve.id);
+          rebuildTransformBox(istate, track);
+        } else {
+          // Click on a point: select that curve, select the point, start drag
+          history.snapshot();
+          istate.dragging = 'point';
+          istate.dragCurveId = curve.id;
+          istate.dragPointIndex = i;
+          istate.dragStartWorld = { ...pt.position };
+          store.setSelectedCurve(curve.id);
+          store.setSelectedPoint(i);
+          istate.transformBox = null;
+        }
+        return;
+      }
+    }
+  }
 
   // Handle hits only available in single-curve mode, without Shift
   const singleCurveId = store.getSelectedCurveId();
@@ -581,31 +608,6 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
             return;
           }
         }
-      }
-    }
-  }
-
-  // Hit-test anchor points on all curves
-  for (const curve of track.curves) {
-    for (let i = 0; i < curve.points.length; i++) {
-      const pt = curve.points[i]!;
-      if (distToPoint(worldPt, pt.position) < hitRadius) {
-        if (shiftKey) {
-          // Shift+click on a point: toggle the curve in selection
-          store.toggleSelectedCurve(curve.id);
-          rebuildTransformBox(istate, track);
-        } else {
-          // Click on a point: select that curve, select the point, start drag
-          history.snapshot();
-          istate.dragging = 'point';
-          istate.dragCurveId = curve.id;
-          istate.dragPointIndex = i;
-          istate.dragStartWorld = { ...pt.position };
-          store.setSelectedCurve(curve.id);
-          store.setSelectedPoint(i);
-          istate.transformBox = null;
-        }
-        return;
       }
     }
   }

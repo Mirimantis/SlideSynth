@@ -1,6 +1,7 @@
 import type { BezierCurve, ControlPoint, Vec2, BoundingBox, TransformHandle } from '../types';
 import { generateId } from './tone';
 import { subdivideCubic, distToPoint } from '../utils/bezier-math';
+import { AUTO_SMOOTH_X_RATIO } from '../constants';
 
 /** Create a new empty curve. */
 export function createCurve(): BezierCurve {
@@ -116,8 +117,8 @@ export function reclampHandlesAround(curve: BezierCurve, index: number): void {
 }
 
 /**
- * Apply horizontal auto-smooth handles at a point, sized at 50% of neighbor
- * segment X lengths. Does nothing for the first point (no previous segment).
+ * Apply horizontal auto-smooth handles at a point, sized at AUTO_SMOOTH_X_RATIO of
+ * neighbor segment X lengths. Does nothing for the first point (no previous segment).
  * handleOut falls back to the same length as handleIn when no next point exists.
  */
 export function applyAutoSmoothHandles(curve: BezierCurve, index: number): void {
@@ -129,12 +130,48 @@ export function applyAutoSmoothHandles(curve: BezierCurve, index: number): void 
   const segmentLenBack = pt.position.x - prev.position.x;
   if (segmentLenBack <= 0) return;
 
-  setHandle(curve, index, 'in', { x: -0.5 * segmentLenBack, y: 0 });
+  setHandle(curve, index, 'in', { x: -AUTO_SMOOTH_X_RATIO * segmentLenBack, y: 0 });
 
   const next = curve.points[index + 1];
   const segmentLenForward = next ? next.position.x - pt.position.x : segmentLenBack;
   if (segmentLenForward > 0) {
-    setHandle(curve, index, 'out', { x: 0.5 * segmentLenForward, y: 0 });
+    setHandle(curve, index, 'out', { x: AUTO_SMOOTH_X_RATIO * segmentLenForward, y: 0 });
+  }
+}
+
+/**
+ * Smooth every point of a curve by re-applying auto-smooth handles. The first point
+ * has no previous segment so it only gets a horizontal handleOut; the last point has
+ * no next segment so its handleOut falls back to the back-segment length (matching
+ * applyAutoSmoothHandles's single-point behaviour). Used by the Smooth Curve action.
+ */
+export function smoothCurveHandles(curve: BezierCurve): void {
+  const pts = curve.points;
+  for (let i = 0; i < pts.length; i++) {
+    const pt = pts[i]!;
+    if (i === 0) {
+      pt.handleIn = null;
+      const next = pts[i + 1];
+      const segmentLenForward = next ? next.position.x - pt.position.x : 0;
+      if (segmentLenForward > 0) {
+        setHandle(curve, i, 'out', { x: AUTO_SMOOTH_X_RATIO * segmentLenForward, y: 0 });
+      } else {
+        pt.handleOut = null;
+      }
+    } else {
+      applyAutoSmoothHandles(curve, i);
+    }
+  }
+}
+
+/**
+ * Clear all Bezier handles on every point of the curve, making every point sharp.
+ * Used by the Sharpen Curve action.
+ */
+export function sharpenCurveHandles(curve: BezierCurve): void {
+  for (const pt of curve.points) {
+    pt.handleIn = null;
+    pt.handleOut = null;
   }
 }
 
