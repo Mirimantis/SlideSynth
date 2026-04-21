@@ -11,6 +11,8 @@ import { createInteraction, rebuildTransformBox, RULER_HEIGHT } from './canvas/i
 import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
+import { createToolPanel } from './ui/tool-panel';
+import { openContextMenu } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { renderPlanchettes, renderFreePlanchette, renderRail, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
@@ -77,6 +79,8 @@ app.innerHTML = `
           <input type="number" id="input-bpm" value="120" min="20" max="300" step="1" />
         </div>
       </div>
+      <div class="panel-header">Tools</div>
+      <div id="tool-panel"></div>
       <div class="panel-header">Tracks</div>
       <div id="track-list"></div>
       <div class="track-panel-actions">
@@ -308,6 +312,22 @@ const playback = createPlaybackEngine((beats) => {
 const toolbarContainer = document.getElementById('toolbar')!;
 
 const toolbar = createToolbar(toolbarContainer, {
+  onSnapToggle(enabled: boolean) {
+    store.setSnap(enabled);
+  },
+  onScaleRootChange(root: number | null) {
+    store.setScaleRoot(root);
+    bgDirty = true;
+  },
+  onScaleIdChange(scaleId: string | null) {
+    store.setScaleId(scaleId);
+    bgDirty = true;
+  },
+});
+
+// ── Tool panel (left sidebar, between Transport and Tracks) ────
+const toolPanelContainer = document.getElementById('tool-panel')!;
+const toolPanel = createToolPanel(toolPanelContainer, {
   onToolChange(tool: ToolMode) {
     store.setTool(tool);
     if (tool !== 'draw' && interaction.drawingCurve) {
@@ -325,20 +345,6 @@ const toolbar = createToolbar(toolbarContainer, {
       // Clear the transform box but keep the curve selection so Draw extends it.
       interaction.transformBox = null;
     }
-  },
-  onJoin() {
-    performJoin();
-  },
-  onSnapToggle(enabled: boolean) {
-    store.setSnap(enabled);
-  },
-  onScaleRootChange(root: number | null) {
-    store.setScaleRoot(root);
-    bgDirty = true;
-  },
-  onScaleIdChange(scaleId: string | null) {
-    store.setScaleId(scaleId);
-    bgDirty = true;
   },
 });
 
@@ -895,20 +901,20 @@ window.addEventListener('keydown', (e) => {
     }
     case 'd':
       store.setTool('draw');
-      toolbar.updateTool('draw');
+      toolPanel.updateTool('draw');
       interaction.transformBox = null;
       break;
     case 'v':
       store.setTool('select');
-      toolbar.updateTool('select');
+      toolPanel.updateTool('select');
       break;
     case 'x':
       store.setTool('delete');
-      toolbar.updateTool('delete');
+      toolPanel.updateTool('delete');
       break;
     case 'c':
       store.setTool('scissors');
-      toolbar.updateTool('scissors');
+      toolPanel.updateTool('scissors');
       interaction.transformBox = null;
       store.setSelectedCurve(null);
       store.setSelectedPoint(null);
@@ -1381,6 +1387,35 @@ fgCanvas.addEventListener('mouseleave', () => {
   }
 });
 
+// Right-click action menu. Disabled during Compose Performance (recording / sounding)
+// because curves being captured shouldn't be mutated out from under the engine.
+fgCanvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (isComposePerformActive()) return;
+  const state = store.getState();
+  const selectedCount = state.selectedCurveIds.size;
+  openContextMenu(e.pageX, e.pageY, [
+    {
+      label: 'Smooth Curve',
+      shortcut: 'Shift+S',
+      disabled: selectedCount === 0,
+      onClick: performSmooth,
+    },
+    {
+      label: 'Sharpen Curve',
+      shortcut: 'Alt+S',
+      disabled: selectedCount === 0,
+      onClick: performSharpen,
+    },
+    {
+      label: 'Join',
+      shortcut: 'Ctrl+J',
+      disabled: selectedCount < 2,
+      onClick: performJoin,
+    },
+  ]);
+});
+
 // Off-canvas tracking while LMB held in Perform.
 window.addEventListener('mousemove', (e) => {
   if (!composeEngine.isLmbDown()) return;
@@ -1460,7 +1495,7 @@ function render() {
   tickComposePerform();
 
   // Per-frame sync for Compose UI affordances
-  toolbar.setXYToolsDisabled(isComposePerformActive());
+  toolPanel.setDisabled(isComposePerformActive());
   updatePitchHudDom(state);
   updateCountdownOverlayDom(state);
 
