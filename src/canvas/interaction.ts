@@ -80,8 +80,7 @@ export function createInteraction(
    */
   function isComposePerformLocked(): boolean {
     const st = store.getState();
-    return st.activeMode === 'composition'
-        && st.playback.state === 'playing'
+    return st.playback.state === 'playing'
         && (st.scrollCanvasEnabled || st.performance.recordArmed);
   }
 

@@ -95,11 +95,7 @@ export type ToolMode = 'draw' | 'select' | 'delete' | 'scissors';
 /** Tools that own cursor X motion in Idle (i.e. placing / picking / slicing curves). */
 export const XY_TOOLS: readonly ToolMode[] = ['draw', 'select', 'delete', 'scissors'];
 
-// ── App Mode ────────────────────────────────────────────────────
-
-export type AppMode = 'composition' | 'glissandograph';
-
-// ── Performance (Perform / Record state, shared by both modes) ──
+// ── Performance (Perform / Record state) ────────────────────────
 
 // Voice identifier — MVP only uses 'primary'. Harmonic Prism adds 'harmony-0', 'harmony-1', etc.
 export type VoiceId = string;
@@ -119,7 +115,6 @@ export interface PerformanceState {
   recordArmed: boolean;
   countdownStartedAt: number;
   lmbSounding: boolean;
-  lastActivityAt: number;
   planchettes: PlanchetteState[];
   currentRecordedCurveIds: Record<VoiceId, string | null>;
 }
@@ -132,7 +127,6 @@ export interface AppState {
   selectedCurveIds: Set<string>;
   selectedPointIndex: number | null;
   activeTool: ToolMode;
-  activeMode: AppMode;
   performance: PerformanceState;
   viewport: ViewportState;
   playback: PlaybackInfo;

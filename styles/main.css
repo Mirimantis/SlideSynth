@@ -209,6 +209,84 @@ body {
   accent-color: var(--accent);
 }
 
+/* ── Scroll switch: Canvas ↔ Planchette ──────────────────────── */
+
+.scroll-switch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: default;
+  user-select: none;
+}
+
+.scroll-switch-title {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.scroll-switch-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.scroll-switch-side {
+  transition: color 0.15s;
+}
+
+/* Active side (the one currently scrolling) gets the accent color. */
+.scroll-switch:has(input:not(:checked)) .scroll-switch-side.left,
+.scroll-switch:has(input:checked) .scroll-switch-side.right {
+  color: var(--accent);
+}
+
+.scroll-switch-track {
+  position: relative;
+  width: 30px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #335;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.scroll-switch-track:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.scroll-switch-track input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.scroll-switch-thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 50%;
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+
+.scroll-switch-track input:checked + .scroll-switch-thumb {
+  transform: translateX(14px);
+}
+
 .toolbar-time-display {
   font-size: 0.75rem;
   color: var(--text-dim);
@@ -361,31 +439,6 @@ body {
   z-index: 1;
 }
 
-/* ── Glissandograph overlay ──────────────────────────────────── */
-
-#gliss-screen {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  background: #0a0a14;
-}
-
-#gliss-screen[hidden] {
-  display: none;
-}
-
-#gliss-bg,
-#gliss-fg {
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-#gliss-fg {
-  z-index: 1;
-  cursor: crosshair;
-}
-
 #pitch-hud {
   position: absolute;
   top: 48px; /* below the ruler */
@@ -396,7 +449,7 @@ body {
   font-weight: 600;
   letter-spacing: 0.03em;
   text-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
-  z-index: 12; /* above gliss-screen's 10 */
+  z-index: 12;
   pointer-events: none;
 }
 #pitch-hud[hidden] { display: none; }
@@ -424,7 +477,7 @@ body {
   font-weight: 700;
   color: var(--accent);
   text-shadow: 0 0 24px rgba(79, 195, 247, 0.6);
-  z-index: 13; /* above gliss-screen (10) and the pitch HUD (12) */
+  z-index: 13; /* above the pitch HUD (12) */
   pointer-events: none;
 }
 
@@ -432,7 +485,7 @@ body {
   display: none;
 }
 
-/* Record button (Glissandograph) */
+/* Record button */
 .record-btn {
   background: var(--surface);
   color: #ff6464;
@@ -459,24 +512,3 @@ body {
   50% { opacity: 0.45; }
 }
 
-/* Mode switch buttons */
-.mode-btn {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid #335;
-  border-radius: 4px;
-  padding: 4px 12px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 600;
-  transition: all 0.15s;
-}
-
-.mode-btn:hover {
-  background: #1a4a80;
-}
-
-.mode-btn.active {
-  background: var(--accent);
-  color: #000;
-}

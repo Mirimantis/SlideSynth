@@ -1,4 +1,4 @@
-import type { AppState, AppMode, Composition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState } from '../types';
+import type { AppState, Composition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState } from '../types';
 import { createComposition } from '../model/composition';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_NOTE } from '../constants';
 
@@ -42,13 +42,11 @@ function createInitialState(): AppState {
     selectedCurveIds: new Set(),
     selectedPointIndex: null,
     activeTool: 'draw',
-    activeMode: 'composition',
     performance: {
       phase: 'idle',
       recordArmed: false,
       countdownStartedAt: 0,
       lmbSounding: false,
-      lastActivityAt: 0,
       planchettes: [createInitialPrimaryPlanchette(null)],
       currentRecordedCurveIds: { primary: null },
     },
@@ -165,12 +163,6 @@ class Store {
     this.notify();
   }
 
-  setActiveMode(mode: AppMode) {
-    if (this.state.activeMode === mode) return;
-    this.state.activeMode = mode;
-    this.notify();
-  }
-
   setPerformPhase(phase: PerformancePhase) {
     this.state.performance.phase = phase;
     this.notify();
@@ -189,10 +181,6 @@ class Store {
   setPerformCountdownStartedAt(t: number) {
     this.state.performance.countdownStartedAt = t;
     this.notify();
-  }
-
-  setPerformLastActivityAt(t: number) {
-    this.state.performance.lastActivityAt = t;
   }
 
   setPlanchetteY(voiceId: string, cursorWorldY: number | null, snappedWorldY: number | null) {
