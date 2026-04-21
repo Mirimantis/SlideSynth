@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SlideSynth — User Guide</title>
+  <title>Glissandograph — User Guide</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -208,10 +208,10 @@
 <!-- ── Sidebar index ─────────────────────────────────── -->
 
 <div id="sidebar">
-  <h1>SlideSynth Guide</h1>
+  <h1>Glissandograph Guide</h1>
   <nav>
     <a href="#overview">Overview</a>
-    <a href="#glissandograph">Glissandograph Mode</a>
+    <a href="#perform">Perform &amp; Record</a>
     <a href="#drawing">Drawing Curves</a>
     <a href="#selecting">Selecting & Editing</a>
     <a href="#scissors">Slice (Split)</a>
@@ -237,10 +237,13 @@
   <!-- Overview -->
   <h2 id="overview">Overview</h2>
   <p>
-    SlideSynth is a canvas-based music composition tool where you draw Bezier curves
-    on a chromatic staff to create melodies. Each curve maps pitch over time and is
-    played back as a continuous, sliding tone — enabling expressive glissandi, portamenti,
-    and microtonal passages that traditional step-sequencers can't easily produce.
+    Glissandograph is a canvas-based music composition and performance tool where you draw
+    Bezier curves on a chromatic staff to create melodies. Each curve maps pitch over time
+    and is played back as a continuous, sliding tone — enabling expressive glissandi,
+    portamenti, and microtonal passages that traditional step-sequencers can't easily
+    produce. Beyond drawing, the canvas doubles as a performance surface: with Scroll
+    Canvas on during Playback, the canvas slides past a stationary rail so you can play
+    — and optionally record — live gestures with the mouse.
   </p>
   <p>
     The workspace has three columns: a <strong>track panel</strong> on the left,
@@ -258,18 +261,18 @@
     playhead scrub zone.
   </p>
 
-  <!-- Glissandograph -->
-  <h2 id="glissandograph">Glissandograph Mode</h2>
+  <!-- Perform & Record -->
+  <h2 id="perform">Perform &amp; Record</h2>
   <p class="dev-notice">
-    <em>This mode is under active development — behaviour may change.</em>
+    <em>These features are under active development — behaviour may change.</em>
   </p>
   <p>
-    A performance mode where you play the canvas like an instrument. The music scrolls
-    right-to-left past a stationary <strong>planchette rail</strong> in the middle of the canvas.
-    The <strong>planchette</strong> is the movable indicator that rides the rail, following
-    the mouse's Y position to show the pitch currently being played. Switch modes via the
-    <strong>Compose</strong> / <strong>Glissandograph</strong> pill buttons in the toolbar.
-    Toolbar, tracks, snap, key, and scale all behave the same in both modes.
+    The canvas doubles as a performance surface. Set the <strong>Scroll</strong> switch to <strong>Canvas</strong>
+    and press Play: the music slides right-to-left past a stationary <strong>rail</strong>
+    at the centre of the canvas. The <strong>planchette</strong> is the movable dot that
+    rides the rail, following the mouse's Y to show the pitch currently being played.
+    Arming Record captures your mouse gestures as editable Bezier curves on the selected
+    track.
   </p>
   <p>
     <em>Coming later:</em> a harmony/chord mode will add additional planchettes to the rail,
@@ -278,28 +281,21 @@
 
   <h3>Playing</h3>
   <ul>
+    <li>Set the <strong>Scroll</strong> switch (transport panel) to <strong>Canvas</strong> and press <kbd>Space</kbd> or Play — the canvas scrolls past the rail at the composition's BPM.</li>
     <li><strong>Mouse Y</strong> moves the planchette along the rail, driving pitch (snapped to scale/semitone if snap is on).</li>
-    <li><strong>Hold LMB</strong> to sound the selected track's tone at the planchette's pitch — release to stop. While idle, the <em>Draw Preview</em> mode (Tool Properties panel) decides whether "Composition + tone" also plays existing curves at that spot so you can hear the chord.</li>
-    <li><strong>Space</strong> starts/stops scrolling play. The canvas slides right-to-left past the rail at the composition's BPM.</li>
+    <li><strong>Hold LMB</strong> while Playback is running to sound the selected track's tone at the planchette's pitch — release to stop. XY tools (Draw, Select, Delete, Slice) gray out while Perform owns LMB.</li>
     <li>Play and Record both start at the <strong>rail's current beat</strong> — wherever you've panned to — not from beat 0.</li>
-    <li>With Loop on, playback uses the loop markers (dragged in the ruler, shared with Compose mode) for its range.</li>
-    <li>During play, holding LMB plays along but does not record (unless Record is armed).</li>
+    <li>With Loop on, playback uses the loop markers (dragged in the ruler) for its range.</li>
+    <li>With the Scroll switch on <strong>Planchette</strong>, Playback stays classic — the playhead moves across a fixed canvas and LMB runs the active XY tool as usual.</li>
   </ul>
 
   <h3>Recording</h3>
   <ul>
-    <li><strong>R</strong> or the red <strong>Record</strong> button arms recording with a 3-second countdown, then starts scrolling play.</li>
-    <li>While recording, each LMB press/release captures a curve onto the selected track. The curve is simplified and auto-smoothed on release, so the result is fully editable back in Compose mode.</li>
-    <li><strong>Escape</strong> during the countdown cancels.</li>
+    <li><strong>R</strong> or the red <strong>Record</strong> button arms recording. From Idle it runs a 3-second countdown then starts Playback. If Playback is already running, it arms immediately with no countdown. Recording forces the Scroll switch to <strong>Canvas</strong>.</li>
+    <li>While recording, each LMB press/release captures a curve onto the selected track. The curve is simplified and auto-smoothed on release, so the result is fully editable afterward.</li>
+    <li><strong>Escape</strong> during the countdown or recording stops and returns to Idle.</li>
     <li>Recording continues past the composition end so you can extend phrases or capture silence; an AFK timeout stops it after a minute of inactivity.</li>
-  </ul>
-
-  <h3>Panning and zooming</h3>
-  <ul>
-    <li><strong>Middle-click drag</strong> pans. When idle, both X and Y pan freely; during play/record, only Y pans (X is owned by the scrolling playhead).</li>
-    <li>Beat 0 can sit at the rail — scroll or pan past the left edge to align it.</li>
-    <li><strong>Mouse wheel</strong> zooms Y (pitch axis), including during scrolling play. <kbd>Ctrl</kbd>+wheel zooms X when idle; it's disabled during scrolling play so the canvas keeps tracking the audio.</li>
-    <li><strong>Y auto-scroll</strong> — during play/record, if the planchette nears the top or bottom edge, the viewport pans in that direction so higher/lower notes come into view. Suspends briefly after an explicit Y-zoom so it doesn't fight your intent.</li>
+    <li>Looping back (loop-wrap) during recording commits the current gesture as a curve and flashes the planchette — the next pass starts a fresh curve.</li>
   </ul>
 
   <h3>Heads-up display</h3>
@@ -424,10 +420,10 @@
         <li><strong>Length</strong> — derived automatically from the rightmost point in any curve and shown as <code>M:SS</code> next to the composition name. Playback stops at that point (or loops back to the start if Loop is on). With no points, playback is a no-op.</li>
         <li><strong>Canvas extent</strong> — the grid, staff, and rulers render everywhere you pan or zoom, with a generous buffer of open space past the last point so you can keep drawing outward. A memory-safe cap limits total pan range.</li>
         <li><strong>Loop</strong> (<kbd>L</kbd>) — when enabled, two draggable <strong>loop markers</strong> (green in, red out) appear in the ruler. Drag them to set the loop range; they snap to the beat grid and to existing curve control points. The range is saved with the composition. Markers hide when Loop is off; playback then runs through to composition end.</li>
-        <li><strong>Scroll Canvas</strong> — when on (default), Playback scrolls the canvas right-to-left past a stationary centered playhead, matching the Glissandograph feel. Turn off for a classic static canvas where the playhead moves across a fixed view — useful for A/B editing. Preference persists via localStorage. Gliss is always scrolling; Record also forces this on while armed.</li>
+        <li><strong>Scroll switch</strong> — chooses what scrolls during Playback. Set to <strong>Canvas</strong> (default) to slide the canvas right-to-left past a stationary centered rail, giving a performance feel. Set to <strong>Planchette</strong> for a classic static canvas where the playhead moves across a fixed view — useful for A/B editing. Preference persists via localStorage. Record forces it to Canvas while armed.</li>
         <li><strong>Pitch HUD</strong> — shows the pitch under the cursor (note name + cents) in the top-right of the canvas while the cursor has a meaningful Y. Toggle off to hide. Preference persists via localStorage.</li>
-        <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording with a 3-second countdown, then Playback begins. While armed, holding LMB in the canvas plays the selected track's tone AND captures it as a curve; release commits the curve. Recording forces Scroll Canvas on and hijacks LMB for Perform — the XY tool buttons (Draw, Select, Delete, Slice) gray out while live. Escape cancels. Available in both modes.</li>
-        <li><strong>Perform during Playback</strong> — when Playback is running with Scroll Canvas on (including during Record), LMB plays the selected track's tone at the cursor's Y pitch. XY tools are disabled for the duration. Release LMB to stop the tone. With Scroll Canvas off, Playback stays classic — LMB runs the active XY tool as usual.</li>
+        <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording. From Idle, a 3-second countdown runs then Playback begins. If Playback is already running (classic or Perform), the countdown is skipped and recording arms immediately at the current beat. While armed, holding LMB in the canvas plays the selected track's tone AND captures it as a curve; release commits the curve. Recording forces the Scroll switch to <strong>Canvas</strong> and hijacks LMB for Perform — the XY tool buttons (Draw, Select, Delete, Slice) gray out while live. Escape cancels.</li>
+        <li><strong>Perform during Playback</strong> — when Playback is running with the Scroll switch on <strong>Canvas</strong> (including during Record), LMB plays the selected track's tone at the cursor's Y pitch. XY tools are disabled for the duration. Release LMB to stop the tone. With the switch on Planchette, Playback stays classic — LMB runs the active XY tool as usual.</li>
         <li><strong>Ruler</strong> — two stacked strips at the top of the canvas: a <strong>seconds ruler</strong> (adapts tick spacing to zoom; labels decimal seconds when zoomed in and <code>M:SS</code> for larger steps) and a <strong>beat / measure ruler</strong> with subdivision ticks. The seconds ruler also reflects BPM changes.</li>
         <li><strong>Scrubbing</strong> — click and drag anywhere in the ruler bar (either strip) to position the playhead. Scrubbing is allowed into empty grid past the last point.</li>
       </ul>
@@ -586,9 +582,9 @@
   <h2 id="shortcuts">Keyboard Shortcuts</h2>
   <table>
     <tr><th>Key</th><th>Action</th></tr>
-    <tr><td><kbd>Space</kbd></td><td>Play / Pause (or scrolling play in Glissandograph; hold for live preview in Draw mode / while scrubbing)</td></tr>
-    <tr><td><kbd>R</kbd></td><td>Arm / disarm Record (Glissandograph only)</td></tr>
-    <tr><td><kbd>Escape</kbd></td><td>Cancel countdown / stop recording (Glissandograph)</td></tr>
+    <tr><td><kbd>Space</kbd></td><td>Play / Pause (hold for live preview in Draw mode / while scrubbing)</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Arm / disarm Record</td></tr>
+    <tr><td><kbd>Escape</kbd></td><td>Cancel countdown / stop recording</td></tr>
     <tr><td><kbd>L</kbd></td><td>Toggle loop</td></tr>
     <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>
     <tr><td><kbd>V</kbd></td><td>Select tool</td></tr>
@@ -599,7 +595,7 @@
     <tr><td><kbd>Ctrl</kbd> (hold in Draw)</td><td>Temporary Select</td></tr>
     <tr><td><kbd>Shift</kbd> (hold while dragging)</td><td>Constrain to axis</td></tr>
     <tr><td><kbd>Alt</kbd>+drag</td><td>Pan canvas (Compose)</td></tr>
-    <tr><td>Middle-click drag</td><td>Pan canvas (Glissandograph: Y-only during play/record)</td></tr>
+    <tr><td>Middle-click drag</td><td>Pan canvas</td></tr>
     <tr><td><kbd>Alt</kbd>+drag (transform)</td><td>Duplicate before transform</td></tr>
     <tr><td>Scroll wheel</td><td>Zoom Y</td></tr>
     <tr><td><kbd>Ctrl</kbd>+scroll</td><td>Zoom X</td></tr>

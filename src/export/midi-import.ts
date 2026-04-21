@@ -23,9 +23,9 @@ const PRESET_TONE_IDS = ['preset-sine', 'preset-square', 'preset-warm-pad', 'pre
 const PERCUSSION_CHANNEL = 9;
 
 /**
- * Convert a Standard MIDI File (ArrayBuffer) into a SlideSynth Composition.
+ * Convert a Standard MIDI File (ArrayBuffer) into a Glissandograph Composition.
  *
- * Each MIDI track/channel pair becomes a SlideSynth track.
+ * Each MIDI track/channel pair becomes a Glissandograph track.
  * Each note becomes a flat 2-point BezierCurve at the note's pitch.
  * Notes outside C2–C7 are discarded. Percussion (channel 10) is skipped.
  */

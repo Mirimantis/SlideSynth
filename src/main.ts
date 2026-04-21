@@ -4,7 +4,7 @@ import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
 import { renderPlayhead } from './canvas/playhead';
-import { renderLoopMarkers, hitTestLoopMarkers } from './canvas/loop-markers';
+import { renderLoopMarkers } from './canvas/loop-markers';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, getAdaptiveSubdivisions } from './utils/snap';
 import { createInteraction, rebuildTransformBox, RULER_HEIGHT } from './canvas/interaction';
@@ -12,7 +12,6 @@ import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
 import { createPlaybackEngine } from './audio/playback';
-import { createGlissandograph } from './canvas/glissandograph';
 import { renderPlanchettes, renderFreePlanchette, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
 import { renderToolPropertyPanel } from './ui/tool-property-panel';
@@ -26,10 +25,11 @@ import { history } from './state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
 import { getCompositionLength } from './model/composition';
-import { computeMultiCurveBBox, deepCopyPoints, joinCurves, curveFromRecording, type RecordedSample } from './model/curve';
+import { computeMultiCurveBBox, deepCopyPoints, joinCurves } from './model/curve';
+import { createPerformanceEngine } from './canvas/performance-engine';
 import { getScaleById } from './utils/scales';
 import { ensureResumed, getAudioContext } from './audio/engine';
-import type { AppMode, AppState, ToolMode, ControlPoint } from './types';
+import type { AppState, ToolMode, ControlPoint } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -53,11 +53,18 @@ app.innerHTML = `
             <span>Loop</span>
           </label>
         </div>
-        <div class="transport-row">
-          <label id="scroll-canvas-label" class="toolbar-loop-label" title="Scroll the canvas past a centered playhead during Playback (Compose only; Gliss always scrolls)">
-            <input type="checkbox" id="scroll-canvas-toggle" />
-            <span>Scroll Canvas</span>
-          </label>
+        <div class="transport-row scroll-switch-row">
+          <div class="scroll-switch" title="Choose which element scrolls during Playback: the Canvas (stationary planchette on the rail) or the Planchette (stationary canvas with a moving playhead)">
+            <div class="scroll-switch-title">Scroll</div>
+            <div class="scroll-switch-control">
+              <span class="scroll-switch-side left">Canvas</span>
+              <label class="scroll-switch-track">
+                <input type="checkbox" id="scroll-canvas-toggle" />
+                <span class="scroll-switch-thumb"></span>
+              </label>
+              <span class="scroll-switch-side right">Planchette</span>
+            </div>
+          </div>
         </div>
         <div class="transport-row">
           <label id="pitch-hud-label" class="toolbar-loop-label" title="Show the pitch readout when the cursor is over the canvas">
@@ -87,10 +94,6 @@ app.innerHTML = `
       </div>
       <div id="pitch-hud" hidden></div>
       <div id="countdown-overlay" hidden></div>
-      <div id="gliss-screen" hidden>
-        <canvas id="gliss-bg"></canvas>
-        <canvas id="gliss-fg"></canvas>
-      </div>
     </div>
     <div id="property-panel">
       <div class="panel-header">Tool Properties</div>
@@ -110,11 +113,6 @@ const fgCanvas = document.getElementById('fg-canvas') as HTMLCanvasElement;
 const bgCtx = bgCanvas.getContext('2d')!;
 const fgCtx = fgCanvas.getContext('2d')!;
 
-const glissScreen = document.getElementById('gliss-screen')!;
-const glissBgCanvas = document.getElementById('gliss-bg') as HTMLCanvasElement;
-const glissFgCanvas = document.getElementById('gliss-fg') as HTMLCanvasElement;
-const glissBgCtx = glissBgCanvas.getContext('2d')!;
-const glissFgCtx = glissFgCanvas.getContext('2d')!;
 const pitchHud = document.getElementById('pitch-hud') as HTMLDivElement;
 let lastHudText = '';
 
@@ -144,7 +142,7 @@ function resizeCanvases() {
   const w = Math.floor(rect.width);
   const h = Math.floor(rect.height);
 
-  for (const canvas of [bgCanvas, fgCanvas, glissBgCanvas, glissFgCanvas]) {
+  for (const canvas of [bgCanvas, fgCanvas]) {
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     canvas.style.width = `${w}px`;
@@ -167,8 +165,69 @@ function resizeCanvases() {
 const preview = createPreviewManager();
 let previewActive = false;
 
+// Spacebar tap-vs-hold: under this threshold, Space is a transport tap (play / pause /
+// stop-recording). Past it, Space becomes a hold-to-preview. The timer fires the preview
+// activation so a quick tap never triggers audio preview.
+const SPACE_HOLD_MS = 250;
+let spaceHoldTimer: number | null = null;
+
+/** Start the preview appropriate to current context (Draw cursor, scrubbing). No-op during recording. */
+function activateSpacePreview() {
+  spaceHoldTimer = null;
+  const state = store.getState();
+  if (state.performance.recordArmed) return;
+  const inDrawContext = state.activeTool === 'draw'
+    && interaction.cursorInCanvas
+    && interaction.cursorScreenY >= RULER_HEIGHT
+    && interaction.cursorWorld !== null;
+  const inScrubContext = interaction.scrubbing;
+
+  if (inDrawContext) {
+    const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+    const tone = track ? state.composition.toneLibrary.find(t => t.id === track.toneId) : null;
+    if (state.drawPreviewMode === 'composition' && interaction.cursorWorld) {
+      preview.startScrubPreview(state.composition);
+      preview.updateScrubPosition(interaction.cursorWorld.x, state.composition);
+      if (tone) preview.startDrawPreview(tone, interaction.cursorWorld.y);
+      previewActive = true;
+      // Classic-playhead mode: snap the playhead to the cursor so the user sees the scrub
+      // location. Leaves it there on preview end (easy way to summon a far-away playhead).
+      if (!state.scrollCanvasEnabled) {
+        store.setPlaybackPosition(Math.max(0, interaction.cursorWorld.x));
+      }
+    } else if (tone && interaction.cursorWorld) {
+      preview.startDrawPreview(tone, interaction.cursorWorld.y);
+      previewActive = true;
+    }
+  } else if (inScrubContext) {
+    preview.startScrubPreview(state.composition);
+    preview.updateScrubPosition(state.playback.positionBeats, state.composition);
+    previewActive = true;
+  }
+}
+
+/** Short-tap action: stop recording if armed, else toggle play/pause. */
+function handleSpaceTap() {
+  const state = store.getState();
+  if (state.performance.recordArmed) {
+    composePerformStop();
+    store.setPlaybackState('stopped');
+    return;
+  }
+  if (playback.isPlaying()) {
+    playback.pause();
+    store.setPlaybackState('paused');
+    updatePlayState(false);
+  } else {
+    startPlayback();
+  }
+}
+
 // ── Interaction ─────────────────────────────────────────────────
 let scrubWasPlaying = false;
+// True while a ruler-drag is driving the scrub preview, so we can stop it cleanly on release
+// without interfering with a spacebar-driven preview.
+let rulerScrubPreviewActive = false;
 const interaction = createInteraction(fgCanvas, viewport, {
   onPlayheadScrub(beats, phase) {
     if (phase === 'start') {
@@ -177,13 +236,25 @@ const interaction = createInteraction(fgCanvas, viewport, {
         playback.pause();
       }
       store.setPlaybackPosition(beats);
+      // Audible ruler-scrub: play the whole composition at the playhead so the user
+      // can hear what's under the cursor as they drag. Skip while Record is armed
+      // (the armed session already owns audio).
+      if (!store.getState().performance.recordArmed && !preview.isScrubPreviewActive()) {
+        preview.startScrubPreview(store.getComposition());
+        preview.updateScrubPosition(beats, store.getComposition());
+        rulerScrubPreviewActive = true;
+      }
     } else if (phase === 'move') {
       store.setPlaybackPosition(beats);
-      if (previewActive && preview.isScrubPreviewActive()) {
+      if (preview.isScrubPreviewActive()) {
         preview.updateScrubPosition(beats, store.getComposition());
       }
     } else {
       store.setPlaybackPosition(beats);
+      if (rulerScrubPreviewActive) {
+        preview.stopScrubPreview();
+        rulerScrubPreviewActive = false;
+      }
       if (scrubWasPlaying) {
         playback.play(store.getComposition(), beats);
       }
@@ -225,7 +296,7 @@ const playback = createPlaybackEngine((beats) => {
   if (!playback.isPlaying() && store.getState().playback.state === 'playing') {
     store.setPlaybackState('stopped');
     updatePlayState(false);
-    // Return Performance state to idle in either mode.
+    // Return Performance state to idle.
     if (store.getState().performance.phase === 'playing') {
       store.setPerformPhase('idle');
       store.setPerformArmed(false);
@@ -233,52 +304,8 @@ const playback = createPlaybackEngine((beats) => {
   }
 });
 
-// ── Glissandograph controller ───────────────────────────────────
-const gliss = createGlissandograph(viewport, playback, preview, () => { bgDirty = true; });
-
 // ── Toolbar ─────────────────────────────────────────────────────
 const toolbarContainer = document.getElementById('toolbar')!;
-
-function switchToMode(mode: AppMode) {
-  const prev = store.getState().activeMode;
-  if (prev === mode) return;
-  // Stop preview & any in-progress interaction state.
-  preview.stopAll();
-  previewActive = false;
-  if (prev === 'glissandograph') {
-    // Leaving gliss mode: stop any active gliss session and playback.
-    gliss.stop();
-    if (playback.isPlaying()) {
-      playback.pause();
-      store.setPlaybackState('paused');
-      updatePlayState(false);
-    }
-  } else {
-    // Leaving compose mode: end any active Compose Perform/Record session.
-    composePerformStop();
-    if (playback.isPlaying()) {
-      playback.pause();
-      store.setPlaybackState('paused');
-      updatePlayState(false);
-    }
-    interaction.drawingCurve = null;
-    interaction.transformBox = null;
-    interaction.scrubbing = false;
-  }
-  store.setActiveMode(mode);
-  // DOM toggle
-  canvasContainer.querySelector<HTMLElement>('#zoom-controls')?.style.setProperty('display', mode === 'composition' ? '' : 'none');
-  if (mode === 'glissandograph') {
-    glissScreen.removeAttribute('hidden');
-    bgCanvas.style.display = 'none';
-    fgCanvas.style.display = 'none';
-  } else {
-    glissScreen.setAttribute('hidden', '');
-    bgCanvas.style.display = '';
-    fgCanvas.style.display = '';
-  }
-  bgDirty = true;
-}
 
 const toolbar = createToolbar(toolbarContainer, {
   onToolChange(tool: ToolMode) {
@@ -298,9 +325,6 @@ const toolbar = createToolbar(toolbarContainer, {
       // Clear the transform box but keep the curve selection so Draw extends it.
       interaction.transformBox = null;
     }
-  },
-  onModeChange(mode: AppMode) {
-    switchToMode(mode);
   },
   onJoin() {
     performJoin();
@@ -326,10 +350,11 @@ const btnRecord = document.getElementById('btn-record') as HTMLButtonElement;
 const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
 const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
 const scrollCanvasToggle = document.getElementById('scroll-canvas-toggle') as HTMLInputElement;
-const scrollCanvasLabel = document.getElementById('scroll-canvas-label') as HTMLLabelElement;
-scrollCanvasToggle.checked = store.getState().scrollCanvasEnabled;
+// Inverted semantics: unchecked (thumb left) = Canvas scrolls = scrollCanvasEnabled true.
+// Checked (thumb right) = Planchette scrolls = classic static canvas mode.
+scrollCanvasToggle.checked = !store.getState().scrollCanvasEnabled;
 scrollCanvasToggle.addEventListener('change', () => {
-  store.setScrollCanvas(scrollCanvasToggle.checked);
+  store.setScrollCanvas(!scrollCanvasToggle.checked);
   scrollCanvasToggle.blur();
 });
 const pitchHudToggle = document.getElementById('pitch-hud-toggle') as HTMLInputElement;
@@ -352,11 +377,9 @@ function minPanOffsetX(canvasWidth: number): number {
     ? -(canvasWidth * RAIL_SCREEN_X_RATIO) / viewport.state.zoomX
     : 0;
 }
-/** True when Compose is in a Scroll-Canvas Playback state that hijacks LMB for Perform. */
+/** True when a Scroll-Canvas Playback state hijacks LMB for Perform. */
 function isComposePerformActive(): boolean {
-  return store.getState().activeMode === 'composition'
-      && playback.isPlaying()
-      && effectiveScrollCanvas();
+  return playback.isPlaying() && effectiveScrollCanvas();
 }
 
 function updatePlayState(playing: boolean) {
@@ -368,21 +391,14 @@ function updateRecordButtonVisuals() {
   const st = store.getState();
   const g = st.performance;
 
-  // Record button is visible in both modes now; disabled when there's no track to record onto.
   btnRecord.removeAttribute('hidden');
   btnRecord.classList.toggle('armed', g.recordArmed && g.phase !== 'playing');
   btnRecord.classList.toggle('recording', g.recordArmed && g.phase === 'playing');
   btnRecord.disabled = st.selectedTrackId === null;
 
-  // Scroll Canvas toggle — Compose-only (Gliss is always Performance/scrolling).
-  if (st.activeMode === 'glissandograph') {
-    scrollCanvasLabel.setAttribute('hidden', '');
-  } else {
-    scrollCanvasLabel.removeAttribute('hidden');
-    scrollCanvasToggle.checked = st.scrollCanvasEnabled;
-  }
+  scrollCanvasToggle.checked = !st.scrollCanvasEnabled;
 
-  // Lock loop toggle while recording (any mode).
+  // Lock loop toggle while recording.
   loopToggle.disabled = g.recordArmed && g.phase === 'playing';
 }
 
@@ -442,41 +458,28 @@ function startPlayback() {
 }
 
 btnPlay.addEventListener('click', () => {
-  if (store.getState().activeMode === 'glissandograph') {
-    gliss.startPlayback();
-    updatePlayState(true);
-    return;
-  }
   startPlayback();
 });
 
 btnPause.addEventListener('click', () => {
-  // During Compose recording, pause means "end the recording session" —
+  // During recording, pause means "end the recording session" —
   // otherwise the record would silently continue on next play.
-  if (store.getState().activeMode === 'composition'
-      && store.getState().performance.recordArmed) {
+  if (store.getState().performance.recordArmed) {
     composePerformStop();
     return;
   }
   playback.pause();
   store.setPlaybackState('paused');
   updatePlayState(false);
-  if (store.getState().activeMode === 'glissandograph') {
-    store.setPerformPhase('idle');
-  }
 });
 
 btnStop.addEventListener('click', () => {
-  if (store.getState().activeMode === 'glissandograph') {
-    gliss.stop();
+  // Cleanly end any active Perform/Record session AND stop playback.
+  const g = store.getState().performance;
+  if (g.phase !== 'idle' || g.recordArmed) {
+    composePerformStop();
   } else {
-    // In Compose, cleanly end any active Perform/Record session AND stop playback.
-    const g = store.getState().performance;
-    if (g.phase !== 'idle' || g.recordArmed) {
-      composePerformStop();
-    } else {
-      playback.stop();
-    }
+    playback.stop();
   }
   store.setPlaybackState('stopped');
   store.setPlaybackPosition(0);
@@ -485,11 +488,7 @@ btnStop.addEventListener('click', () => {
 
 btnRecord.addEventListener('click', () => {
   if (store.getState().selectedTrackId === null) return; // no track to record onto
-  if (store.getState().activeMode === 'glissandograph') {
-    gliss.toggleArmed();
-  } else {
-    composeToggleArmed();
-  }
+  composeToggleArmed();
   updateRecordButtonVisuals();
 });
 
@@ -502,8 +501,8 @@ bpmInput.addEventListener('change', () => {
 
 loopToggle.addEventListener('change', () => {
   playback.setLoop(loopToggle.checked);
-  // If toggling on mid-play in Compose, update the play range to the markers right away.
-  if (playback.isPlaying() && store.getState().activeMode === 'composition') {
+  // If toggling on mid-play, update the play range to the markers right away.
+  if (playback.isPlaying()) {
     const comp = store.getComposition();
     if (loopToggle.checked) {
       playback.setPlayRange(comp.loopStartBeats, comp.loopEndBeats);
@@ -751,27 +750,18 @@ history.subscribe(() => {
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
 
-  // Record / Escape — available in both modes.
   if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     if (e.repeat) return;
     if (store.getState().selectedTrackId === null) return;
-    if (store.getState().activeMode === 'glissandograph') {
-      gliss.toggleArmed();
-    } else {
-      composeToggleArmed();
-    }
+    composeToggleArmed();
     return;
   }
   if (e.key === 'Escape') {
     const g = store.getState().performance;
     if (g.phase === 'countdown' || g.recordArmed) {
       e.preventDefault();
-      if (store.getState().activeMode === 'glissandograph') {
-        gliss.stop();
-      } else {
-        composePerformStop();
-      }
+      composePerformStop();
       store.setPlaybackState('stopped');
       updatePlayState(false);
       return;
@@ -851,73 +841,11 @@ window.addEventListener('keydown', (e) => {
   switch (e.key) {
     case ' ': {
       e.preventDefault();
-      if (e.repeat) break; // prevent rapid toggling when holding space
-
-      const state = store.getState();
-
-      // Glissandograph mode: Space toggles scrolling play.
-      if (state.activeMode === 'glissandograph') {
-        if (state.performance.phase === 'playing') {
-          gliss.stop();
-          store.setPlaybackState('stopped');
-          updatePlayState(false);
-        } else {
-          gliss.startPlayback();
-          updatePlayState(true);
-        }
-        break;
-      }
-
-      const inDrawContext = state.activeTool === 'draw'
-        && interaction.cursorInCanvas
-        && interaction.cursorScreenY >= RULER_HEIGHT
-        && interaction.cursorWorld !== null;
-      const inScrubContext = interaction.scrubbing;
-
-      if (inDrawContext) {
-        const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-        const tone = track ? state.composition.toneLibrary.find(t => t.id === track.toneId) : null;
-        if (state.drawPreviewMode === 'composition' && interaction.cursorWorld) {
-          // Preview what the composition would sound like if a point were placed here:
-          // play all existing curves at cursor X, plus the cursor tone at cursor Y.
-          preview.startScrubPreview(state.composition);
-          preview.updateScrubPosition(interaction.cursorWorld.x, state.composition);
-          if (tone) {
-            preview.startDrawPreview(tone, interaction.cursorWorld.y);
-          }
-          previewActive = true;
-          // Classic-playhead mode: snap the playhead to the cursor so the user sees
-          // the scrub location. Leaves it there on preview end (easy way to bring
-          // a far-away playhead back to the cursor).
-          if (!state.scrollCanvasEnabled) {
-            store.setPlaybackPosition(Math.max(0, interaction.cursorWorld.x));
-          }
-        } else if (tone && interaction.cursorWorld) {
-          // Tone-only preview — play the track's tone at cursor pitch.
-          preview.startDrawPreview(tone, interaction.cursorWorld.y);
-          previewActive = true;
-        }
-      } else if (inScrubContext) {
-        // Start scrub preview — play all curves at scrub position
-        preview.startScrubPreview(state.composition);
-        preview.updateScrubPosition(state.playback.positionBeats, state.composition);
-        previewActive = true;
-      } else {
-        // Normal play/pause toggle
-        if (playback.isPlaying()) {
-          // During Compose recording, Space pauses the session → fully disarm
-          // so the next Play doesn't silently continue capturing.
-          if (state.performance.recordArmed) {
-            composePerformStop();
-          } else {
-            playback.pause();
-            store.setPlaybackState('paused');
-            updatePlayState(false);
-          }
-        } else {
-          startPlayback();
-        }
-      }
+      if (e.repeat) break; // auto-repeat shouldn't re-fire the timer
+      // Start (or reset) the hold timer. A release before SPACE_HOLD_MS is a tap; a
+      // release after activates preview then stops it on keyup.
+      if (spaceHoldTimer !== null) window.clearTimeout(spaceHoldTimer);
+      spaceHoldTimer = window.setTimeout(activateSpacePreview, SPACE_HOLD_MS);
       break;
     }
     case 'd':
@@ -985,10 +913,23 @@ window.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('keyup', (e) => {
-  if (e.key === ' ' && previewActive) {
-    preview.stopAll();
-    previewActive = false;
+  if (e.key !== ' ') return;
+  // If the timer is still pending, the key was a tap — run the transport action.
+  // If it already fired, decide based on whether preview actually started:
+  //   - previewActive: hold-release, just stop preview (no tap action).
+  //   - !previewActive: timer fired but context didn't allow preview (e.g. recording) —
+  //     still treat release as a tap so transport responds.
+  const wasTap = spaceHoldTimer !== null;
+  if (spaceHoldTimer !== null) {
+    window.clearTimeout(spaceHoldTimer);
+    spaceHoldTimer = null;
   }
+  if (wasTap || !previewActive) {
+    handleSpaceTap();
+    return;
+  }
+  preview.stopAll();
+  previewActive = false;
 });
 
 // ── Track panel ─────────────────────────────────────────────────
@@ -1122,7 +1063,7 @@ window.addEventListener('mousemove', (e) => {
     const rect = canvasContainer.getBoundingClientRect();
     // When Scroll Canvas is on, the rail is pinned at canvas-centre. Allow offsetX
     // to go negative by half the canvas width so the user can pan beat 0 all the
-    // way over to the rail — matches the scrolling-play clamp in Gliss.
+    // way over to the rail — matches the scrolling-play clamp.
     viewport.clampOffset(rect.width, rect.height, minPanOffsetX(rect.width));
     lastMouse = { x: e.clientX, y: e.clientY };
     bgDirty = true;
@@ -1165,9 +1106,12 @@ fgCanvas.addEventListener('wheel', (e) => {
 
 // ── Compose Perform: LMB sounding + record + planchette-for-HUD ─────
 const COMPOSE_COUNTDOWN_SECONDS = 3;
-let composePerformLmbDown = false;
-const composeRecBuffer: RecordedSample[] = [];
-let composeSessionSnapshotted = false;
+const composeEngine = createPerformanceEngine({
+  countdownSeconds: COMPOSE_COUNTDOWN_SECONDS,
+  afkTimeoutMs: 20_000,
+  recordingBufferMax: 3600,
+  loopWrapThresholdBeats: 0.5,
+});
 
 function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number } {
   const { wy } = viewport.screenToWorld(0, sy);
@@ -1184,7 +1128,7 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
 }
 
 function composeUpdatePlanchette(sy: number) {
-  if (sy < RULER_HEIGHT && !composePerformLmbDown) {
+  if (sy < RULER_HEIGHT && !composeEngine.isLmbDown()) {
     store.setPlanchetteY('primary', null, null);
     return;
   }
@@ -1224,47 +1168,47 @@ function stopComposePerformSounding() {
 }
 
 function captureComposeRecordingSample() {
-  if (store.getState().activeMode !== 'composition') return;
   const g = store.getState().performance;
-  if (g.phase !== 'playing' || !g.recordArmed || !composePerformLmbDown) return;
+  if (g.phase !== 'playing' || !g.recordArmed || !composeEngine.isLmbDown()) return;
   const planchette = g.planchettes[0];
   if (!planchette || planchette.snappedWorldY == null) return;
-  const beat = playback.getPositionBeats();
-  const last = composeRecBuffer[composeRecBuffer.length - 1];
-  if (last && beat <= last.beat) return;
-  composeRecBuffer.push({ beat, note: planchette.snappedWorldY, volume: 0.8 });
-  if (composeRecBuffer.length > 3600) composeRecBuffer.shift();
-  store.setPerformLastActivityAt(performance.now());
+  composeEngine.captureSample('primary', {
+    beat: playback.getPositionBeats(),
+    note: planchette.snappedWorldY,
+    volume: 0.8,
+  });
 }
 
 function finalizeComposeRecordedCurve() {
-  const samples = composeRecBuffer.slice();
-  composeRecBuffer.length = 0;
-  if (samples.length < 2) return;
   const st = store.getState();
   const trackId = st.selectedTrackId;
-  if (!trackId) return;
-  const track = st.composition.tracks.find(t => t.id === trackId);
-  if (!track) return;
-  const curve = curveFromRecording(samples);
-  if (!curve) return;
-  if (!composeSessionSnapshotted) {
-    history.snapshot();
-    composeSessionSnapshotted = true;
+  const track = trackId ? st.composition.tracks.find(t => t.id === trackId) : null;
+  if (!track) {
+    composeEngine.clearBuffer('primary');
+    return;
   }
+  const curve = composeEngine.finalizeCurve('primary', () => history.snapshot());
+  if (!curve) return;
   store.mutate(() => { track.curves.push(curve); });
   store.setPerformCurrentCurve('primary', curve.id);
 }
 
-function tickComposeCountdown() {
-  if (store.getState().activeMode !== 'composition') return;
+function tickComposePerform() {
   const g = store.getState().performance;
-  if (g.phase !== 'countdown') return;
-  const elapsed = getAudioContext().currentTime - g.countdownStartedAt;
-  if (elapsed < COMPOSE_COUNTDOWN_SECONDS) return;
-  // Countdown finished → begin Playback. Record stays armed.
-  // `effectiveScrollCanvas()` is true because recordArmed is true → scroll kicks in.
-  startComposePerformPlayback();
+  composeEngine.tick({
+    now: performance.now(),
+    audioNow: getAudioContext().currentTime,
+    isPlaying: playback.isPlaying(),
+    phase: g.phase,
+    recordArmed: g.recordArmed,
+    countdownStartedAt: g.countdownStartedAt,
+    playbackBeat: playback.getPositionBeats(),
+    onCountdownElapsed: startComposePerformPlayback,
+    onLoopWrap: () => {
+      if (g.recordArmed && composeEngine.isLmbDown()) finalizeComposeRecordedCurve();
+    },
+    onAfkTimeout: composePerformStop,
+  });
 }
 
 function startComposePerformPlayback() {
@@ -1274,12 +1218,25 @@ function startComposePerformPlayback() {
   // Record forces Scroll Canvas on, so the rail is visible. Start from whichever beat
   // the user sees under the rail right now rather than the stored position.
   const r = canvasContainer.getBoundingClientRect();
-  const startBeat = Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
-  const endBeat = Math.max(compLength, startBeat) + 10_000;
-  playback.play(comp, startBeat, endBeat, 0);
+  let startBeat = Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
+  let endBeat: number;
+  let loopStart = 0;
+  // With Loop on: respect the composition's loop range so the performance wraps and
+  // the engine's loop-wrap detection fires (planchette flash + finalize current curve).
+  // With Loop off: extend end far past content so the canvas keeps scrolling during recording.
+  if (playback.isLoopEnabled()) {
+    const lStart = comp.loopStartBeats;
+    const lEnd = comp.loopEndBeats;
+    if (startBeat < lStart || startBeat >= lEnd) startBeat = lStart;
+    endBeat = lEnd;
+    loopStart = lStart;
+  } else {
+    endBeat = Math.max(compLength, startBeat) + 10_000;
+  }
+  playback.play(comp, startBeat, endBeat, loopStart);
   store.setPlaybackState('playing');
   store.setPerformPhase('playing');
-  store.setPerformLastActivityAt(performance.now());
+  composeEngine.startSession(performance.now());
   updatePlayState(true);
   // Snap viewport immediately to avoid first-frame flash.
   scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
@@ -1289,58 +1246,73 @@ function startComposePerformPlayback() {
 function composeToggleArmed() {
   if (store.getState().selectedTrackId === null) return;
   const g = store.getState().performance;
-  if (g.phase === 'idle') {
-    ensureResumed();
-    store.setPerformArmed(true);
-    store.setPerformCountdownStartedAt(getAudioContext().currentTime);
-    store.setPerformPhase('countdown');
-    composeSessionSnapshotted = false;
-  } else if (g.phase === 'countdown') {
+
+  // Recording → full stop: commit any in-progress curve, stop playback, return to idle.
+  if (g.phase === 'playing' && g.recordArmed) {
+    composePerformStop();
+    store.setPlaybackState('stopped');
+    return;
+  }
+
+  // Countdown → cancel back to idle.
+  if (g.phase === 'countdown') {
     store.setPerformArmed(false);
     store.setPerformCountdownStartedAt(0);
     store.setPerformPhase('idle');
-  } else if (g.phase === 'playing') {
-    if (g.recordArmed) {
-      if (composePerformLmbDown) finalizeComposeRecordedCurve();
-      store.setPerformArmed(false);
-    } else {
-      store.setPerformArmed(true);
-      composeSessionSnapshotted = false;
-      store.setPerformLastActivityAt(performance.now());
-    }
+    return;
   }
+
+  // Playback already running (classic or Perform) → arm immediately, no countdown.
+  // Set perform phase to 'playing' so the render loop captures samples. Extend the
+  // play range if looping is off so recording can continue past composition end.
+  if (playback.isPlaying()) {
+    ensureResumed();
+    store.setPerformArmed(true);
+    store.setPerformPhase('playing');
+    composeEngine.startSession(performance.now());
+    if (!playback.isLoopEnabled()) {
+      const pos = playback.getPositionBeats();
+      const comp = store.getComposition();
+      playback.setPlayRange(0, Math.max(getCompositionLength(comp), pos) + 10_000);
+    }
+    return;
+  }
+
+  // Truly idle → start countdown + Perform-playback flow.
+  ensureResumed();
+  store.setPerformArmed(true);
+  store.setPerformCountdownStartedAt(getAudioContext().currentTime);
+  store.setPerformPhase('countdown');
+  composeEngine.startSession(performance.now());
 }
 
 function composePerformStop() {
   const g = store.getState().performance;
-  if (g.phase === 'playing' && g.recordArmed && composePerformLmbDown) {
+  if (g.phase === 'playing' && g.recordArmed && composeEngine.isLmbDown()) {
     finalizeComposeRecordedCurve();
   }
-  if (composePerformLmbDown) {
-    composePerformLmbDown = false;
+  if (composeEngine.isLmbDown()) {
     stopComposePerformSounding();
   }
   preview.stopDrawPreview('primary');
   if (playback.isPlaying()) playback.stop();
-  composeRecBuffer.length = 0;
+  composeEngine.stopSession();
   store.setPerformPhase('idle');
   store.setPerformArmed(false);
   store.setPerformCountdownStartedAt(0);
   store.setPerformLmbSounding(false);
-  composeSessionSnapshotted = false;
   updatePlayState(false);
 }
 
-// Compose canvas mousedown: intercept LMB for Perform when active.
+// Canvas mousedown: intercept LMB for Perform when active.
 fgCanvas.addEventListener('mousedown', (e) => {
-  if (store.getState().activeMode !== 'composition') return;
   if (!isComposePerformActive()) return;
   if (e.button !== 0) return;
   const rect = fgCanvas.getBoundingClientRect();
   const sy = e.clientY - rect.top;
   if (sy < RULER_HEIGHT) return;
   composeUpdatePlanchette(sy);
-  composePerformLmbDown = true;
+  composeEngine.onLmbDown(performance.now());
   const planchette = store.getState().performance.planchettes[0];
   if (planchette?.snappedWorldY != null) {
     startComposePerformSounding(planchette.snappedWorldY);
@@ -1349,27 +1321,24 @@ fgCanvas.addEventListener('mousedown', (e) => {
 }, true);  // Capture phase so it fires before interaction.ts's bubbling handler.
 
 fgCanvas.addEventListener('mousemove', (e) => {
-  if (store.getState().activeMode !== 'composition') return;
   const rect = fgCanvas.getBoundingClientRect();
   const sy = e.clientY - rect.top;
   composeUpdatePlanchette(sy);
-  if (composePerformLmbDown) {
+  if (composeEngine.isLmbDown()) {
     const p = store.getState().performance.planchettes[0];
     if (p?.snappedWorldY != null) updateComposePerformPitch(p.snappedWorldY);
   }
 });
 
 fgCanvas.addEventListener('mouseleave', () => {
-  if (store.getState().activeMode !== 'composition') return;
-  if (!composePerformLmbDown) {
+  if (!composeEngine.isLmbDown()) {
     store.setPlanchetteY('primary', null, null);
   }
 });
 
-// Off-canvas tracking while LMB held in Compose Perform.
+// Off-canvas tracking while LMB held in Perform.
 window.addEventListener('mousemove', (e) => {
-  if (store.getState().activeMode !== 'composition') return;
-  if (!composePerformLmbDown) return;
+  if (!composeEngine.isLmbDown()) return;
   const rect = fgCanvas.getBoundingClientRect();
   if (e.clientX >= rect.left && e.clientX <= rect.right
       && e.clientY >= rect.top && e.clientY <= rect.bottom) return;
@@ -1380,15 +1349,14 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mouseup', (e) => {
-  if (store.getState().activeMode !== 'composition') return;
-  if (!composePerformLmbDown) return;
+  if (!composeEngine.isLmbDown()) return;
   if (e.button !== 0) return;
-  composePerformLmbDown = false;
+  composeEngine.onLmbUp();
   stopComposePerformSounding();
   if (store.getState().performance.recordArmed) {
     finalizeComposeRecordedCurve();
   } else {
-    composeRecBuffer.length = 0;
+    composeEngine.clearBuffer('primary');
   }
 });
 
@@ -1418,172 +1386,14 @@ function updateCountdownOverlayDom(state: AppState) {
     }
     return;
   }
-  const elapsed = getAudioContext().currentTime - state.performance.countdownStartedAt;
-  const remaining = COMPOSE_COUNTDOWN_SECONDS - elapsed;
-  let label: string;
-  if (remaining <= 0) label = 'Go';
-  else if (remaining <= 1) label = '1';
-  else if (remaining <= 2) label = '2';
-  else label = '3';
+  const label = composeEngine.getCountdownLabel(
+    getAudioContext().currentTime,
+    state.performance.phase,
+    state.performance.countdownStartedAt,
+  );
   if (countdownOverlay.textContent !== label) countdownOverlay.textContent = label;
   countdownOverlay.removeAttribute('hidden');
 }
-
-// ── Glissandograph mouse handlers ───────────────────────────────
-function glissMouseCoords(e: MouseEvent): { sx: number; sy: number; w: number; h: number } {
-  const rect = glissFgCanvas.getBoundingClientRect();
-  return { sx: e.clientX - rect.left, sy: e.clientY - rect.top, w: rect.width, h: rect.height };
-}
-
-// Middle-click pan in gliss mode: full X+Y when idle, Y-only when active (scrolling play/record).
-let isGlissPanning = false;
-let lastGlissMouse = { x: 0, y: 0 };
-// Loop-marker drag state for the gliss canvas (compose has its own via interaction.ts).
-let glissDraggingLoopMarker: 'start' | 'end' | null = null;
-
-function snapBeatForGlissMarker(worldX: number): number {
-  const zoomX = viewport.state.zoomX;
-  const comp = store.getComposition();
-  let bestPointX: number | null = null;
-  let bestDistPx = 8;
-  for (const track of comp.tracks) {
-    for (const curve of track.curves) {
-      for (const pt of curve.points) {
-        const distPx = Math.abs(pt.position.x - worldX) * zoomX;
-        if (distPx < bestDistPx) { bestDistPx = distPx; bestPointX = pt.position.x; }
-      }
-    }
-  }
-  if (bestPointX !== null) return Math.max(0, bestPointX);
-  const subs = getAdaptiveSubdivisions(zoomX);
-  const snapConfig = { enabled: store.getState().snapEnabled, subdivisionsPerBeat: subs, scaleRoot: null, scale: null };
-  const snapped = snapConfig.enabled ? snapToGrid(worldX, 0, snapConfig).wx : worldX;
-  return Math.max(0, snapped);
-}
-
-glissFgCanvas.addEventListener('mousedown', (e) => {
-  if (store.getState().activeMode !== 'glissandograph') return;
-  if (e.button === 1) {
-    isGlissPanning = true;
-    lastGlissMouse = { x: e.clientX, y: e.clientY };
-    glissFgCanvas.style.cursor = 'grabbing';
-    e.preventDefault();
-    return;
-  }
-  const { sx, sy, w, h } = glissMouseCoords(e);
-  // Ruler zone + Loop on: check loop-marker hit first.
-  if (sy < RULER_HEIGHT && e.button === 0 && playback.isLoopEnabled()) {
-    const comp = store.getComposition();
-    const which = hitTestLoopMarkers(viewport, sx, comp.loopStartBeats, comp.loopEndBeats);
-    if (which) {
-      glissDraggingLoopMarker = which;
-      const worldX = viewport.screenToWorld(sx, sy).wx;
-      const beat = snapBeatForGlissMarker(worldX);
-      history.snapshot();
-      if (which === 'start') store.setLoopStart(beat);
-      else store.setLoopEnd(beat);
-      e.preventDefault();
-      return;
-    }
-  }
-  gliss.onMouseDown(e, sx, sy, w, h);
-  e.preventDefault();
-});
-
-glissFgCanvas.addEventListener('mousemove', (e) => {
-  if (store.getState().activeMode !== 'glissandograph') return;
-  if (glissDraggingLoopMarker) {
-    const { sx, sy } = glissMouseCoords(e);
-    const worldX = viewport.screenToWorld(sx, sy).wx;
-    const beat = snapBeatForGlissMarker(worldX);
-    if (glissDraggingLoopMarker === 'start') store.setLoopStart(beat);
-    else store.setLoopEnd(beat);
-    return;
-  }
-  const { sx, sy, w, h } = glissMouseCoords(e);
-  gliss.onMouseMove(e, sx, sy, w, h);
-});
-
-// Global mouse handlers for gliss: mouseup releases LMB/pan, mousemove tracks pan off-canvas.
-window.addEventListener('mousemove', (e) => {
-  if (!isGlissPanning) return;
-  const dx = gliss.isActive() ? 0 : (e.clientX - lastGlissMouse.x);
-  const dy = e.clientY - lastGlissMouse.y;
-  viewport.panBy(dx, dy);
-  const rect = canvasContainer.getBoundingClientRect();
-  // Allow X to go negative enough for beat 0 to sit at the planchette, matching scrolling-play.
-  const minOffsetX = -(rect.width * 0.5) / viewport.state.zoomX;
-  viewport.clampOffset(rect.width, rect.height, minOffsetX);
-  lastGlissMouse = { x: e.clientX, y: e.clientY };
-  bgDirty = true;
-});
-
-// Off-canvas mouse-Y tracking while LMB is held in Gliss mode. Browsers keep firing
-// window.mousemove when a button is already pressed, even outside the browser window,
-// so auto-scroll and pitch tracking keep going until release.
-window.addEventListener('mousemove', (e) => {
-  const st = store.getState();
-  if (st.activeMode !== 'glissandograph') return;
-  if (!st.performance.lmbSounding) return;
-  const rect = glissFgCanvas.getBoundingClientRect();
-  // If the pointer is over the canvas, the canvas's own mousemove handler runs — skip to avoid double-firing.
-  if (e.clientX >= rect.left && e.clientX <= rect.right
-      && e.clientY >= rect.top && e.clientY <= rect.bottom) return;
-  const sx = e.clientX - rect.left;
-  const sy = e.clientY - rect.top;
-  gliss.onMouseMove(e, sx, sy, rect.width, rect.height);
-});
-
-// Mouseup is attached to window so LMB release outside canvas still stops the tone.
-window.addEventListener('mouseup', (e) => {
-  if (store.getState().activeMode === 'glissandograph') {
-    if (isGlissPanning && e.button === 1) {
-      isGlissPanning = false;
-      glissFgCanvas.style.cursor = '';
-      return;
-    }
-    if (glissDraggingLoopMarker && e.button === 0) {
-      glissDraggingLoopMarker = null;
-      return;
-    }
-    gliss.onMouseUp(e);
-  }
-});
-
-glissFgCanvas.addEventListener('mouseleave', () => {
-  if (store.getState().activeMode !== 'glissandograph') return;
-  gliss.onMouseLeave();
-});
-
-// Prevent the browser's default middle-click auto-scroll cursor in gliss.
-glissFgCanvas.addEventListener('auxclick', (e) => {
-  if (store.getState().activeMode === 'glissandograph' && e.button === 1) e.preventDefault();
-});
-
-// Wheel in gliss mode: plain wheel = Y-zoom (allowed even during scrolling play so
-// the user can see higher/lower notes); Ctrl+wheel = X-zoom (disabled during scrolling
-// play because X is owned by the playhead).
-glissFgCanvas.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  if (store.getState().activeMode !== 'glissandograph') return;
-  const rect = glissFgCanvas.getBoundingClientRect();
-  const sx = e.clientX - rect.left;
-  const sy = e.clientY - rect.top;
-  const factor = e.deltaY > 0 ? 0.9 : 1.1;
-  if (gliss.isScrolling() && e.ctrlKey) return; // X-zoom disabled while scrolling
-  if (e.ctrlKey) {
-    viewport.zoomXAt(factor, sx);
-  } else {
-    viewport.zoomYAt(factor, sy);
-    gliss.noteYZoom();
-  }
-  const rect2 = canvasContainer.getBoundingClientRect();
-  // Gliss is always in rail mode: allow beat 0 to reach the rail.
-  const minOffsetX = -(rect2.width * RAIL_SCREEN_X_RATIO) / viewport.state.zoomX;
-  viewport.clampOffset(rect2.width, rect2.height, minOffsetX);
-  updateZoom();
-  bgDirty = true;
-}, { passive: false });
 
 // ── Render loop ─────────────────────────────────────────────────
 function render() {
@@ -1591,40 +1401,8 @@ function render() {
   const comp = state.composition;
   const rect = canvasContainer.getBoundingClientRect();
 
-  // Glissandograph mode: per-frame viewport scroll, render against gliss canvases, skip compose chrome.
-  if (state.activeMode === 'glissandograph') {
-    gliss.tick(rect.width, rect.height);
-    const scaleRoot = state.scaleRoot;
-    const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
-    // BG: staff + ruler. Redraw every frame while scrolling so the grid slides smoothly.
-    if (bgDirty || gliss.isScrolling()) {
-      glissBgCtx.clearRect(0, 0, rect.width, rect.height);
-      renderStaff(glissBgCtx, viewport, rect.width, rect.height, comp.beatsPerMeasure, scaleRoot, scale);
-      renderRuler(glissBgCtx, viewport, rect.width, comp.beatsPerMeasure, comp.bpm);
-      bgDirty = false;
-    }
-    // FG: curves (from composition) + planchette. No tool previews, no compose-mode playhead.
-    glissFgCtx.clearRect(0, 0, rect.width, rect.height);
-    for (const track of comp.tracks) {
-      if (track.muted) continue;
-      const tone = comp.toneLibrary.find(t => t.id === track.toneId);
-      if (!tone) continue;
-      const emptySet = new Set<string>();
-      renderCurves(glissFgCtx, viewport, track.curves, tone, emptySet, null, null);
-    }
-    if (playback.isLoopEnabled()) {
-      renderLoopMarkers(glissFgCtx, viewport, comp.loopStartBeats, comp.loopEndBeats, rect.height);
-    }
-    renderPlanchettes(glissFgCtx, viewport, rect.width, rect.height, state.performance.planchettes, gliss.getLastLoopWrapAt());
-    // Shared HUD + countdown DOM updates (used by both modes now).
-    updatePitchHudDom(state);
-    updateCountdownOverlayDom(state);
-    requestAnimationFrame(render);
-    return;
-  }
-
-  // Compose "Scroll Canvas" view: when the toggle is effectively on during Playback,
-  // scroll the viewport each frame so the playhead sits centred like the Gliss rail.
+  // "Scroll Canvas" view: when the toggle is effectively on during Playback,
+  // scroll the viewport each frame so the playhead sits centred on the rail.
   // Toggle off → classic static canvas with the playhead moving across.
   // Recording forces the scrolling view on via `effectiveScrollCanvas()`.
   const composeScrolling = effectiveScrollCanvas() && playback.isPlaying();
@@ -1633,8 +1411,8 @@ function render() {
     bgDirty = true;
   }
 
-  // Countdown advance in Compose: transition to Playback after COUNTDOWN_SECONDS.
-  tickComposeCountdown();
+  // Compose performance tick: countdown advance, loop-wrap detection, AFK auto-stop.
+  tickComposePerform();
 
   // Per-frame sync for Compose UI affordances
   toolbar.setXYToolsDisabled(isComposePerformActive());
@@ -1759,7 +1537,7 @@ function render() {
   // Scroll Canvas OFF: classic moving playhead at the stored position.
   const railVisible = effectiveScrollCanvas();
   if (railVisible) {
-    renderPlanchettes(fgCtx, viewport, rect.width, rect.height, state.performance.planchettes, 0);
+    renderPlanchettes(fgCtx, viewport, rect.width, rect.height, state.performance.planchettes, composeEngine.getLastLoopWrapAt());
   } else {
     const playheadBeat = playback.isPlaying()
       ? playback.getPositionBeats()
@@ -1823,7 +1601,6 @@ store.subscribe(() => {
   // "effectively infinite" endBeat set by startComposePerformPlayback() so the canvas
   // can scroll past composition end; shrinking it here would auto-stop mid-record.
   if (playback.isPlaying()
-      && store.getState().activeMode === 'composition'
       && !store.getState().performance.recordArmed) {
     if (playback.isLoopEnabled()) {
       playback.setPlayRange(comp.loopStartBeats, comp.loopEndBeats);

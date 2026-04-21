@@ -1,12 +1,12 @@
-# SlideSynth - Design Document
+# Glissandograph - Design Document
 
 ## Overview
 
-SlideSynth is a browser-based music composition app where users draw Bezier curves on a chromatic staff to create smooth, continuous pitch modulation — like a trombone or theremin. Instead of placing discrete notes, users sketch tonal lines with control points that define pitch, timing, and volume simultaneously.
+Glissandograph is a browser-based music composition app where users draw Bezier curves on a chromatic staff to create smooth, continuous pitch modulation — like a trombone or theremin. Instead of placing discrete notes, users sketch tonal lines with control points that define pitch, timing, and volume simultaneously.
 
 ## Core Concept
 
-Traditional music notation uses discrete note symbols. SlideSynth replaces this with **vector curves**: the user draws Bezier paths across a chromatic staff using a pen tool (similar to Illustrator). The vertical position of the curve controls pitch continuously, enabling smooth glides between notes. Each control point also carries a volume value, allowing fade-in/fade-out dynamics.
+Traditional music notation uses discrete note symbols. Glissandograph replaces this with **vector curves**: the user draws Bezier paths across a chromatic staff using a pen tool (similar to Illustrator). The vertical position of the curve controls pitch continuously, enabling smooth glides between notes. Each control point also carries a volume value, allowing fade-in/fade-out dynamics.
 
 ## Tech Stack
 
@@ -21,7 +21,7 @@ Traditional music notation uses discrete note symbols. SlideSynth replaces this 
 
 **Why no React/Vue/Svelte?** The UI is ~90% canvas. The only DOM elements are the toolbar, tone builder dialog, tone picker popup, and track/property panels. These are simple enough that vanilla DOM manipulation is cleaner than a framework fighting with imperative canvas code.
 
-**Note on MIDI:** MIDI *export* was considered but deferred. MIDI's note-based model doesn't naturally support the continuous pitch modulation that is SlideSynth's core feature. Approximation via pitch bend events is possible but lossy. WAV export provides exact reproduction and is the recommended output format. MIDI *import* is supported — MIDI notes are converted to Bezier curves (one curve per note, with pitch bends applied).
+**Note on MIDI:** MIDI *export* was considered but deferred. MIDI's note-based model doesn't naturally support the continuous pitch modulation that is Glissandograph's core feature. Approximation via pitch bend events is possible but lossy. WAV export provides exact reproduction and is the recommended output format. MIDI *import* is supported — MIDI notes are converted to Bezier curves (one curve per note, with pitch bends applied).
 
 ## Architecture Decisions
 
@@ -35,7 +35,7 @@ This avoids the main performance bottleneck: redrawing hundreds of grid lines 60
 
 ### 2. Persistent Oscillator per Track
 
-Rather than creating/destroying OscillatorNodes per note (which causes audio clicks), each track maintains a **single OscillatorNode** for the duration of playback. Pitch and volume are controlled entirely through `AudioParam` scheduling. Gain ramps to zero in gaps between curves. This produces the smooth continuous sound that is the core value of SlideSynth.
+Rather than creating/destroying OscillatorNodes per note (which causes audio clicks), each track maintains a **single OscillatorNode** for the duration of playback. Pitch and volume are controlled entirely through `AudioParam` scheduling. Gain ramps to zero in gaps between curves. This produces the smooth continuous sound that is the core value of Glissandograph.
 
 ### 3. Lookahead Audio Scheduler
 
@@ -207,7 +207,7 @@ MIDI files (`.mid`, `.midi`) can be imported via the toolbar button. Each MIDI c
 ## File Structure
 
 ```
-SlideSynth/
+Glissandograph/
 ├── index.html
 ├── package.json
 ├── tsconfig.json
