@@ -164,6 +164,38 @@ export function renderPlanchettes(
 }
 
 /**
+ * Brief expanding ring + halo for a metronome tick. Downbeats are bigger +
+ * brighter than accent/weak ticks so the beat hierarchy is visible. `ageMs`
+ * is the wall-clock age of the most recent click; ring fades + grows over
+ * `METRONOME_FLASH_DURATION_MS`.
+ */
+export const METRONOME_FLASH_DURATION_MS = 180;
+
+export function renderMetronomeFlash(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  ageMs: number,
+  tier: 'downbeat' | 'accent' | 'weak',
+): void {
+  if (ageMs < 0 || ageMs >= METRONOME_FLASH_DURATION_MS) return;
+  const t = ageMs / METRONOME_FLASH_DURATION_MS;   // 0..1
+  const alpha = 1 - t;
+  const maxRadius = tier === 'downbeat' ? 22 : tier === 'accent' ? 16 : 12;
+  const radius = CIRCLE_RADIUS + (maxRadius - CIRCLE_RADIUS) * t;
+  const lineWidth = tier === 'downbeat' ? 2.5 : 1.8;
+  const color = tier === 'downbeat' ? '#ffeb3b' : tier === 'accent' ? '#ffb74d' : '#f4a3a3';
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
  * Render a free-floating planchette at an arbitrary screen X (cursor-anchored).
  * Used in Compose when the user is previewing a pitch via keyboard-modifier
  * (Idle + Space) — the planchette is NOT on a rail, it's at the cursor.

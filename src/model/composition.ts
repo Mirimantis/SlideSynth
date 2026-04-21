@@ -12,6 +12,7 @@ export function createComposition(): Composition {
     name: 'Untitled',
     bpm: DEFAULT_BPM,
     beatsPerMeasure: DEFAULT_BEATS_PER_MEASURE,
+    timeSignatureDenominator: 4,
     toneLibrary,
     tracks: [createTrack('Track 1', firstTone.id)],
     loopStartBeats: 0,
@@ -33,4 +34,20 @@ export function getCompositionLength(comp: Composition): number {
     }
   }
   return max;
+}
+
+/**
+ * Measure length in internal (quarter-note) beats, derived from the time
+ * signature. 4/4 → 4; 3/4 → 3; 6/8 → 3; 9/8 → 4.5; 12/8 → 6.
+ */
+export function measureLengthInBeats(comp: Composition): number {
+  return comp.beatsPerMeasure * 4 / (comp.timeSignatureDenominator || 4);
+}
+
+/**
+ * Metronome tick spacing in internal (quarter-note) beats. /4 meters tick
+ * once per beat; /8 meters tick on eighth notes (every half-beat).
+ */
+export function metronomeTickIntervalInBeats(comp: Composition): number {
+  return 4 / (comp.timeSignatureDenominator || 4);
 }

@@ -10,11 +10,11 @@ export function renderRuler(
   ctx: CanvasRenderingContext2D,
   vp: Viewport,
   width: number,
-  beatsPerMeasure: number,
+  measureLen: number,
   bpm: number,
 ): void {
   renderSecondsRuler(ctx, vp, width, bpm);
-  renderBeatRuler(ctx, vp, width, beatsPerMeasure, SECONDS_RULER_HEIGHT);
+  renderBeatRuler(ctx, vp, width, measureLen, SECONDS_RULER_HEIGHT);
 
   // Outer bottom border of the whole ruler area
   ctx.strokeStyle = '#446';
@@ -153,7 +153,7 @@ function renderBeatRuler(
   ctx: CanvasRenderingContext2D,
   vp: Viewport,
   width: number,
-  beatsPerMeasure: number,
+  measureLen: number,
   topY: number,
 ): void {
   const h = BEAT_RULER_HEIGHT;
@@ -180,7 +180,7 @@ function renderBeatRuler(
     const { sx } = vp.worldToScreen(b, 0);
     if (sx < 0 || sx > width) continue;
 
-    const isMeasure = b % beatsPerMeasure === 0;
+    const isMeasure = measureLen > 0 && b % measureLen === 0;
 
     // Draw subdivision ticks within this beat
     if (showEighths || showSixteenths) {
@@ -234,13 +234,13 @@ function renderBeatRuler(
 
     // Labels — measure numbers always, beat numbers when zoomed in
     if (isMeasure) {
-      const measureNum = b / beatsPerMeasure + 1;
+      const measureNum = b / measureLen + 1;
       ctx.fillStyle = '#aabbcc';
       ctx.font = 'bold 10px monospace';
       ctx.textBaseline = 'top';
       ctx.fillText(String(measureNum), sx + 3, topY + 2);
     } else if (zx >= 50) {
-      const beatInMeasure = (b % beatsPerMeasure) + 1;
+      const beatInMeasure = (b % measureLen) + 1;
       ctx.fillStyle = '#667';
       ctx.font = '9px monospace';
       ctx.textBaseline = 'top';

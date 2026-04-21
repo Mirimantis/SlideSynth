@@ -14,7 +14,8 @@ import { createToolbar } from './ui/toolbar';
 import { createToolPanel } from './ui/tool-panel';
 import { openContextMenu } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
-import { renderPlanchettes, renderFreePlanchette, renderRail, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
+import { createMetronome } from './audio/metronome';
+import { renderPlanchettes, renderFreePlanchette, renderRail, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
 import { renderToolPropertyPanel } from './ui/tool-property-panel';
 import { openToneBuilder } from './ui/tone-builder';
@@ -26,11 +27,11 @@ import { store } from './state/store';
 import { history } from './state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
-import { getCompositionLength } from './model/composition';
+import { getCompositionLength, measureLengthInBeats } from './model/composition';
 import { computeMultiCurveBBox, deepCopyPoints, joinCurves, sharpenCurveHandles, smoothCurveHandles } from './model/curve';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { getScaleById } from './utils/scales';
-import { ensureResumed, getAudioContext } from './audio/engine';
+import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
 import type { AppState, ToolMode, ControlPoint } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -77,6 +78,26 @@ app.innerHTML = `
         <div class="transport-row">
           <label>BPM</label>
           <input type="number" id="input-bpm" value="120" min="20" max="300" step="1" />
+        </div>
+        <div class="transport-row">
+          <label>Time</label>
+          <select id="input-time-sig" title="Time signature">
+            <option value="2/4">2/4</option>
+            <option value="3/4">3/4</option>
+            <option value="4/4" selected>4/4</option>
+            <option value="5/4">5/4</option>
+            <option value="7/4">7/4</option>
+            <option value="6/8">6/8</option>
+            <option value="9/8">9/8</option>
+            <option value="12/8">12/8</option>
+          </select>
+        </div>
+        <div class="transport-row">
+          <label class="toolbar-loop-label" title="Metronome clicks during playback">
+            <input type="checkbox" id="metronome-toggle" />
+            <span>Metronome</span>
+          </label>
+          <input type="range" id="metronome-volume" class="metronome-volume" min="0" max="100" value="60" title="Metronome volume" />
         </div>
       </div>
       <div class="panel-header">Tools</div>
@@ -308,6 +329,26 @@ const playback = createPlaybackEngine((beats) => {
   }
 });
 
+// ── Metronome ───────────────────────────────────────────────────
+const metronome = createMetronome(getAudioContext, getMasterGain);
+metronome.setEnabled(store.getState().metronomeEnabled);
+metronome.setVolume(store.getState().metronomeVolume);
+/** Wall-clock ms at which the latest metronome tick is scheduled to fire, plus
+ *  its tier — render loop reads these to flash the planchette/playhead. */
+let lastMetronomeClickAt = 0;
+let lastMetronomeClickTier: 'downbeat' | 'accent' | 'weak' = 'weak';
+metronome.onTick((audioTime, tier) => {
+  const ctx = getAudioContext();
+  const delayMs = Math.max(0, (audioTime - ctx.currentTime) * 1000);
+  setTimeout(() => {
+    lastMetronomeClickAt = performance.now();
+    lastMetronomeClickTier = tier;
+  }, delayMs);
+});
+playback.setSchedulerHook((fromBeat, toBeat, comp, beatToAudioTime) => {
+  metronome.scheduleInRange(fromBeat, toBeat, comp, beatToAudioTime);
+});
+
 // ── Toolbar ─────────────────────────────────────────────────────
 const toolbarContainer = document.getElementById('toolbar')!;
 
@@ -503,6 +544,36 @@ bpmInput.addEventListener('change', () => {
   bpmInput.value = String(bpm);
   history.snapshot();
   store.setBpm(bpm);
+});
+
+// ── Time signature dropdown ────────────────────────────────────
+const timeSigSelect = document.getElementById('input-time-sig') as HTMLSelectElement;
+{
+  const comp = store.getComposition();
+  timeSigSelect.value = `${comp.beatsPerMeasure}/${comp.timeSignatureDenominator}`;
+}
+timeSigSelect.addEventListener('change', () => {
+  const [numStr, denStr] = timeSigSelect.value.split('/');
+  const num = Number(numStr);
+  const den = Number(denStr);
+  if (!Number.isFinite(num) || !Number.isFinite(den)) return;
+  history.snapshot();
+  store.setTimeSignature(num, den);
+  bgDirty = true;
+  timeSigSelect.blur();
+});
+
+// ── Metronome controls ─────────────────────────────────────────
+const metronomeToggle = document.getElementById('metronome-toggle') as HTMLInputElement;
+const metronomeVolumeSlider = document.getElementById('metronome-volume') as HTMLInputElement;
+metronomeToggle.checked = store.getState().metronomeEnabled;
+metronomeVolumeSlider.value = String(Math.round(store.getState().metronomeVolume * 100));
+metronomeToggle.addEventListener('change', () => {
+  store.setMetronomeEnabled(metronomeToggle.checked);
+  metronomeToggle.blur();
+});
+metronomeVolumeSlider.addEventListener('input', () => {
+  store.setMetronomeVolume(Number(metronomeVolumeSlider.value) / 100);
 });
 
 loopToggle.addEventListener('change', () => {
@@ -1506,8 +1577,9 @@ function render() {
   if (bgDirty) {
     const scaleRoot = state.scaleRoot;
     const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
-    renderStaff(bgCtx, viewport, rect.width, rect.height, comp.beatsPerMeasure, scaleRoot, scale);
-    renderRuler(bgCtx, viewport, rect.width, comp.beatsPerMeasure, comp.bpm);
+    const measureLen = measureLengthInBeats(comp);
+    renderStaff(bgCtx, viewport, rect.width, rect.height, measureLen, scaleRoot, scale);
+    renderRuler(bgCtx, viewport, rect.width, measureLen, comp.bpm);
     bgDirty = false;
   }
 
@@ -1641,6 +1713,23 @@ function render() {
     renderPlayhead(fgCtx, viewport, playheadBeat, rect.height);
   }
 
+  // Metronome tick flash: ring at the top of the rail / playhead. Lives briefly
+  // and fades, so the user gets a visual beat even if audio is muted or missed.
+  const flashAge = performance.now() - lastMetronomeClickAt;
+  if (lastMetronomeClickAt > 0 && flashAge < METRONOME_FLASH_DURATION_MS) {
+    const flashY = RULER_HEIGHT + 9;
+    let flashX: number;
+    if (railVisible) {
+      flashX = rect.width * RAIL_SCREEN_X_RATIO;
+    } else {
+      const playheadBeat = playback.isPlaying()
+        ? playback.getPositionBeats()
+        : state.playback.positionBeats;
+      flashX = viewport.worldToScreen(playheadBeat, 0).sx;
+    }
+    renderMetronomeFlash(fgCtx, flashX, flashY, flashAge, lastMetronomeClickTier);
+  }
+
   // Free planchette: Idle + Space-hold draw preview + cursor over canvas.
   // Rendered at cursor X so the user sees exactly where they'd place / are hearing.
   if (freePlanchetteVisible && interaction.cursorWorld) {
@@ -1682,6 +1771,14 @@ store.subscribe(() => {
   bgDirty = true;
   const comp = store.getComposition();
   updateBpm(comp.bpm);
+  const tsValue = `${comp.beatsPerMeasure}/${comp.timeSignatureDenominator}`;
+  if (timeSigSelect.value !== tsValue) timeSigSelect.value = tsValue;
+  const appState = store.getState();
+  if (metronomeToggle.checked !== appState.metronomeEnabled) {
+    metronomeToggle.checked = appState.metronomeEnabled;
+  }
+  metronome.setEnabled(appState.metronomeEnabled);
+  metronome.setVolume(appState.metronomeVolume);
   syncCompositionDerived();
   renderTrackList();
   renderPropertyPanel(document.getElementById('prop-content')!);
