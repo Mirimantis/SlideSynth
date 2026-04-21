@@ -12,7 +12,7 @@ import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
 import { createPlaybackEngine } from './audio/playback';
-import { renderPlanchettes, renderFreePlanchette, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
+import { renderPlanchettes, renderFreePlanchette, renderRail, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
 import { renderToolPropertyPanel } from './ui/tool-property-panel';
 import { openToneBuilder } from './ui/tone-builder';
@@ -25,7 +25,7 @@ import { history } from './state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
 import { getCompositionLength } from './model/composition';
-import { computeMultiCurveBBox, deepCopyPoints, joinCurves } from './model/curve';
+import { computeMultiCurveBBox, deepCopyPoints, joinCurves, sharpenCurveHandles, smoothCurveHandles } from './model/curve';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { getScaleById } from './utils/scales';
 import { ensureResumed, getAudioContext } from './audio/engine';
@@ -728,6 +728,36 @@ function performJoin() {
   store.setSelectedPoint(null);
   interaction.transformBox = null;
 }
+
+function performSharpen() {
+  const state = store.getState();
+  if (state.selectedCurveIds.size === 0) return;
+  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  if (!track) return;
+  const curves = [...state.selectedCurveIds]
+    .map(id => track.curves.find(c => c.id === id))
+    .filter((c): c is import('./types').BezierCurve => !!c);
+  if (curves.length === 0) return;
+  history.snapshot();
+  store.mutate(() => {
+    for (const curve of curves) sharpenCurveHandles(curve);
+  });
+}
+
+function performSmooth() {
+  const state = store.getState();
+  if (state.selectedCurveIds.size === 0) return;
+  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  if (!track) return;
+  const curves = [...state.selectedCurveIds]
+    .map(id => track.curves.find(c => c.id === id))
+    .filter((c): c is import('./types').BezierCurve => !!c);
+  if (curves.length === 0) return;
+  history.snapshot();
+  store.mutate(() => {
+    for (const curve of curves) smoothCurveHandles(curve);
+  });
+}
 // ── Undo / Redo buttons ────────────────────────────────────────
 function clearInteractionForUndo() {
   interaction.drawingCurve = null;
@@ -835,6 +865,21 @@ window.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
     e.preventDefault();
     performJoin();
+    return;
+  }
+
+  // Sharpen selected curve(s) — clear all bezier handles to make every point sharp.
+  // Uses e.code for Alt-letter because some layouts (e.g. macOS) remap e.key with Option.
+  if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === 'KeyS') {
+    e.preventDefault();
+    performSharpen();
+    return;
+  }
+
+  // Smooth selected curve(s) — reset every point to the auto-smoothing handle defaults.
+  if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'KeyS') {
+    e.preventDefault();
+    performSmooth();
     return;
   }
 
@@ -1536,8 +1581,24 @@ function render() {
   // already sees the rail. Rendering mirrors Gliss exactly (rail + planchette dot + pulse).
   // Scroll Canvas OFF: classic moving playhead at the stored position.
   const railVisible = effectiveScrollCanvas();
+  const freePlanchetteVisible = !playback.isPlaying()
+    && previewActive
+    && interaction.cursorInCanvas
+    && interaction.cursorWorld != null;
   if (railVisible) {
-    renderPlanchettes(fgCtx, viewport, rect.width, rect.height, state.performance.planchettes, composeEngine.getLastLoopWrapAt());
+    if (freePlanchetteVisible) {
+      // Free planchette at cursor is the action location (preview tone follows cursor),
+      // so draw just the rail — skip the rail-bound planchette dot to avoid a duplicate.
+      renderRail(fgCtx, rect.width, rect.height, composeEngine.getLastLoopWrapAt());
+      // Composition+tone preview: also render a transient playhead at cursor X so the
+      // user can see where in the composition they're scrubbing. Rail still marks where
+      // a real Play would start from; this playhead disappears when preview ends.
+      if (state.drawPreviewMode === 'composition' && interaction.cursorWorld) {
+        renderPlayhead(fgCtx, viewport, interaction.cursorWorld.x, rect.height);
+      }
+    } else {
+      renderPlanchettes(fgCtx, viewport, rect.width, rect.height, state.performance.planchettes, composeEngine.getLastLoopWrapAt());
+    }
   } else {
     const playheadBeat = playback.isPlaying()
       ? playback.getPositionBeats()
@@ -1547,18 +1608,19 @@ function render() {
 
   // Free planchette: Idle + Space-hold draw preview + cursor over canvas.
   // Rendered at cursor X so the user sees exactly where they'd place / are hearing.
-  if (!playback.isPlaying() && previewActive && interaction.cursorInCanvas && interaction.cursorWorld) {
-    const cursorScreenX = viewport.worldToScreen(interaction.cursorWorld.x, 0).sx;
+  if (freePlanchetteVisible && interaction.cursorWorld) {
+    const cursorWorld = interaction.cursorWorld;
+    const cursorScreenX = viewport.worldToScreen(cursorWorld.x, 0).sx;
     const snapConfig = {
       enabled: state.snapEnabled,
       subdivisionsPerBeat: getAdaptiveSubdivisions(viewport.state.zoomX),
       scaleRoot: state.scaleRoot,
       scale: state.scaleId ? getScaleById(state.scaleId) ?? null : null,
     };
-    const snapped = snapToGrid(0, interaction.cursorWorld.y, snapConfig);
+    const snapped = snapToGrid(0, cursorWorld.y, snapConfig);
     renderFreePlanchette(
       fgCtx, viewport, cursorScreenX, snapped.wy,
-      interaction.cursorWorld.y, rect.height,
+      cursorWorld.y, rect.height,
     );
   }
 

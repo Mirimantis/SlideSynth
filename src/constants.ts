@@ -41,6 +41,12 @@ export const DEFAULT_BPM = 120;
 export const DEFAULT_BEATS_PER_MEASURE = 4;
 export const SUBDIVISIONS_PER_BEAT = 16; // snap to 1/16 beats
 
+// ── Curve handles ──────────────────────────────────────────────
+// Fraction of the neighbor segment's X distance used for auto-smoothed (horizontal)
+// bezier handle length. Shared by Draw Auto-Smoothing and the Smooth Curve action
+// so both stay in sync.
+export const AUTO_SMOOTH_X_RATIO = 0.25;
+
 // ── Canvas extent ──────────────────────────────────────────────
 // The canvas renders (and the viewport pans) over this range in beats.
 // Extent is derived dynamically from the composition length plus buffer,
