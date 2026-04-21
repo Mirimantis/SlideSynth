@@ -150,6 +150,7 @@ export function midiToComposition(buffer: ArrayBuffer): Composition {
     name: 'Imported MIDI',
     bpm,
     beatsPerMeasure: DEFAULT_BEATS_PER_MEASURE,
+    timeSignatureDenominator: 4,
     tracks,
     toneLibrary,
     loopStartBeats: 0,

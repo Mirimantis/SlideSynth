@@ -28,6 +28,12 @@ export interface PlaybackEngine {
   isLoopEnabled(): boolean;
   /** Update the active loop/auto-stop range mid-playback (e.g. when selection changes). */
   setPlayRange(loopStart: number, loopEnd: number): void;
+  /**
+   * Register a hook called once per scheduler tick with the current scheduling
+   * window in beats and a helper to convert any beat in that window to audio time.
+   * Used by the metronome to schedule clicks alongside tone playback.
+   */
+  setSchedulerHook(hook: ((fromBeat: number, toBeat: number, composition: Composition, beatToAudioTime: (beat: number) => number) => void) | null): void;
 }
 
 export function createPlaybackEngine(
@@ -44,6 +50,11 @@ export function createPlaybackEngine(
   let playStartBeat = 0;
   let playEndBeat = 0;
   let restartingLoop = false;
+  let schedulerHook: ((fromBeat: number, toBeat: number, composition: Composition, beatToAudioTime: (beat: number) => number) => void) | null = null;
+  /** Earliest beat not yet covered by the scheduler hook (tracks the shared
+   *  scheduling window so downstream consumers like the metronome can advance
+   *  a monotonic cursor). */
+  let hookFromBeat = 0;
 
   function getPositionBeats(): number {
     if (!playing) return startBeatOffset;
@@ -118,6 +129,20 @@ export function createPlaybackEngine(
       }
 
       tp.lastScheduledTime = scheduleUntil;
+    }
+
+    // Run scheduler hook (metronome etc.) over the same [hookFromBeat, toBeat)
+    // window. hookFromBeat advances monotonically with scheduleUntil.
+    if (schedulerHook && currentComposition) {
+      const hookToBeat = startBeatOffset + (scheduleUntil - startAudioTime) / beatsToSec;
+      const comp = currentComposition;
+      const localBeatsToSec = beatsToSec;
+      const localStartAudio = startAudioTime;
+      const localStartBeat = startBeatOffset;
+      const beatToAudioTime = (beat: number): number =>
+        localStartAudio + (beat - localStartBeat) * localBeatsToSec;
+      schedulerHook(hookFromBeat, hookToBeat, comp, beatToAudioTime);
+      hookFromBeat = hookToBeat;
     }
 
     // Update position callback
@@ -227,6 +252,9 @@ export function createPlaybackEngine(
       tp.lastScheduledTime = startAudioTime;
     }
 
+    // Align scheduler hook cursor to the play-start beat.
+    hookFromBeat = startBeat;
+
     // Start scheduler
     schedulerInterval = setInterval(scheduleAhead, SCHEDULER_INTERVAL_MS);
     scheduleAhead(); // immediate first schedule
@@ -266,6 +294,9 @@ export function createPlaybackEngine(
       if (endBeat <= startBeat) return;
       playStartBeat = startBeat;
       playEndBeat = endBeat;
+    },
+    setSchedulerHook(hook) {
+      schedulerHook = hook;
     },
   };
 }

@@ -16,6 +16,8 @@ function createInitialPrimaryPlanchette(trackId: string | null): PlanchetteState
 
 const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollCanvas';
 const PITCH_HUD_STORAGE_KEY = 'slidesynth.pitchHud';
+const METRONOME_ENABLED_STORAGE_KEY = 'slidesynth.metronomeEnabled';
+const METRONOME_VOLUME_STORAGE_KEY = 'slidesynth.metronomeVolume';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -30,6 +32,25 @@ function loadBoolPref(key: string, defaultValue: boolean): boolean {
 function saveBoolPref(key: string, value: boolean): void {
   try {
     localStorage.setItem(key, value ? 'true' : 'false');
+  } catch {
+    // Silently ignore — preference just won't persist.
+  }
+}
+
+function loadNumberPref(key: string, defaultValue: number): number {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return defaultValue;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+function saveNumberPref(key: string, value: number): void {
+  try {
+    localStorage.setItem(key, String(value));
   } catch {
     // Silently ignore — preference just won't persist.
   }
@@ -67,6 +88,8 @@ function createInitialState(): AppState {
     bezierAutoSmooth: false,
     scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, true),
     pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
+    metronomeEnabled: loadBoolPref(METRONOME_ENABLED_STORAGE_KEY, false),
+    metronomeVolume: loadNumberPref(METRONOME_VOLUME_STORAGE_KEY, 0.6),
   };
 }
 
@@ -222,6 +245,29 @@ class Store {
     if (this.state.pitchHudVisible === visible) return;
     this.state.pitchHudVisible = visible;
     saveBoolPref(PITCH_HUD_STORAGE_KEY, visible);
+    this.notify();
+  }
+
+  setMetronomeEnabled(enabled: boolean) {
+    if (this.state.metronomeEnabled === enabled) return;
+    this.state.metronomeEnabled = enabled;
+    saveBoolPref(METRONOME_ENABLED_STORAGE_KEY, enabled);
+    this.notify();
+  }
+
+  setMetronomeVolume(volume: number) {
+    const clamped = Math.max(0, Math.min(1, volume));
+    if (this.state.metronomeVolume === clamped) return;
+    this.state.metronomeVolume = clamped;
+    saveNumberPref(METRONOME_VOLUME_STORAGE_KEY, clamped);
+    this.notify();
+  }
+
+  setTimeSignature(numerator: number, denominator: number) {
+    if (this.state.composition.beatsPerMeasure === numerator
+        && this.state.composition.timeSignatureDenominator === denominator) return;
+    this.state.composition.beatsPerMeasure = numerator;
+    this.state.composition.timeSignatureDenominator = denominator;
     this.notify();
   }
 

@@ -63,7 +63,8 @@ export interface Composition {
   version: number;
   name: string;
   bpm: number;
-  beatsPerMeasure: number;
+  beatsPerMeasure: number;           // time-signature numerator
+  timeSignatureDenominator: number;  // 4 or 8 — defaults to 4
   tracks: Track[];
   toneLibrary: ToneDefinition[];
   loopStartBeats: number;
@@ -137,6 +138,8 @@ export interface AppState {
   bezierAutoSmooth: boolean;                  // Draw-tool: click-placed points get horizontal handles
   scrollCanvasEnabled: boolean;               // Compose Playback view preference (localStorage-backed)
   pitchHudVisible: boolean;                   // Pitch HUD user preference (localStorage-backed)
+  metronomeEnabled: boolean;                  // Metronome user preference (localStorage-backed)
+  metronomeVolume: number;                    // 0..1 — metronome master gain (localStorage-backed)
 }
 
 // ── Transform Box ──────────────────────────────────────────────

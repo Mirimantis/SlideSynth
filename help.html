@@ -251,8 +251,8 @@
     on the right. The right-hand panel is split into <strong>Tool Properties</strong>
     (variable settings for the active tool) on top and <strong>Object Properties</strong>
     (context for the selected track or point) below. The left panel is divided into
-    <strong>Transport</strong>, <strong>Tools</strong> (tool-mode buttons and Join),
-    and <strong>Tracks</strong>. A toolbar across the top shows the
+    <strong>Transport</strong> (BPM, time signature, metronome, loop, scroll
+    mode), <strong>Tools</strong> (tool-mode buttons), and <strong>Tracks</strong>. A toolbar across the top shows the
     <strong>composition name</strong> (editable) alongside the <strong>composition length</strong>
     (auto-derived from the rightmost point, shown as <code>M:SS</code>), followed by
     snap, scale controls, and file operations. A <strong>ruler bar</strong>
@@ -424,6 +424,8 @@
       <ul>
         <li><strong>Play / Pause / Stop</strong> — toolbar buttons or <kbd>Space</kbd> to toggle.</li>
         <li><strong>BPM</strong> — adjustable from 20 to 300.</li>
+        <li><strong>Time signature</strong> — dropdown with 2/4, 3/4, 4/4, 5/4, 7/4, 6/8, 9/8, 12/8. Measure lines on the ruler and staff update immediately; BPM continues to mean quarter notes per minute regardless of denominator. Persisted with the composition.</li>
+        <li><strong>Metronome</strong> — checkbox + volume slider in Transport. When enabled, audible clicks play during Playback (and Record) with three tiers: a bright high click on beat 1 of each measure (downbeat), a medium click on compound-meter secondary accents (beat 4 of 6/8, etc.), and a soft low click on every other tick. The ruler playhead / rail flashes a coloured ring on each tick so the beat is visible as well as audible. /4 meters tick on the beat; /8 meters tick on eighth-note subdivisions. Metronome clicks are not captured while recording (Record stores cursor Y, not audio output). Enabled state and volume persist via localStorage.</li>
         <li><strong>Length</strong> — derived automatically from the rightmost point in any curve and shown as <code>M:SS</code> next to the composition name. Playback stops at that point (or loops back to the start if Loop is on). With no points, playback is a no-op.</li>
         <li><strong>Canvas extent</strong> — the grid, staff, and rulers render everywhere you pan or zoom, with a generous buffer of open space past the last point so you can keep drawing outward. A memory-safe cap limits total pan range.</li>
         <li><strong>Loop</strong> (<kbd>L</kbd>) — when enabled, two draggable <strong>loop markers</strong> (green in, red out) appear in the ruler. Drag them to set the loop range; they snap to the beat grid and to existing curve control points. The range is saved with the composition. Markers hide when Loop is off; playback then runs through to composition end.</li>

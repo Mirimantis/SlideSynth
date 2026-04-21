@@ -17,7 +17,7 @@ export function renderStaff(
   vp: Viewport,
   width: number,
   height: number,
-  beatsPerMeasure: number = DEFAULT_BEATS_PER_MEASURE,
+  measureLen: number = DEFAULT_BEATS_PER_MEASURE,
   scaleRoot: number | null = null,
   scale: ScaleDefinition | null = null,
 ): void {
@@ -179,7 +179,7 @@ export function renderStaff(
     const { sx } = vp.worldToScreen(b, 0);
     if (sx < 0 || sx > width) continue;
 
-    const isMeasureStart = b % beatsPerMeasure === 0;
+    const isMeasureStart = measureLen > 0 && b % measureLen === 0;
 
     if (isMeasureStart) {
       ctx.strokeStyle = '#556';

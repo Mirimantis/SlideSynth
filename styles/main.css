@@ -495,6 +495,13 @@ body {
   pointer-events: none;
 }
 
+/* ── Metronome volume slider (Transport row) ─────────────────── */
+.metronome-volume {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--accent);
+}
+
 /* ── Right-click context menu ────────────────────────────────── */
 .context-menu {
   position: fixed;
