@@ -357,6 +357,20 @@ body {
   letter-spacing: 0.05em;
 }
 
+#tool-panel {
+  padding: 8px;
+}
+
+.tool-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.tool-panel-grid .tool-btn {
+  width: 100%;
+}
+
 #track-list {
   flex: 1;
   padding: 8px;
@@ -479,6 +493,45 @@ body {
   text-shadow: 0 0 24px rgba(79, 195, 247, 0.6);
   z-index: 13; /* above the pitch HUD (12) */
   pointer-events: none;
+}
+
+/* ── Right-click context menu ────────────────────────────────── */
+.context-menu {
+  position: fixed;
+  min-width: 180px;
+  background: var(--bg-light);
+  border: 1px solid #335;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  padding: 4px 0;
+  z-index: 50;
+  font-size: 0.85rem;
+  user-select: none;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 6px 14px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.context-menu-item:hover:not(.disabled) {
+  background: #1a4a80;
+}
+
+.context-menu-item.disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.context-menu-shortcut {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
 }
 
 #countdown-overlay[hidden] {

@@ -250,10 +250,12 @@
     the <strong>canvas</strong> in the centre, and a <strong>properties panel</strong>
     on the right. The right-hand panel is split into <strong>Tool Properties</strong>
     (variable settings for the active tool) on top and <strong>Object Properties</strong>
-    (context for the selected track or point) below. A toolbar across the top shows the
+    (context for the selected track or point) below. The left panel is divided into
+    <strong>Transport</strong>, <strong>Tools</strong> (tool-mode buttons and Join),
+    and <strong>Tracks</strong>. A toolbar across the top shows the
     <strong>composition name</strong> (editable) alongside the <strong>composition length</strong>
-    (auto-derived from the rightmost point, shown as <code>M:SS</code>), followed by tool
-    selection, zoom, snap, scale controls, and file operations. A <strong>ruler bar</strong>
+    (auto-derived from the rightmost point, shown as <code>M:SS</code>), followed by
+    snap, scale controls, and file operations. A <strong>ruler bar</strong>
     along the top of the canvas has two stacked strips: a <strong>seconds ruler</strong>
     on top that adapts its tick interval to zoom (sub-second decimals when zoomed in,
     whole seconds or larger when zoomed out) and a <strong>beat ruler</strong> below
@@ -345,6 +347,9 @@
         <li><kbd>Shift</kbd>+click to add/remove curves from a multi-selection.</li>
         <li>When a single curve is selected, drag its handles (handleIn / handleOut) to adjust curvature.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to the horizontal or vertical axis.</li>
+        <li>Right-click anywhere on the canvas to open an action menu with
+            <strong>Smooth Curve</strong>, <strong>Sharpen Curve</strong>, and
+            <strong>Join</strong>; items dim when no curves are selected.</li>
       </ul>
     </div>
   </details>
@@ -384,7 +389,7 @@
         <li>If endpoints are far apart, a new straight segment bridges the gap.</li>
         <li>Curves that overlap in time (start point before the previous curve's end) are skipped.</li>
         <li>Handles at merged points are preserved from each side, maintaining curve shape.</li>
-        <li>Also available via the <strong>Join</strong> button in the toolbar.</li>
+        <li>Also available via the right-click action menu on the canvas.</li>
         <li>Use <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo a join.</li>
       </ul>
     </div>
