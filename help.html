@@ -220,6 +220,7 @@
     <a href="#playback">Playback & Transport</a>
     <a href="#tracks">Tracks & Tones</a>
     <a href="#preview">Live Audio Preview</a>
+    <a href="#midi-input">Live MIDI Input</a>
     <a href="#snapping">Snap & Grid</a>
     <a href="#scales">Key & Scale</a>
     <a href="#viewport">Zoom & Pan</a>
@@ -489,6 +490,32 @@
         <li>Release <kbd>Space</kbd> to stop the preview.</li>
         <li>When the cursor is not over the canvas or you're not in Draw mode,
             <kbd>Space</kbd> works as the normal play/pause toggle.</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- MIDI input -->
+  <h2 id="midi-input">Live MIDI Input</h2>
+  <p>
+    Connect a MIDI keyboard or controller and play notes straight into the selected
+    track's tone. Distinct from <strong>File &gt; Import MIDI</strong>, which reads
+    an existing <code>.mid</code> file into new curves.
+  </p>
+  <details>
+    <summary>MIDI input details</summary>
+    <div class="detail-body">
+      <ul>
+        <li>Pick a device from the <strong>MIDI</strong> dropdown in the Transport
+            panel. On first selection the browser prompts for MIDI access.</li>
+        <li><kbd>Note On</kbd> sounds the selected track's tone at the note's pitch;
+            <kbd>Note Off</kbd> stops it. Held notes play in parallel (polyphonic),
+            so you can sound chords against the track's tone.</li>
+        <li>The dropdown updates automatically when devices are plugged or unplugged.</li>
+        <li>Recording from live MIDI (capturing played notes as curves) is not yet
+            wired up in this first pass — use mouse Perform or Import MIDI for that.
+            Pitch-bend and CC messages are also ignored for now.</li>
+        <li>Requires a browser with Web MIDI support (Chromium-based browsers). The
+            dropdown is disabled when the API is unavailable.</li>
       </ul>
     </div>
   </details>
