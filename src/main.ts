@@ -15,6 +15,7 @@ import { createToolPanel } from './ui/tool-panel';
 import { openContextMenu } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
+import { createMidiInput } from './audio/midi-input';
 import { renderPlanchettes, renderFreePlanchette, renderRail, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
 import { renderToolPropertyPanel } from './ui/tool-property-panel';
@@ -98,6 +99,12 @@ app.innerHTML = `
             <span>Metronome</span>
           </label>
           <input type="range" id="metronome-volume" class="metronome-volume" min="0" max="100" value="60" title="Metronome volume" />
+        </div>
+        <div class="transport-row">
+          <label>MIDI</label>
+          <select id="input-midi-device" title="Live MIDI input device">
+            <option value="">None</option>
+          </select>
         </div>
       </div>
       <div class="panel-header">Tools</div>
@@ -562,6 +569,68 @@ timeSigSelect.addEventListener('change', () => {
   bgDirty = true;
   timeSigSelect.blur();
 });
+
+// ── Live MIDI input ─────────────────────────────────────────────
+const midiInput = createMidiInput();
+const midiDeviceSelect = document.getElementById('input-midi-device') as HTMLSelectElement;
+
+function refreshMidiDeviceList() {
+  const active = midiInput.getActiveDeviceId();
+  const devices = midiInput.getDevices();
+  midiDeviceSelect.innerHTML = '<option value="">None</option>'
+    + devices.map(d => `<option value="${d.id}">${d.name || d.manufacturer || d.id}</option>`).join('');
+  midiDeviceSelect.value = active ?? '';
+}
+
+midiInput.onDevicesChanged(refreshMidiDeviceList);
+
+midiInput.onNoteOn((note, velocity) => {
+  const state = store.getState();
+  const trackId = state.selectedTrackId;
+  if (!trackId) return;
+  const track = state.composition.tracks.find(t => t.id === trackId);
+  if (!track) return;
+  const tone = state.composition.toneLibrary.find(t => t.id === track.toneId);
+  if (!tone) return;
+  ensureResumed();
+  // Per-note voice ID lets simultaneously-held notes sound in parallel.
+  preview.startDrawPreview(tone, note, `midi-${note}`);
+  // velocity reserved for a future loudness-mapped preview; stable mid-volume for now.
+  void velocity;
+});
+
+midiInput.onNoteOff((note) => {
+  preview.stopDrawPreview(`midi-${note}`);
+});
+
+midiDeviceSelect.addEventListener('change', async () => {
+  const id = midiDeviceSelect.value || null;
+  if (id && !midiInput.hasAccess()) {
+    const ok = await midiInput.requestAccess();
+    if (!ok) {
+      alert('MIDI access denied or unsupported by this browser.');
+      midiDeviceSelect.value = '';
+      return;
+    }
+    refreshMidiDeviceList();
+    midiDeviceSelect.value = id;
+  }
+  midiInput.setActiveDevice(id);
+  midiDeviceSelect.blur();
+});
+
+// Populate the list lazily on first focus — requesting MIDI access earlier
+// would trigger a permission prompt before the user showed intent.
+midiDeviceSelect.addEventListener('focus', async () => {
+  if (midiInput.hasAccess() || !midiInput.isSupported()) return;
+  const ok = await midiInput.requestAccess();
+  if (ok) refreshMidiDeviceList();
+});
+
+if (!midiInput.isSupported()) {
+  midiDeviceSelect.disabled = true;
+  midiDeviceSelect.title = 'Web MIDI not supported in this browser';
+}
 
 // ── Metronome controls ─────────────────────────────────────────
 const metronomeToggle = document.getElementById('metronome-toggle') as HTMLInputElement;
