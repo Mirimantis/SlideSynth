@@ -140,6 +140,7 @@ export interface AppState {
   pitchHudVisible: boolean;                   // Pitch HUD user preference (localStorage-backed)
   metronomeEnabled: boolean;                  // Metronome user preference (localStorage-backed)
   metronomeVolume: number;                    // 0..1 — metronome master gain (localStorage-backed)
+  snapGlideBeats: number;                     // 0..16 beats — Performance pitch glide between snap targets (localStorage-backed)
 }
 
 // ── Transform Box ──────────────────────────────────────────────

@@ -18,6 +18,7 @@ const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollCanvas';
 const PITCH_HUD_STORAGE_KEY = 'slidesynth.pitchHud';
 const METRONOME_ENABLED_STORAGE_KEY = 'slidesynth.metronomeEnabled';
 const METRONOME_VOLUME_STORAGE_KEY = 'slidesynth.metronomeVolume';
+const SNAP_GLIDE_BEATS_STORAGE_KEY = 'slidesynth.snapGlideBeats';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -90,6 +91,7 @@ function createInitialState(): AppState {
     pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
     metronomeEnabled: loadBoolPref(METRONOME_ENABLED_STORAGE_KEY, false),
     metronomeVolume: loadNumberPref(METRONOME_VOLUME_STORAGE_KEY, 0.6),
+    snapGlideBeats: Math.max(0, Math.min(1, loadNumberPref(SNAP_GLIDE_BEATS_STORAGE_KEY, 0))),
   };
 }
 
@@ -260,6 +262,14 @@ class Store {
     if (this.state.metronomeVolume === clamped) return;
     this.state.metronomeVolume = clamped;
     saveNumberPref(METRONOME_VOLUME_STORAGE_KEY, clamped);
+    this.notify();
+  }
+
+  setSnapGlideBeats(beats: number) {
+    const clamped = Math.max(0, Math.min(1, beats));
+    if (this.state.snapGlideBeats === clamped) return;
+    this.state.snapGlideBeats = clamped;
+    saveNumberPref(SNAP_GLIDE_BEATS_STORAGE_KEY, clamped);
     this.notify();
   }
 
