@@ -1,7 +1,6 @@
 import { SCALE_CATALOG, getScaleGroups } from '../utils/scales';
 
 export interface ToolbarCallbacks {
-  onSnapToggle(enabled: boolean): void;
   onScaleRootChange(root: number | null): void;
   onScaleIdChange(scaleId: string | null): void;
 }
@@ -10,7 +9,6 @@ export function createToolbar(
   container: HTMLElement,
   callbacks: ToolbarCallbacks,
 ): {
-  updateSnap(enabled: boolean): void;
   updateScaleRoot(root: number | null): void;
   updateScaleId(scaleId: string | null): void;
 } {
@@ -27,10 +25,6 @@ export function createToolbar(
 
   container.innerHTML = `
     <div class="toolbar-row">
-      <div class="toolbar-group">
-        <button id="snap-toggle" class="tool-btn active" title="Toggle snap (S)">Snap</button>
-      </div>
-
       <div class="toolbar-group scale">
         <label>Key</label>
         <select id="scale-root">
@@ -55,15 +49,6 @@ export function createToolbar(
     </div>
   `;
 
-  // Snap toggle
-  const snapToggle = container.querySelector('#snap-toggle') as HTMLButtonElement;
-  let snapOn = true;
-  snapToggle.addEventListener('click', () => {
-    snapOn = !snapOn;
-    snapToggle.classList.toggle('active', snapOn);
-    callbacks.onSnapToggle(snapOn);
-  });
-
   // Scale root / type
   const scaleRootSelect = container.querySelector('#scale-root') as HTMLSelectElement;
   const scaleTypeSelect = container.querySelector('#scale-type') as HTMLSelectElement;
@@ -87,10 +72,6 @@ export function createToolbar(
   });
 
   return {
-    updateSnap(enabled: boolean) {
-      snapOn = enabled;
-      snapToggle.classList.toggle('active', enabled);
-    },
     updateScaleRoot(root: number | null) {
       scaleRootSelect.value = root === null ? 'none' : String(root);
       scaleTypeSelect.disabled = root === null;

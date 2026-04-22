@@ -209,6 +209,69 @@ body {
   accent-color: var(--accent);
 }
 
+/* ── Toggle switch (shared visual for Snap / Metronome / Pitch HUD / Loop / Scroll) */
+
+.toggle-switch-track {
+  position: relative;
+  width: 30px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #335;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.toggle-switch-track:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.toggle-switch-track input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.toggle-switch-thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 50%;
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+
+.toggle-switch-track input:checked + .toggle-switch-thumb {
+  transform: translateX(14px);
+}
+
+/* Single-label toggle row: [switch] [label]. Use on .transport-row children. */
+.toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text);
+  cursor: default;
+  user-select: none;
+}
+
+.toggle-switch-label {
+  cursor: pointer;
+}
+
+/* Dim the label when the switch is off. */
+.toggle-switch:has(input:not(:checked)) .toggle-switch-label {
+  color: var(--text-dim);
+}
+
 /* ── Scroll switch: Canvas ↔ Planchette ──────────────────────── */
 
 .scroll-switch {
@@ -245,46 +308,6 @@ body {
 .scroll-switch:has(input:not(:checked)) .scroll-switch-side.left,
 .scroll-switch:has(input:checked) .scroll-switch-side.right {
   color: var(--accent);
-}
-
-.scroll-switch-track {
-  position: relative;
-  width: 30px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid #335;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.scroll-switch-track:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.scroll-switch-track input {
-  position: absolute;
-  opacity: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  cursor: pointer;
-}
-
-.scroll-switch-thumb {
-  position: absolute;
-  top: 1px;
-  left: 1px;
-  width: 12px;
-  height: 12px;
-  background: var(--accent);
-  border-radius: 50%;
-  transition: transform 0.15s ease;
-  pointer-events: none;
-}
-
-.scroll-switch-track input:checked + .scroll-switch-thumb {
-  transform: translateX(14px);
 }
 
 .toolbar-time-display {
@@ -500,6 +523,21 @@ body {
   flex: 1;
   min-width: 60px;
   accent-color: var(--accent);
+}
+
+/* ── Snap Glide slider (Transport row) ───────────────────────── */
+.snap-glide-slider {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--accent);
+}
+
+.snap-glide-value {
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  min-width: 30px;
+  text-align: right;
 }
 
 /* ── Right-click context menu ────────────────────────────────── */

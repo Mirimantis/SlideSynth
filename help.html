@@ -256,7 +256,7 @@
     mode), <strong>Tools</strong> (tool-mode buttons), and <strong>Tracks</strong>. A toolbar across the top shows the
     <strong>composition name</strong> (editable) alongside the <strong>composition length</strong>
     (auto-derived from the rightmost point, shown as <code>M:SS</code>), followed by
-    snap, scale controls, and file operations. A <strong>ruler bar</strong>
+    scale controls and file operations. A <strong>ruler bar</strong>
     along the top of the canvas has two stacked strips: a <strong>seconds ruler</strong>
     on top that adapts its tick interval to zoom (sub-second decimals when zoomed in,
     whole seconds or larger when zoomed out) and a <strong>beat ruler</strong> below
@@ -523,7 +523,9 @@
   <!-- Snap -->
   <h2 id="snapping">Snap & Grid</h2>
   <p>
-    Toggle snap on/off with the <strong>Snap</strong> button or press <kbd>S</kbd>.
+    Toggle snap on/off with the <strong>Snap</strong> switch in the Transport panel
+    or press <kbd>S</kbd>. The switch sits alongside a <strong>Glide</strong> slider
+    that controls glissando snap duration.
   </p>
   <details>
     <summary>Snap details</summary>
@@ -533,6 +535,15 @@
         <li><strong>Adaptive snap</strong> — the time-axis snap granularity adjusts with zoom: 1/16-beat at high zoom, eighth-note at medium zoom, and whole beats when zoomed out. The ruler ticks match the current snap resolution.</li>
         <li>Bezier handles are never snapped, allowing smooth curve shaping regardless of snap setting.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to one axis.</li>
+        <li><strong>Glide</strong> (0–16 beats) — at 0, the planchette snaps instantly
+            between lines (the default). Above 0, during Compose Performance and
+            Recording, the audible pitch glides smoothly from the previous snap to
+            the new one over the set number of beats, producing a glissando.
+            Recorded curves show a diagonal connecting segment proportional to the
+            glide length. If the cursor crosses multiple snap cells mid-glide, the
+            pitch re-anchors toward the most recent cell, so fast passes stay
+            responsive instead of queuing up transitions. Glide only has an audible
+            effect when Snap is on.</li>
       </ul>
     </div>
   </details>

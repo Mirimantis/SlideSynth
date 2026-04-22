@@ -16,6 +16,7 @@ import { openContextMenu } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
 import { createMidiInput } from './audio/midi-input';
+import { createSnapGlideState, updateGlide, resetSnapGlide } from './utils/snap-glide';
 import { renderPlanchettes, renderFreePlanchette, renderRail, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
 import { renderToolPropertyPanel } from './ui/tool-property-panel';
@@ -52,9 +53,14 @@ app.innerHTML = `
           <button id="btn-pause" title="Pause" disabled>&#10074;&#10074;</button>
           <button id="btn-stop" title="Stop">&#9632;</button>
           <button id="btn-record" class="record-btn" title="Record (R) — captures curves onto the selected track" hidden>&#9679;</button>
-          <label class="toolbar-loop-label" title="Loop playback (L)">
-            <input type="checkbox" id="loop-toggle" />
-            <span>Loop</span>
+        </div>
+        <div class="transport-row">
+          <label class="toggle-switch" title="Loop playback (L)">
+            <span class="toggle-switch-track">
+              <input type="checkbox" id="loop-toggle" />
+              <span class="toggle-switch-thumb"></span>
+            </span>
+            <span class="toggle-switch-label">Loop</span>
           </label>
         </div>
         <div class="transport-row scroll-switch-row">
@@ -62,18 +68,21 @@ app.innerHTML = `
             <div class="scroll-switch-title">Scroll</div>
             <div class="scroll-switch-control">
               <span class="scroll-switch-side left">Canvas</span>
-              <label class="scroll-switch-track">
+              <label class="toggle-switch-track">
                 <input type="checkbox" id="scroll-canvas-toggle" />
-                <span class="scroll-switch-thumb"></span>
+                <span class="toggle-switch-thumb"></span>
               </label>
               <span class="scroll-switch-side right">Planchette</span>
             </div>
           </div>
         </div>
         <div class="transport-row">
-          <label id="pitch-hud-label" class="toolbar-loop-label" title="Show the pitch readout when the cursor is over the canvas">
-            <input type="checkbox" id="pitch-hud-toggle" />
-            <span>Pitch HUD</span>
+          <label id="pitch-hud-label" class="toggle-switch" title="Show the pitch readout when the cursor is over the canvas">
+            <span class="toggle-switch-track">
+              <input type="checkbox" id="pitch-hud-toggle" />
+              <span class="toggle-switch-thumb"></span>
+            </span>
+            <span class="toggle-switch-label">Pitch HUD</span>
           </label>
         </div>
         <div class="transport-row">
@@ -94,9 +103,23 @@ app.innerHTML = `
           </select>
         </div>
         <div class="transport-row">
-          <label class="toolbar-loop-label" title="Metronome clicks during playback">
-            <input type="checkbox" id="metronome-toggle" />
-            <span>Metronome</span>
+          <label class="toggle-switch" title="Toggle snap (S)">
+            <span class="toggle-switch-track">
+              <input type="checkbox" id="snap-toggle" checked />
+              <span class="toggle-switch-thumb"></span>
+            </span>
+            <span class="toggle-switch-label">Snap</span>
+          </label>
+          <input type="range" id="input-snap-glide" class="snap-glide-slider" min="0" max="1" value="0" step="0.1" title="Snap glide duration in beats (0 = instant)" />
+          <span class="snap-glide-value">0</span>
+        </div>
+        <div class="transport-row">
+          <label class="toggle-switch" title="Metronome clicks during playback">
+            <span class="toggle-switch-track">
+              <input type="checkbox" id="metronome-toggle" />
+              <span class="toggle-switch-thumb"></span>
+            </span>
+            <span class="toggle-switch-label">Metronome</span>
           </label>
           <input type="range" id="metronome-volume" class="metronome-volume" min="0" max="100" value="60" title="Metronome volume" />
         </div>
@@ -359,10 +382,7 @@ playback.setSchedulerHook((fromBeat, toBeat, comp, beatToAudioTime) => {
 // ── Toolbar ─────────────────────────────────────────────────────
 const toolbarContainer = document.getElementById('toolbar')!;
 
-const toolbar = createToolbar(toolbarContainer, {
-  onSnapToggle(enabled: boolean) {
-    store.setSnap(enabled);
-  },
+createToolbar(toolbarContainer, {
   onScaleRootChange(root: number | null) {
     store.setScaleRoot(root);
     bgDirty = true;
@@ -631,6 +651,26 @@ if (!midiInput.isSupported()) {
   midiDeviceSelect.disabled = true;
   midiDeviceSelect.title = 'Web MIDI not supported in this browser';
 }
+
+// ── Snap toggle + Snap Glide slider (Transport) ────────────────
+const snapToggleInput = document.getElementById('snap-toggle') as HTMLInputElement;
+const snapGlideSlider = document.getElementById('input-snap-glide') as HTMLInputElement;
+const snapGlideValue = document.querySelector('.snap-glide-value') as HTMLSpanElement;
+snapToggleInput.checked = store.getState().snapEnabled;
+{
+  const g = store.getState().snapGlideBeats;
+  snapGlideSlider.value = String(g);
+  snapGlideValue.textContent = String(g);
+}
+snapToggleInput.addEventListener('change', () => {
+  store.setSnap(snapToggleInput.checked);
+  snapToggleInput.blur();
+});
+snapGlideSlider.addEventListener('input', () => {
+  const beats = Number(snapGlideSlider.value);
+  store.setSnapGlideBeats(beats);
+  snapGlideValue.textContent = String(beats);
+});
 
 // ── Metronome controls ─────────────────────────────────────────
 const metronomeToggle = document.getElementById('metronome-toggle') as HTMLInputElement;
@@ -1062,7 +1102,6 @@ window.addEventListener('keydown', (e) => {
     case 's': {
       const snapEnabled = !store.getState().snapEnabled;
       store.setSnap(snapEnabled);
-      toolbar.updateSnap(snapEnabled);
       break;
     }
     case 'l':
@@ -1304,7 +1343,13 @@ const composeEngine = createPerformanceEngine({
   loopWrapThresholdBeats: 0.5,
 });
 
-function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number } {
+const snapGlideState = createSnapGlideState();
+
+/** Last known compose-mode cursor screen Y. Cached so the per-frame glide tick
+ *  can keep advancing the planchette pitch even when the mouse isn't moving. */
+let lastComposeSy: number | null = null;
+
+function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number; snapTarget: number } {
   const { wy } = viewport.screenToWorld(0, sy);
   const st = store.getState();
   const scale = st.scaleId ? getScaleById(st.scaleId) ?? null : null;
@@ -1315,21 +1360,51 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
     scale,
   };
   const snapped = snapToGrid(0, wy, snapConfig);
-  return { cursorWorldY: wy, snappedWorldY: snapped.wy };
+  const nowBeats = playback.getPositionBeats();
+  // Glide only applies while the user is actively sounding a tone (LMB-held
+  // performance). Hovering in Select/Draw/etc should track the cursor
+  // instantly — otherwise the planchette appears to lag even when nothing is
+  // being played.
+  const performing = composeEngine.isLmbDown();
+  const glideBeats = st.snapEnabled && performing ? st.snapGlideBeats : 0;
+  const glidedPitch = updateGlide(snapGlideState, snapped.wy, nowBeats, glideBeats, performance.now());
+  return { cursorWorldY: wy, snappedWorldY: glidedPitch, snapTarget: snapped.wy };
 }
 
+/** Previous snap target (pre-glide). Used to trigger the snap-line-cross pulse
+ *  on target changes rather than on every frame of the in-flight glide. */
+let prevSnapTarget: number | null = null;
+
 function composeUpdatePlanchette(sy: number) {
+  lastComposeSy = sy;
   if (sy < RULER_HEIGHT && !composeEngine.isLmbDown()) {
     store.setPlanchetteY('primary', null, null);
+    resetSnapGlide(snapGlideState);
+    prevSnapTarget = null;
+    lastComposeSy = null;
     return;
   }
-  const { cursorWorldY, snappedWorldY } = computeComposeCursorPitch(sy);
-  const prev = store.getState().performance.planchettes.find(p => p.voiceId === 'primary');
-  const prevSnapped = prev?.snappedWorldY ?? null;
+  const { cursorWorldY, snappedWorldY, snapTarget } = computeComposeCursorPitch(sy);
   store.setPlanchetteY('primary', cursorWorldY, snappedWorldY);
-  // Snap-line-cross pulse tracking (mirrors Gliss behaviour).
-  if (prevSnapped != null && prevSnapped !== snappedWorldY) {
+  // Snap-line-cross pulse tracking — fire on target change, not on every frame
+  // of glide interpolation.
+  if (prevSnapTarget != null && prevSnapTarget !== snapTarget) {
     store.markPlanchetteCrossed('primary', Date.now());
+  }
+  prevSnapTarget = snapTarget;
+}
+
+/** Per-frame glide advance: re-runs composeUpdatePlanchette with the last known
+ *  cursor Y so the glide interpolation keeps advancing even when the mouse is
+ *  still. Also updates the currently-sounding synth so the audible pitch matches. */
+function tickComposeGlide() {
+  if (lastComposeSy === null) return;
+  if (store.getState().snapGlideBeats <= 0) return;
+  if (!store.getState().snapEnabled) return;
+  composeUpdatePlanchette(lastComposeSy);
+  if (composeEngine.isLmbDown()) {
+    const p = store.getState().performance.planchettes[0];
+    if (p?.snappedWorldY != null) updateComposePerformPitch(p.snappedWorldY);
   }
 }
 
@@ -1524,6 +1599,9 @@ fgCanvas.addEventListener('mousemove', (e) => {
 fgCanvas.addEventListener('mouseleave', () => {
   if (!composeEngine.isLmbDown()) {
     store.setPlanchetteY('primary', null, null);
+    resetSnapGlide(snapGlideState);
+    prevSnapTarget = null;
+    lastComposeSy = null;
   }
 });
 
@@ -1627,12 +1705,25 @@ function render() {
   // Recording forces the scrolling view on via `effectiveScrollCanvas()`.
   const composeScrolling = effectiveScrollCanvas() && playback.isPlaying();
   if (composeScrolling) {
-    scrollViewportToBeat(viewport, playback.getPositionBeats(), rect.width, rect.height);
+    // While recording the in-flight buffer isn't reflected in the composition
+    // length yet, so the canvas extent can be shorter than the live playhead —
+    // the viewport would clamp and the canvas visually freezes. Bump the extent
+    // to stay ahead of the playhead so scroll keeps going until LMB release
+    // commits the captured curve (after which syncCompositionDerived takes over).
+    const playheadBeat = playback.getPositionBeats();
+    const neededExtent = Math.min(MAX_CANVAS_EXTENT, playheadBeat + SCROLL_BUFFER);
+    if (viewport.canvasExtent < neededExtent) viewport.canvasExtent = neededExtent;
+    scrollViewportToBeat(viewport, playheadBeat, rect.width, rect.height);
     bgDirty = true;
   }
 
   // Compose performance tick: countdown advance, loop-wrap detection, AFK auto-stop.
   tickComposePerform();
+
+  // Per-frame glide advance — keeps the planchette interpolating toward the
+  // current snap target even when the mouse is still. No-op when glide is 0
+  // or snap is off.
+  tickComposeGlide();
 
   // Per-frame sync for Compose UI affordances
   toolPanel.setDisabled(isComposePerformActive());
@@ -1845,6 +1936,13 @@ store.subscribe(() => {
   const appState = store.getState();
   if (metronomeToggle.checked !== appState.metronomeEnabled) {
     metronomeToggle.checked = appState.metronomeEnabled;
+  }
+  if (snapToggleInput.checked !== appState.snapEnabled) {
+    snapToggleInput.checked = appState.snapEnabled;
+  }
+  if (Number(snapGlideSlider.value) !== appState.snapGlideBeats) {
+    snapGlideSlider.value = String(appState.snapGlideBeats);
+    snapGlideValue.textContent = String(appState.snapGlideBeats);
   }
   metronome.setEnabled(appState.metronomeEnabled);
   metronome.setVolume(appState.metronomeVolume);
