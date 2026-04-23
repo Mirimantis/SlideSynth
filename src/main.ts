@@ -163,7 +163,7 @@ app.innerHTML = `
       <canvas id="fg-canvas"></canvas>
       <div id="zoom-controls">
         <span class="zoom-label">Zoom</span>
-        <input type="range" id="zoom-x" min="${MIN_ZOOM_X}" max="${MAX_ZOOM_X}" value="${viewport.state.zoomX}" step="1" title="Zoom X (time)" />
+        <input type="range" id="zoom-x" min="0" max="1000" value="0" step="1" title="Zoom X (time) — logarithmic" />
         <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="1" title="Zoom Y (pitch)" />
       </div>
       <div id="pitch-hud" hidden></div>
@@ -786,6 +786,22 @@ loopToggle.addEventListener('change', () => {
 const zoomX = document.getElementById('zoom-x') as HTMLInputElement;
 const zoomY = document.getElementById('zoom-y') as HTMLInputElement;
 
+/** Zoom X slider uses a logarithmic mapping so a single slider covers the full
+ *  ~1200× range (0.5..600 px/beat) without the low-zoom end squeezing out all
+ *  the useful mid-zoom resolution. */
+const ZOOM_X_LOG_STEPS = 1000;
+const ZOOM_X_LOG_RATIO = Math.log(MAX_ZOOM_X / MIN_ZOOM_X);
+function sliderPosToZoomX(pos: number): number {
+  const t = Math.max(0, Math.min(1, pos / ZOOM_X_LOG_STEPS));
+  return MIN_ZOOM_X * Math.exp(t * ZOOM_X_LOG_RATIO);
+}
+function zoomXToSliderPos(zoom: number): number {
+  const t = Math.log(zoom / MIN_ZOOM_X) / ZOOM_X_LOG_RATIO;
+  return Math.round(Math.max(0, Math.min(1, t)) * ZOOM_X_LOG_STEPS);
+}
+// Initialize slider position from current zoomX.
+zoomX.value = String(zoomXToSliderPos(viewport.state.zoomX));
+
 /** Anchor for slider zoom: center of selection bbox if any selected, else canvas center. */
 function getSliderZoomAnchor(): { sx: number; sy: number } {
   const rect = canvasContainer.getBoundingClientRect();
@@ -804,7 +820,7 @@ function getSliderZoomAnchor(): { sx: number; sy: number } {
 }
 
 zoomX.addEventListener('input', () => {
-  const target = Number(zoomX.value);
+  const target = sliderPosToZoomX(Number(zoomX.value));
   const factor = target / viewport.state.zoomX;
   if (factor !== 1 && isFinite(factor)) {
     viewport.zoomXAt(factor, getSliderZoomAnchor().sx);
@@ -833,7 +849,7 @@ zoomX.addEventListener('change', () => zoomX.blur());
 zoomY.addEventListener('change', () => zoomY.blur());
 
 function updateZoom() {
-  zoomX.value = String(viewport.state.zoomX);
+  zoomX.value = String(zoomXToSliderPos(viewport.state.zoomX));
   zoomY.min = String(viewport.minZoomY);
   zoomY.value = String(viewport.state.zoomY);
 }

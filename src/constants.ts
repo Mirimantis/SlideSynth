@@ -58,7 +58,10 @@ export const MAX_CANVAS_EXTENT = 10000; // memory cap (~83 min at 120 BPM)
 // ── Viewport defaults ───────────────────────────────────────────
 export const DEFAULT_ZOOM_X = 120;  // pixels per beat
 export const DEFAULT_ZOOM_Y = 14;   // pixels per semitone
-export const MIN_ZOOM_X = 30;
+// Min is 0.5 px/beat so the viewport can show ~10 minutes at 120 BPM on a
+// typical canvas width. The slider maps to this range logarithmically so the
+// useful mid-range resolution isn't swamped by the extended low end.
+export const MIN_ZOOM_X = 0.5;
 export const MAX_ZOOM_X = 600;
 export const MIN_ZOOM_Y = 4;
 export const MAX_ZOOM_Y = 140;

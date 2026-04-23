@@ -6,6 +6,7 @@ import {
 } from '../constants';
 import type { ScaleDefinition } from '../utils/scales';
 import { isNoteInScale, isMicrotonal, getScaleNotes } from '../utils/scales';
+import { getAdaptiveBeatStep } from '../utils/snap';
 
 /**
  * Render the background staff grid onto a canvas.
@@ -142,12 +143,16 @@ export function renderStaff(
   const showSixteenths = vp.state.zoomX >= 60;
   const showEighths = vp.state.zoomX >= 35;
 
-  const startBeat = Math.max(0, minBeat);
+  // Coarsen the main vertical-line step when zoomed way out: beats →
+  // measures → every-2nd measure → every-4th, etc. Keeps the canvas from
+  // drawing thousands of sub-pixel lines at low zoom.
+  const beatStep = getAdaptiveBeatStep(vp.state.zoomX, measureLen);
+  const startBeat = Math.max(0, Math.floor(minBeat / beatStep) * beatStep);
   const endBeat = maxBeat;
 
-  for (let b = startBeat; b <= endBeat; b++) {
-    // Draw subdivisions within this beat
-    if (showEighths || showSixteenths) {
+  for (let b = startBeat; b <= endBeat; b += beatStep) {
+    // Draw subdivisions within this beat (only when rendering every beat)
+    if (beatStep === 1 && (showEighths || showSixteenths)) {
       const subdiv = showSixteenths ? SUBDIVISIONS_PER_BEAT : 2;
       for (let s = 1; s < subdiv; s++) {
         const subBeat = b + s / subdiv;
