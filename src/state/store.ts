@@ -1,6 +1,6 @@
 import type { AppState, Composition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState } from '../types';
 import { createComposition } from '../model/composition';
-import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_NOTE } from '../constants';
+import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_NOTE, AUTO_SMOOTH_X_RATIO } from '../constants';
 
 type Listener = () => void;
 
@@ -22,6 +22,7 @@ const MAGNETIC_ENABLED_STORAGE_KEY = 'slidesynth.magneticEnabled';
 const MAGNETIC_STRENGTH_STORAGE_KEY = 'slidesynth.magneticStrength';
 const MAGNETIC_SPRING_K_STORAGE_KEY = 'slidesynth.magneticSpringK';
 const MAGNETIC_DAMPING_STORAGE_KEY = 'slidesynth.magneticDamping';
+const AUTO_SMOOTH_X_RATIO_STORAGE_KEY = 'slidesynth.autoSmoothXRatio';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -98,6 +99,7 @@ function createInitialState(): AppState {
     magneticStrength: Math.max(0, Math.min(1, loadNumberPref(MAGNETIC_STRENGTH_STORAGE_KEY, 0.75))),
     magneticSpringK: Math.max(1, Math.min(50, loadNumberPref(MAGNETIC_SPRING_K_STORAGE_KEY, 30))),
     magneticDamping: Math.max(0.25, Math.min(15, loadNumberPref(MAGNETIC_DAMPING_STORAGE_KEY, 3))),
+    autoSmoothXRatio: Math.max(0, Math.min(1, loadNumberPref(AUTO_SMOOTH_X_RATIO_STORAGE_KEY, AUTO_SMOOTH_X_RATIO))),
   };
 }
 
@@ -299,6 +301,14 @@ class Store {
     if (this.state.magneticDamping === clamped) return;
     this.state.magneticDamping = clamped;
     saveNumberPref(MAGNETIC_DAMPING_STORAGE_KEY, clamped);
+    this.notify();
+  }
+
+  setAutoSmoothXRatio(r: number) {
+    const clamped = Math.max(0, Math.min(1, r));
+    if (this.state.autoSmoothXRatio === clamped) return;
+    this.state.autoSmoothXRatio = clamped;
+    saveNumberPref(AUTO_SMOOTH_X_RATIO_STORAGE_KEY, clamped);
     this.notify();
   }
 

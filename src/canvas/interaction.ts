@@ -495,7 +495,7 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
       const idx = addPointToCurve(targetCurve, point);
       // Re-clamp neighboring handles so they don't extend past the new point.
       reclampHandlesAround(targetCurve, idx);
-      if (state.bezierAutoSmooth) applyAutoSmoothHandles(targetCurve, idx);
+      if (state.bezierAutoSmooth) applyAutoSmoothHandles(targetCurve, idx, state.autoSmoothXRatio);
       store.setSelectedPoint(idx);
 
       // Start dragging handle
@@ -531,7 +531,7 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
     const idx = addPointToCurve(istate.drawingCurve, point);
     // Re-clamp neighboring handles so they don't extend past the new point.
     reclampHandlesAround(istate.drawingCurve, idx);
-    if (state.bezierAutoSmooth) applyAutoSmoothHandles(istate.drawingCurve, idx);
+    if (state.bezierAutoSmooth) applyAutoSmoothHandles(istate.drawingCurve, idx, state.autoSmoothXRatio);
     store.setSelectedPoint(idx);
 
     // Start dragging handle for new point
