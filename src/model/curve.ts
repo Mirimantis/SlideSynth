@@ -117,11 +117,12 @@ export function reclampHandlesAround(curve: BezierCurve, index: number): void {
 }
 
 /**
- * Apply horizontal auto-smooth handles at a point, sized at AUTO_SMOOTH_X_RATIO of
- * neighbor segment X lengths. Does nothing for the first point (no previous segment).
- * handleOut falls back to the same length as handleIn when no next point exists.
+ * Apply horizontal auto-smooth handles at a point, sized at `ratio` of
+ * neighbor segment X lengths (default AUTO_SMOOTH_X_RATIO). Does nothing for
+ * the first point (no previous segment). handleOut falls back to the same
+ * length as handleIn when no next point exists.
  */
-export function applyAutoSmoothHandles(curve: BezierCurve, index: number): void {
+export function applyAutoSmoothHandles(curve: BezierCurve, index: number, ratio: number = AUTO_SMOOTH_X_RATIO): void {
   const pt = curve.points[index];
   if (!pt || index === 0) return;
   const prev = curve.points[index - 1];
@@ -130,22 +131,24 @@ export function applyAutoSmoothHandles(curve: BezierCurve, index: number): void 
   const segmentLenBack = pt.position.x - prev.position.x;
   if (segmentLenBack <= 0) return;
 
-  setHandle(curve, index, 'in', { x: -AUTO_SMOOTH_X_RATIO * segmentLenBack, y: 0 });
+  setHandle(curve, index, 'in', { x: -ratio * segmentLenBack, y: 0 });
 
   const next = curve.points[index + 1];
   const segmentLenForward = next ? next.position.x - pt.position.x : segmentLenBack;
   if (segmentLenForward > 0) {
-    setHandle(curve, index, 'out', { x: AUTO_SMOOTH_X_RATIO * segmentLenForward, y: 0 });
+    setHandle(curve, index, 'out', { x: ratio * segmentLenForward, y: 0 });
   }
 }
 
 /**
- * Smooth every point of a curve by re-applying auto-smooth handles. The first point
- * has no previous segment so it only gets a horizontal handleOut; the last point has
- * no next segment so its handleOut falls back to the back-segment length (matching
- * applyAutoSmoothHandles's single-point behaviour). Used by the Smooth Curve action.
+ * Smooth every point of a curve by re-applying auto-smooth handles at the given
+ * `ratio` (default AUTO_SMOOTH_X_RATIO). The first point has no previous
+ * segment so it only gets a horizontal handleOut; the last point has no next
+ * segment so its handleOut falls back to the back-segment length (matching
+ * applyAutoSmoothHandles's single-point behaviour). Used by the Smooth Curve
+ * action.
  */
-export function smoothCurveHandles(curve: BezierCurve): void {
+export function smoothCurveHandles(curve: BezierCurve, ratio: number = AUTO_SMOOTH_X_RATIO): void {
   const pts = curve.points;
   for (let i = 0; i < pts.length; i++) {
     const pt = pts[i]!;
@@ -154,12 +157,12 @@ export function smoothCurveHandles(curve: BezierCurve): void {
       const next = pts[i + 1];
       const segmentLenForward = next ? next.position.x - pt.position.x : 0;
       if (segmentLenForward > 0) {
-        setHandle(curve, i, 'out', { x: AUTO_SMOOTH_X_RATIO * segmentLenForward, y: 0 });
+        setHandle(curve, i, 'out', { x: ratio * segmentLenForward, y: 0 });
       } else {
         pt.handleOut = null;
       }
     } else {
-      applyAutoSmoothHandles(curve, i);
+      applyAutoSmoothHandles(curve, i, ratio);
     }
   }
 }

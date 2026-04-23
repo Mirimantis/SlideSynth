@@ -252,6 +252,32 @@
   margin: 0;
 }
 
+.prop-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.prop-slider-row label {
+  flex-shrink: 0;
+}
+
+.prop-slider-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  margin-top: 0;
+}
+
+.prop-slider-row .auto-smooth-ratio-value {
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  min-width: 28px;
+  text-align: right;
+}
+
 /* ── Tone Picker Popup ───────────────────────────────────────── */
 
 .tone-picker-overlay {

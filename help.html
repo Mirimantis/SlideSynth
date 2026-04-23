@@ -324,11 +324,12 @@
         <li>While in Draw mode, hold <kbd>Ctrl</kbd> to temporarily switch to Select mode.</li>
         <li><strong>Bezier Auto-Smoothing</strong> (Tool Properties) — when on, a single
             click to place a point (second point onward) gives it horizontal handles
-            sized at 25% of the neighbouring segment length, producing a smooth curve
-            without needing to drag. The first point of a new curve is unaffected.
-            If you drag after clicking, the drag defines the handles as usual.
-            <kbd>Shift</kbd>+<kbd>S</kbd> re-applies the same smoothing to the selected
-            curve(s); <kbd>Alt</kbd>+<kbd>S</kbd> clears handles for sharp corners.</li>
+            sized at a fraction of the neighbouring segment length (controlled by the
+            <strong>Handle length</strong> slider right below the checkbox, default
+            0.25). The first point of a new curve is unaffected. If you drag after
+            clicking, the drag defines the handles as usual. <kbd>Shift</kbd>+<kbd>S</kbd>
+            re-applies the same smoothing to the selected curve(s) using the current
+            slider value; <kbd>Alt</kbd>+<kbd>S</kbd> clears handles for sharp corners.</li>
       </ul>
     </div>
   </details>
@@ -505,8 +506,8 @@
     <summary>MIDI input details</summary>
     <div class="detail-body">
       <ul>
-        <li>Pick a device from the <strong>MIDI</strong> dropdown in the Transport
-            panel. On first selection the browser prompts for MIDI access.</li>
+        <li>Pick a device from the <strong>MIDI Input</strong> dropdown in the
+            Transport panel. On first selection the browser prompts for MIDI access.</li>
         <li><kbd>Note On</kbd> sounds the selected track's tone at the note's pitch;
             <kbd>Note Off</kbd> stops it. Held notes play in parallel (polyphonic),
             so you can sound chords against the track's tone.</li>
@@ -666,6 +667,7 @@
     <tr><td><kbd>Shift</kbd>+<kbd>S</kbd></td><td>Smooth selected curve(s) — reset handles to auto-smooth defaults</td></tr>
     <tr><td><kbd>Alt</kbd>+<kbd>S</kbd></td><td>Sharpen selected curve(s) — clear all bezier handles</td></tr>
     <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Delete selected point</td></tr>
+    <tr><td><kbd>Page Up</kbd> / <kbd>Page Down</kbd></td><td>Scroll viewport to first / last control point in the composition</td></tr>
     <tr><td><kbd>?</kbd></td><td>Open this help page</td></tr>
   </table>
 

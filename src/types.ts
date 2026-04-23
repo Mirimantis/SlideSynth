@@ -144,6 +144,7 @@ export interface AppState {
   magneticStrength: number;                   // 0..1 — snap attractor strength for Magnetic mode (localStorage-backed)
   magneticSpringK: number;                    // 0..50 — cursor-to-pitch spring stiffness for Magnetic mode (localStorage-backed)
   magneticDamping: number;                    // 0..20 — velocity damping for Magnetic mode (low = long wobbles, high = quick settle) (localStorage-backed)
+  autoSmoothXRatio: number;                   // 0..1 — fraction of neighbor segment length used for Draw auto-smooth + Smooth Curve action (localStorage-backed)
 }
 
 // ── Transform Box ──────────────────────────────────────────────

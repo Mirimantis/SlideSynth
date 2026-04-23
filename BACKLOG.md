@@ -74,19 +74,19 @@ Items marked **own planning session** need a dedicated design pass before any co
 - [x] **7.1 Remove Duration Snap Glide** *(S–M, cleanup)*
   The time-based Glide (Phase 5.1) didn't land as hoped — useful range is too narrow to justify the UI. Delete [src/utils/snap-glide.ts](src/utils/snap-glide.ts), `snapGlideBeats` state + mutator + localStorage key, the Glide slider row in Transport, the glide branch in `computeComposeCursorPitch`, and the grey-out logic (no mutual exclusion needed once Glide is gone). When Magnetic is off, snap is the original instantaneous behavior. Update help.html.
 
-- [ ] **7.2 Auto-smooth handle-length slider** *(S, feature)*
+- [x] **7.2 Auto-smooth handle-length slider** *(S, feature)*
   Expose `AUTO_SMOOTH_X_RATIO` from [src/constants.ts](src/constants.ts) as a user-adjustable slider in the Draw Tool Properties panel. Slider drives the same constant used by both Draw auto-smoothing and the Smooth Curve action. Persist to localStorage.
 
-- [ ] **7.3 Pitch HUD layout stability** *(S, bug)*
+- [x] **7.3 Pitch HUD layout stability** *(S, bug)*
   Pitch HUD numbers jump horizontally when a component changes width (e.g. cents goes from "0" to "+12¢"). Give each field (note name, cents, raw pitch, etc.) its own fixed-width slot so adjacent fields don't shift. Touch [src/main.ts](src/main.ts) `updatePitchHudDom` + HUD styles in [styles/main.css](styles/main.css).
 
-- [ ] **7.4 Page Up / Page Down — jump to first/last point** *(S, feature)*
+- [x] **7.4 Page Up / Page Down — jump to first/last point** *(S, feature)*
   New keybindings: Page Up scrolls viewport to the first control point in the composition; Page Down scrolls to the last. Reuse existing viewport scroll helpers. Wire into the keydown handler in [src/main.ts](src/main.ts).
 
-- [ ] **7.5 Rename Transport "MIDI" → "MIDI Input"** *(XS, rename)*
+- [x] **7.5 Rename Transport "MIDI" → "MIDI Input"** *(XS, rename)*
   Label change on the MIDI device row in the Transport panel. Trivial string edit in [src/main.ts](src/main.ts).
 
-- [ ] **7.6 MIDI unsupported tooltip wording** *(XS, polish)*
+- [x] **7.6 MIDI unsupported tooltip wording** *(XS, polish)*
   When Web MIDI is unavailable, the device dropdown should show the tooltip `"MIDI Input Not Supported By Browser."` (current wording is "Web MIDI not supported in this browser"). Confirm the existing disabled-state logic fires correctly and update the string.
 
 ---

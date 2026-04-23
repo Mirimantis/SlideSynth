@@ -143,7 +143,7 @@ app.innerHTML = `
           <input type="range" id="metronome-volume" class="metronome-volume" min="0" max="100" value="60" title="Metronome volume" />
         </div>
         <div class="transport-row">
-          <label>MIDI</label>
+          <label>MIDI Input</label>
           <select id="input-midi-device" title="Live MIDI input device">
             <option value="">None</option>
           </select>
@@ -188,24 +188,58 @@ const bgCtx = bgCanvas.getContext('2d')!;
 const fgCtx = fgCanvas.getContext('2d')!;
 
 const pitchHud = document.getElementById('pitch-hud') as HTMLDivElement;
-let lastHudText = '';
 
-/** Format the primary planchette's current pitch for the HUD: "C#4 +12¢" or "G5". */
-function formatPlanchetteHud(snappedY: number | null, rawY: number | null): string {
-  if (snappedY == null) return '';
+// Fixed-width HUD slots — one <span> per field so the numbers don't shift
+// horizontally as cents flip between e.g. "+3¢" and "-12¢". Slots are created
+// once and their textContent is updated in place.
+pitchHud.innerHTML = `
+  <span class="hud-slot hud-note" id="hud-snap-name"></span>
+  <span class="hud-slot hud-cents" id="hud-snap-cents"></span>
+  <span class="hud-slot hud-sep" id="hud-sep"></span>
+  <span class="hud-slot hud-note" id="hud-raw-name"></span>
+  <span class="hud-slot hud-cents" id="hud-raw-cents"></span>
+`;
+const hudSnapName = document.getElementById('hud-snap-name') as HTMLSpanElement;
+const hudSnapCents = document.getElementById('hud-snap-cents') as HTMLSpanElement;
+const hudSep = document.getElementById('hud-sep') as HTMLSpanElement;
+const hudRawName = document.getElementById('hud-raw-name') as HTMLSpanElement;
+const hudRawCents = document.getElementById('hud-raw-cents') as HTMLSpanElement;
+
+function formatCents(cents: number): string {
+  if (cents === 0) return '';
+  return `${cents > 0 ? '+' : ''}${cents}¢`;
+}
+
+/** Fill each HUD slot in place — no innerHTML, no text concatenation. */
+function writePitchHud(snappedY: number | null, rawY: number | null): void {
+  if (snappedY == null) {
+    hudSnapName.textContent = '';
+    hudSnapCents.textContent = '';
+    hudSep.textContent = '';
+    hudRawName.textContent = '';
+    hudRawCents.textContent = '';
+    return;
+  }
   const nearest = Math.round(snappedY);
   const cents = Math.round((snappedY - nearest) * 100);
-  const name = noteNumberToName(nearest);
-  const snapPart = cents === 0 ? name : `${name} ${cents > 0 ? '+' : ''}${cents}¢`;
-  if (rawY == null || Math.abs(rawY - snappedY) < 0.02) return snapPart;
-  // Raw can land outside the MIDI note range when the cursor is chasing auto-scroll
-  // past the clamp — skip the ghost reading in that case.
-  const rawNearest = Math.round(rawY);
-  if (rawNearest < MIN_NOTE || rawNearest > MAX_NOTE) return snapPart;
-  const rawCents = Math.round((rawY - rawNearest) * 100);
-  const rawName = noteNumberToName(rawNearest);
-  const rawPart = rawCents === 0 ? rawName : `${rawName} ${rawCents > 0 ? '+' : ''}${rawCents}¢`;
-  return `${snapPart}  ·  ${rawPart}`;
+  hudSnapName.textContent = noteNumberToName(nearest);
+  hudSnapCents.textContent = formatCents(cents);
+
+  const hasRaw = rawY != null
+    && Math.abs(rawY - snappedY) >= 0.02
+    && Math.round(rawY) >= MIN_NOTE
+    && Math.round(rawY) <= MAX_NOTE;
+  if (hasRaw) {
+    const rawNearest = Math.round(rawY!);
+    const rawCents = Math.round((rawY! - rawNearest) * 100);
+    hudSep.textContent = '·';
+    hudRawName.textContent = noteNumberToName(rawNearest);
+    hudRawCents.textContent = formatCents(rawCents);
+  } else {
+    hudSep.textContent = '';
+    hudRawName.textContent = '';
+    hudRawCents.textContent = '';
+  }
 }
 
 let bgDirty = true;
@@ -668,7 +702,7 @@ midiDeviceSelect.addEventListener('focus', async () => {
 
 if (!midiInput.isSupported()) {
   midiDeviceSelect.disabled = true;
-  midiDeviceSelect.title = 'Web MIDI not supported in this browser';
+  midiDeviceSelect.title = 'MIDI Input Not Supported By Browser.';
 }
 
 // ── Snap toggle (Transport) ────────────────────────────────────
@@ -990,7 +1024,8 @@ function performSmooth() {
   if (curves.length === 0) return;
   history.snapshot();
   store.mutate(() => {
-    for (const curve of curves) smoothCurveHandles(curve);
+    const ratio = store.getState().autoSmoothXRatio;
+    for (const curve of curves) smoothCurveHandles(curve, ratio);
   });
 }
 // ── Undo / Redo buttons ────────────────────────────────────────
@@ -1165,6 +1200,29 @@ window.addEventListener('keydown', (e) => {
     case '?':
       window.open('/help.html', '_blank');
       break;
+    case 'PageUp':
+    case 'PageDown': {
+      // Jump the viewport to the first (PageUp) or last (PageDown) control point
+      // across all tracks in the composition. No-op when the composition is empty.
+      e.preventDefault();
+      const comp = store.getComposition();
+      let minX: number | null = null;
+      let maxX: number | null = null;
+      for (const track of comp.tracks) {
+        for (const curve of track.curves) {
+          for (const pt of curve.points) {
+            if (minX === null || pt.position.x < minX) minX = pt.position.x;
+            if (maxX === null || pt.position.x > maxX) maxX = pt.position.x;
+          }
+        }
+      }
+      if (minX === null || maxX === null) return;
+      const target = e.key === 'PageUp' ? minX : maxX;
+      const r = canvasContainer.getBoundingClientRect();
+      scrollViewportToBeat(viewport, target, r.width, r.height);
+      bgDirty = true;
+      return;
+    }
     case 'Delete':
     case 'Backspace': {
       // Delete selected point (only when a single curve is selected with a point)
@@ -1720,16 +1778,11 @@ function updatePitchHudDom(state: AppState) {
   const planchette = state.performance.planchettes[0];
   const show = state.pitchHudVisible && planchette?.snappedWorldY != null;
   if (show) {
-    const text = formatPlanchetteHud(planchette!.snappedWorldY, planchette!.cursorWorldY);
-    if (text !== lastHudText) {
-      pitchHud.textContent = text;
-      lastHudText = text;
-    }
+    writePitchHud(planchette!.snappedWorldY, planchette!.cursorWorldY);
     pitchHud.removeAttribute('hidden');
   } else if (!pitchHud.hasAttribute('hidden')) {
     pitchHud.setAttribute('hidden', '');
-    pitchHud.textContent = '';
-    lastHudText = '';
+    writePitchHud(null, null);
   }
 }
 
