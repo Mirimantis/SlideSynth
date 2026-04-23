@@ -141,6 +141,10 @@ export interface AppState {
   metronomeEnabled: boolean;                  // Metronome user preference (localStorage-backed)
   metronomeVolume: number;                    // 0..1 — metronome master gain (localStorage-backed)
   snapGlideBeats: number;                     // 0..16 beats — Performance pitch glide between snap targets (localStorage-backed)
+  magneticEnabled: boolean;                   // Magnetic Snap physics on/off (localStorage-backed)
+  magneticStrength: number;                   // 0..1 — snap attractor strength for Magnetic mode (localStorage-backed)
+  magneticSpringK: number;                    // 0..50 — cursor-to-pitch spring stiffness for Magnetic mode (localStorage-backed)
+  magneticDamping: number;                    // 0..20 — velocity damping for Magnetic mode (low = long wobbles, high = quick settle) (localStorage-backed)
 }
 
 // ── Transform Box ──────────────────────────────────────────────

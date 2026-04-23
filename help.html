@@ -535,7 +535,7 @@
         <li><strong>Adaptive snap</strong> — the time-axis snap granularity adjusts with zoom: 1/16-beat at high zoom, eighth-note at medium zoom, and whole beats when zoomed out. The ruler ticks match the current snap resolution.</li>
         <li>Bezier handles are never snapped, allowing smooth curve shaping regardless of snap setting.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to one axis.</li>
-        <li><strong>Glide</strong> (0–16 beats) — at 0, the planchette snaps instantly
+        <li><strong>Glide</strong> (0–1 beat) — at 0, the planchette snaps instantly
             between lines (the default). Above 0, during Compose Performance and
             Recording, the audible pitch glides smoothly from the previous snap to
             the new one over the set number of beats, producing a glissando.
@@ -544,6 +544,29 @@
             pitch re-anchors toward the most recent cell, so fast passes stay
             responsive instead of queuing up transitions. Glide only has an audible
             effect when Snap is on.</li>
+        <li><strong>Magnetic</strong> — an alternative to Glide that uses spring-mass
+            physics instead of linear interpolation. The planchette has inertia, is
+            pulled toward the cursor by an elastic force, and is attracted to the
+            nearest snap line with proximity-based strength. Only active during
+            Compose Performance (LMB held). Magnetic overrides Glide when both are
+            on — the Glide slider greys out to indicate this. Requires Snap on to
+            have any effect. Three tuning sliders:
+            <ul>
+              <li><strong>Magnetic</strong> (0–1, default 0.75) — snap attractor
+                  strength. At 0 the planchette is a smooth cursor-follower with no
+                  snap detents; higher values make snap lines pull the pitch in
+                  increasingly hard.</li>
+              <li><strong>Spring</strong> (1–50, default 30) — cursor-to-pitch coupling
+                  stiffness. Lower values feel rubbery and let the planchette linger
+                  between snaps; higher values track the cursor tightly.</li>
+              <li><strong>Damping</strong> (0.25–15, default 3) — how quickly pitch
+                  oscillations near a snap line fade. Low values sustain tremolo
+                  wobbles for longer; high values settle quickly. Too low combined
+                  with high Magnetic can swing wildly.</li>
+            </ul>
+            Combine strong Magnetic with low Damping and a moderate Spring to get
+            tremolo around held notes; combine low Magnetic with high Spring for
+            free-sliding microtonal performance with gentle detents.</li>
       </ul>
     </div>
   </details>

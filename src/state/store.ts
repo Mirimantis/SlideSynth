@@ -19,6 +19,10 @@ const PITCH_HUD_STORAGE_KEY = 'slidesynth.pitchHud';
 const METRONOME_ENABLED_STORAGE_KEY = 'slidesynth.metronomeEnabled';
 const METRONOME_VOLUME_STORAGE_KEY = 'slidesynth.metronomeVolume';
 const SNAP_GLIDE_BEATS_STORAGE_KEY = 'slidesynth.snapGlideBeats';
+const MAGNETIC_ENABLED_STORAGE_KEY = 'slidesynth.magneticEnabled';
+const MAGNETIC_STRENGTH_STORAGE_KEY = 'slidesynth.magneticStrength';
+const MAGNETIC_SPRING_K_STORAGE_KEY = 'slidesynth.magneticSpringK';
+const MAGNETIC_DAMPING_STORAGE_KEY = 'slidesynth.magneticDamping';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -92,6 +96,10 @@ function createInitialState(): AppState {
     metronomeEnabled: loadBoolPref(METRONOME_ENABLED_STORAGE_KEY, false),
     metronomeVolume: loadNumberPref(METRONOME_VOLUME_STORAGE_KEY, 0.6),
     snapGlideBeats: Math.max(0, Math.min(1, loadNumberPref(SNAP_GLIDE_BEATS_STORAGE_KEY, 0))),
+    magneticEnabled: loadBoolPref(MAGNETIC_ENABLED_STORAGE_KEY, false),
+    magneticStrength: Math.max(0, Math.min(1, loadNumberPref(MAGNETIC_STRENGTH_STORAGE_KEY, 0.75))),
+    magneticSpringK: Math.max(1, Math.min(50, loadNumberPref(MAGNETIC_SPRING_K_STORAGE_KEY, 30))),
+    magneticDamping: Math.max(0.25, Math.min(15, loadNumberPref(MAGNETIC_DAMPING_STORAGE_KEY, 3))),
   };
 }
 
@@ -270,6 +278,37 @@ class Store {
     if (this.state.snapGlideBeats === clamped) return;
     this.state.snapGlideBeats = clamped;
     saveNumberPref(SNAP_GLIDE_BEATS_STORAGE_KEY, clamped);
+    this.notify();
+  }
+
+  setMagneticEnabled(on: boolean) {
+    if (this.state.magneticEnabled === on) return;
+    this.state.magneticEnabled = on;
+    saveBoolPref(MAGNETIC_ENABLED_STORAGE_KEY, on);
+    this.notify();
+  }
+
+  setMagneticStrength(strength: number) {
+    const clamped = Math.max(0, Math.min(1, strength));
+    if (this.state.magneticStrength === clamped) return;
+    this.state.magneticStrength = clamped;
+    saveNumberPref(MAGNETIC_STRENGTH_STORAGE_KEY, clamped);
+    this.notify();
+  }
+
+  setMagneticSpringK(k: number) {
+    const clamped = Math.max(1, Math.min(50, k));
+    if (this.state.magneticSpringK === clamped) return;
+    this.state.magneticSpringK = clamped;
+    saveNumberPref(MAGNETIC_SPRING_K_STORAGE_KEY, clamped);
+    this.notify();
+  }
+
+  setMagneticDamping(d: number) {
+    const clamped = Math.max(0.25, Math.min(15, d));
+    if (this.state.magneticDamping === clamped) return;
+    this.state.magneticDamping = clamped;
+    saveNumberPref(MAGNETIC_DAMPING_STORAGE_KEY, clamped);
     this.notify();
   }
 

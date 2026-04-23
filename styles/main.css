@@ -525,19 +525,31 @@ body {
   accent-color: var(--accent);
 }
 
-/* ── Snap Glide slider (Transport row) ───────────────────────── */
-.snap-glide-slider {
+/* ── Snap Glide + Magnetic sliders (Transport rows) ──────────── */
+.snap-glide-slider,
+.magnetic-strength-slider,
+.magnetic-spring-slider,
+.magnetic-damping-slider {
   flex: 1;
   min-width: 60px;
   accent-color: var(--accent);
 }
 
-.snap-glide-value {
+.snap-glide-value,
+.magnetic-strength-value,
+.magnetic-spring-value,
+.magnetic-damping-value {
   font-family: ui-monospace, 'SF Mono', Consolas, monospace;
   font-size: 0.75rem;
   color: var(--text-dim);
   min-width: 30px;
   text-align: right;
+}
+
+/* Greyed state — applied to Glide slider when Magnetic mode overrides it. */
+.disabled-slider {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 /* ── Right-click context menu ────────────────────────────────── */
