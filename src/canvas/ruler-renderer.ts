@@ -1,5 +1,6 @@
 import type { Viewport } from './viewport';
 import { RULER_HEIGHT, SECONDS_RULER_HEIGHT, BEAT_RULER_HEIGHT } from './interaction';
+import { getAdaptiveBeatStep } from '../utils/snap';
 
 /**
  * Render the ruler bar at the top of the canvas.
@@ -176,14 +177,18 @@ function renderBeatRuler(
   const showSixteenths = zx >= 60;
   const showEighths = zx >= 35;
 
-  for (let b = minBeat; b <= maxBeat; b++) {
+  // Coarsen the tick step when zoomed way out (same helper as the staff grid).
+  const beatStep = getAdaptiveBeatStep(zx, measureLen);
+  const startBeat = Math.floor(minBeat / beatStep) * beatStep;
+
+  for (let b = startBeat; b <= maxBeat; b += beatStep) {
     const { sx } = vp.worldToScreen(b, 0);
     if (sx < 0 || sx > width) continue;
 
     const isMeasure = measureLen > 0 && b % measureLen === 0;
 
-    // Draw subdivision ticks within this beat
-    if (showEighths || showSixteenths) {
+    // Draw subdivision ticks within this beat (only when rendering every beat)
+    if (beatStep === 1 && (showEighths || showSixteenths)) {
       const subdiv = showSixteenths ? 16 : showEighths ? 2 : 1;
       for (let s = 1; s < subdiv; s++) {
         const subBeat = b + s / subdiv;

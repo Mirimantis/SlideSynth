@@ -52,3 +52,19 @@ export function getAdaptiveSubdivisions(zoomX: number): number {
   if (zoomX >= 35) return 2;            // 1/2 beats (eighths)
   return 1;                             // whole beats
 }
+
+/**
+ * Choose the coarsest musical interval (in beats) that still keeps adjacent
+ * beat/measure gridlines at least MIN_GRID_PX apart. Used by the staff grid
+ * and the ruler so zooming out progresses cleanly through beats → measures →
+ * every-2nd measure → every-4th, etc, instead of drawing thousands of
+ * sub-pixel lines.
+ */
+const MIN_GRID_PX = 30;
+export function getAdaptiveBeatStep(zoomX: number, measureLen: number): number {
+  if (zoomX * 1 >= MIN_GRID_PX) return 1;
+  if (measureLen <= 0) return 1;
+  let step = measureLen;
+  while (zoomX * step < MIN_GRID_PX) step *= 2;
+  return step;
+}
