@@ -16,7 +16,6 @@ import { openContextMenu } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
 import { createMidiInput } from './audio/midi-input';
-import { createSnapGlideState, updateGlide, resetSnapGlide } from './utils/snap-glide';
 import { createMagneticState, updateMagnetic, resetMagnetic } from './utils/snap-magnetic';
 import { renderPlanchettes, renderFreePlanchette, renderRail, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
@@ -111,8 +110,6 @@ app.innerHTML = `
             </span>
             <span class="toggle-switch-label">Snap</span>
           </label>
-          <input type="range" id="input-snap-glide" class="snap-glide-slider" min="0" max="1" value="0" step="0.1" title="Snap glide duration in beats (0 = instant)" />
-          <span class="snap-glide-value">0</span>
         </div>
         <div class="transport-row">
           <label class="toggle-switch" title="Magnetic Snap: pitch follows physics model with snap-line attractors">
@@ -674,24 +671,12 @@ if (!midiInput.isSupported()) {
   midiDeviceSelect.title = 'Web MIDI not supported in this browser';
 }
 
-// ── Snap toggle + Snap Glide slider (Transport) ────────────────
+// ── Snap toggle (Transport) ────────────────────────────────────
 const snapToggleInput = document.getElementById('snap-toggle') as HTMLInputElement;
-const snapGlideSlider = document.getElementById('input-snap-glide') as HTMLInputElement;
-const snapGlideValue = document.querySelector('.snap-glide-value') as HTMLSpanElement;
 snapToggleInput.checked = store.getState().snapEnabled;
-{
-  const g = store.getState().snapGlideBeats;
-  snapGlideSlider.value = String(g);
-  snapGlideValue.textContent = String(g);
-}
 snapToggleInput.addEventListener('change', () => {
   store.setSnap(snapToggleInput.checked);
   snapToggleInput.blur();
-});
-snapGlideSlider.addEventListener('input', () => {
-  const beats = Number(snapGlideSlider.value);
-  store.setSnapGlideBeats(beats);
-  snapGlideValue.textContent = String(beats);
 });
 
 // ── Magnetic Snap toggle + strength slider + spring slider (Transport) ─
@@ -711,7 +696,6 @@ const magneticDampingValue = document.querySelector('.magnetic-damping-value') a
   magneticSpringValue.textContent = String(Math.round(st.magneticSpringK));
   magneticDampingSlider.value = String(st.magneticDamping);
   magneticDampingValue.textContent = formatDamping(st.magneticDamping);
-  updateGlideSliderDisabledState(st.magneticEnabled);
 }
 
 function formatDamping(d: number): string {
@@ -736,14 +720,6 @@ magneticDampingSlider.addEventListener('input', () => {
   store.setMagneticDamping(d);
   magneticDampingValue.textContent = formatDamping(d);
 });
-
-/** Grey out the Glide slider when Magnetic mode is active — the two are
- *  mutually exclusive (Magnetic overrides Glide when on). */
-function updateGlideSliderDisabledState(magneticOn: boolean) {
-  snapGlideSlider.classList.toggle('disabled-slider', magneticOn);
-  snapGlideValue.classList.toggle('disabled-slider', magneticOn);
-  snapGlideSlider.disabled = magneticOn;
-}
 
 // ── Metronome controls ─────────────────────────────────────────
 const metronomeToggle = document.getElementById('metronome-toggle') as HTMLInputElement;
@@ -1416,7 +1392,6 @@ const composeEngine = createPerformanceEngine({
   loopWrapThresholdBeats: 0.5,
 });
 
-const snapGlideState = createSnapGlideState();
 const magneticState = createMagneticState();
 
 /** Last known compose-mode cursor screen Y. Cached so the per-frame pitch-mode
@@ -1435,39 +1410,31 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
   };
   const snapped = snapToGrid(0, wy, snapConfig);
   const nowBeats = playback.getPositionBeats();
-  // Glide / Magnetic only apply while the user is actively sounding a tone
-  // (LMB-held performance). Hovering in Select/Draw/etc should track the cursor
-  // instantly — otherwise the planchette appears to lag even when nothing is
-  // being played.
+  // Magnetic only applies while the user is actively sounding a tone (LMB-held
+  // performance). Hovering in Select/Draw/etc should track the cursor instantly.
   const performing = composeEngine.isLmbDown();
 
-  // Magnetic mode wins over Glide when both are on. Uses only the nearest snap
-  // line as an attractor — two overlapping wells with linear falloff cancel
+  // Magnetic mode: spring-mass physics with nearest-snap attractor. Uses only
+  // the nearest snap line — two overlapping wells with linear falloff cancel
   // each other exactly in the inter-snap region, producing zero net pull.
-  // `snapped.wy` is already the nearest snap (chromatic or scale-aware).
   if (st.snapEnabled && performing && st.magneticEnabled) {
     const magneticPitch = updateMagnetic(magneticState, wy, nowBeats, st.magneticStrength, st.magneticSpringK, st.magneticDamping, [snapped.wy]);
-    // Keep glide state from going stale while magnetic is driving.
-    resetSnapGlide(snapGlideState);
     return { cursorWorldY: wy, snappedWorldY: magneticPitch, snapTarget: snapped.wy };
   }
 
-  const glideBeats = st.snapEnabled && performing ? st.snapGlideBeats : 0;
-  const glidedPitch = updateGlide(snapGlideState, snapped.wy, nowBeats, glideBeats, performance.now());
-  // Keep magnetic state from going stale while glide is driving.
+  // Default path: instant snap (or raw cursor Y when snap is off).
   resetMagnetic(magneticState);
-  return { cursorWorldY: wy, snappedWorldY: glidedPitch, snapTarget: snapped.wy };
+  return { cursorWorldY: wy, snappedWorldY: snapped.wy, snapTarget: snapped.wy };
 }
 
-/** Previous snap target (pre-glide). Used to trigger the snap-line-cross pulse
- *  on target changes rather than on every frame of the in-flight glide. */
+/** Previous snap target. Used to trigger the snap-line-cross pulse on target
+ *  changes rather than on every frame while magnetic physics is interpolating. */
 let prevSnapTarget: number | null = null;
 
 function composeUpdatePlanchette(sy: number) {
   lastComposeSy = sy;
   if (sy < RULER_HEIGHT && !composeEngine.isLmbDown()) {
     store.setPlanchetteY('primary', null, null);
-    resetSnapGlide(snapGlideState);
     resetMagnetic(magneticState);
     prevSnapTarget = null;
     lastComposeSy = null;
@@ -1475,8 +1442,8 @@ function composeUpdatePlanchette(sy: number) {
   }
   const { cursorWorldY, snappedWorldY, snapTarget } = computeComposeCursorPitch(sy);
   store.setPlanchetteY('primary', cursorWorldY, snappedWorldY);
-  // Snap-line-cross pulse tracking — fire on target change, not on every frame
-  // of glide interpolation.
+  // Snap-line-cross pulse — fire on target change, not on every frame of
+  // magnetic physics interpolation.
   if (prevSnapTarget != null && prevSnapTarget !== snapTarget) {
     store.markPlanchetteCrossed('primary', Date.now());
   }
@@ -1484,16 +1451,13 @@ function composeUpdatePlanchette(sy: number) {
 }
 
 /** Per-frame pitch-mode tick: re-runs composeUpdatePlanchette with the last
- *  known cursor Y so Glide or Magnetic physics keep advancing even when the
- *  mouse is still. Also updates the currently-sounding synth so the audible
- *  pitch matches. No-op when neither mode is active. */
+ *  known cursor Y so Magnetic physics keeps advancing even when the mouse is
+ *  still. Also updates the currently-sounding synth so the audible pitch
+ *  matches. No-op when Magnetic is off. */
 function tickComposePitchMode() {
   if (lastComposeSy === null) return;
   const st = store.getState();
-  if (!st.snapEnabled) return;
-  const glideActive = st.snapGlideBeats > 0;
-  const magneticActive = st.magneticEnabled;
-  if (!glideActive && !magneticActive) return;
+  if (!st.snapEnabled || !st.magneticEnabled) return;
   composeUpdatePlanchette(lastComposeSy);
   if (composeEngine.isLmbDown()) {
     const p = store.getState().performance.planchettes[0];
@@ -1692,7 +1656,6 @@ fgCanvas.addEventListener('mousemove', (e) => {
 fgCanvas.addEventListener('mouseleave', () => {
   if (!composeEngine.isLmbDown()) {
     store.setPlanchetteY('primary', null, null);
-    resetSnapGlide(snapGlideState);
     resetMagnetic(magneticState);
     prevSnapTarget = null;
     lastComposeSy = null;
@@ -2034,10 +1997,6 @@ store.subscribe(() => {
   if (snapToggleInput.checked !== appState.snapEnabled) {
     snapToggleInput.checked = appState.snapEnabled;
   }
-  if (Number(snapGlideSlider.value) !== appState.snapGlideBeats) {
-    snapGlideSlider.value = String(appState.snapGlideBeats);
-    snapGlideValue.textContent = String(appState.snapGlideBeats);
-  }
   if (magneticToggle.checked !== appState.magneticEnabled) {
     magneticToggle.checked = appState.magneticEnabled;
   }
@@ -2053,7 +2012,6 @@ store.subscribe(() => {
     magneticDampingSlider.value = String(appState.magneticDamping);
     magneticDampingValue.textContent = formatDamping(appState.magneticDamping);
   }
-  updateGlideSliderDisabledState(appState.magneticEnabled);
   metronome.setEnabled(appState.metronomeEnabled);
   metronome.setVolume(appState.metronomeVolume);
   syncCompositionDerived();

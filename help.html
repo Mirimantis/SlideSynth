@@ -524,33 +524,21 @@
   <h2 id="snapping">Snap & Grid</h2>
   <p>
     Toggle snap on/off with the <strong>Snap</strong> switch in the Transport panel
-    or press <kbd>S</kbd>. The switch sits alongside a <strong>Glide</strong> slider
-    that controls glissando snap duration.
+    or press <kbd>S</kbd>.
   </p>
   <details>
     <summary>Snap details</summary>
     <div class="detail-body">
       <ul>
-        <li>When snap is on, points snap to the time grid and the nearest semitone (or nearest scale note if a scale is active).</li>
+        <li>When snap is on, points snap to the time grid and the nearest semitone (or nearest scale note if a scale is active). Transitions between snap lines are instantaneous unless Magnetic mode (below) is also on.</li>
         <li><strong>Adaptive snap</strong> — the time-axis snap granularity adjusts with zoom: 1/16-beat at high zoom, eighth-note at medium zoom, and whole beats when zoomed out. The ruler ticks match the current snap resolution.</li>
         <li>Bezier handles are never snapped, allowing smooth curve shaping regardless of snap setting.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to one axis.</li>
-        <li><strong>Glide</strong> (0–1 beat) — at 0, the planchette snaps instantly
-            between lines (the default). Above 0, during Compose Performance and
-            Recording, the audible pitch glides smoothly from the previous snap to
-            the new one over the set number of beats, producing a glissando.
-            Recorded curves show a diagonal connecting segment proportional to the
-            glide length. If the cursor crosses multiple snap cells mid-glide, the
-            pitch re-anchors toward the most recent cell, so fast passes stay
-            responsive instead of queuing up transitions. Glide only has an audible
-            effect when Snap is on.</li>
-        <li><strong>Magnetic</strong> — an alternative to Glide that uses spring-mass
-            physics instead of linear interpolation. The planchette has inertia, is
-            pulled toward the cursor by an elastic force, and is attracted to the
-            nearest snap line with proximity-based strength. Only active during
-            Compose Performance (LMB held). Magnetic overrides Glide when both are
-            on — the Glide slider greys out to indicate this. Requires Snap on to
-            have any effect. Three tuning sliders:
+        <li><strong>Magnetic</strong> — a spring-mass physics alternative for pitch
+            snapping during performance. The planchette has inertia, is pulled toward
+            the cursor by an elastic force, and is attracted to the nearest snap line
+            with proximity-based strength. Only active during Compose Performance
+            (LMB held). Requires Snap on to have any effect. Three tuning sliders:
             <ul>
               <li><strong>Magnetic</strong> (0–1, default 0.75) — snap attractor
                   strength. At 0 the planchette is a smooth cursor-follower with no
