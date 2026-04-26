@@ -3,6 +3,7 @@ import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZO
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
+import { renderProjection, renderProjectionSourceHighlight } from './canvas/projection-renderer';
 import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
@@ -12,6 +13,7 @@ import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
 import { createToolPanel } from './ui/tool-panel';
+import { createPrismPanel } from './ui/prism-panel';
 import { openContextMenu } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
@@ -34,7 +36,7 @@ import { computeMultiCurveBBox, deepCopyPoints, joinCurves, sharpenCurveHandles,
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { getScaleById } from './utils/scales';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
-import type { AppState, ToolMode, ControlPoint } from './types';
+import type { AppState, ToolMode, ControlPoint, BezierCurve } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -103,6 +105,27 @@ app.innerHTML = `
           </select>
         </div>
         <div class="transport-row">
+          <label class="toggle-switch" title="Metronome clicks during playback">
+            <span class="toggle-switch-track">
+              <input type="checkbox" id="metronome-toggle" />
+              <span class="toggle-switch-thumb"></span>
+            </span>
+            <span class="toggle-switch-label">Metronome</span>
+          </label>
+          <input type="range" id="metronome-volume" class="metronome-volume" min="0" max="100" value="60" title="Metronome volume" />
+        </div>
+        <div class="transport-row">
+          <label>MIDI Input</label>
+          <select id="input-midi-device" title="Live MIDI input device">
+            <option value="">None</option>
+          </select>
+        </div>
+      </div>
+      <div class="panel-header">Tools</div>
+      <div id="tool-panel"></div>
+      <div class="panel-header">Snap</div>
+      <div id="snap-section">
+        <div class="transport-row">
           <label class="toggle-switch" title="Toggle snap (S)">
             <span class="toggle-switch-track">
               <input type="checkbox" id="snap-toggle" checked />
@@ -132,25 +155,9 @@ app.innerHTML = `
           <input type="range" id="input-magnetic-damping" class="magnetic-damping-slider" min="0.25" max="15" value="3" step="0.25" title="Velocity damping (low = long tremolo wobbles, high = quick settle)" />
           <span class="magnetic-damping-value">3</span>
         </div>
-        <div class="transport-row">
-          <label class="toggle-switch" title="Metronome clicks during playback">
-            <span class="toggle-switch-track">
-              <input type="checkbox" id="metronome-toggle" />
-              <span class="toggle-switch-thumb"></span>
-            </span>
-            <span class="toggle-switch-label">Metronome</span>
-          </label>
-          <input type="range" id="metronome-volume" class="metronome-volume" min="0" max="100" value="60" title="Metronome volume" />
-        </div>
-        <div class="transport-row">
-          <label>MIDI Input</label>
-          <select id="input-midi-device" title="Live MIDI input device">
-            <option value="">None</option>
-          </select>
-        </div>
       </div>
-      <div class="panel-header">Tools</div>
-      <div id="tool-panel"></div>
+      <div class="panel-header" title="Harmonic Prism — press H on a selected curve to project harmonic echoes">Harmonic Prism</div>
+      <div id="prism-panel"></div>
       <div class="panel-header">Tracks</div>
       <div id="track-list"></div>
       <div class="track-panel-actions">
@@ -468,6 +475,11 @@ const toolPanel = createToolPanel(toolPanelContainer, {
     }
   },
 });
+
+// ── Harmonic Prism panel (chord-spec picker) ───────────────────
+const prismPanelContainer = document.getElementById('prism-panel')!;
+const prismPanel = createPrismPanel(prismPanelContainer);
+store.subscribe(() => prismPanel.refresh());
 
 // ── Transport controls (in track panel) ────────────────────────
 const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
@@ -1082,6 +1094,13 @@ window.addEventListener('keydown', (e) => {
       updatePlayState(false);
       return;
     }
+    // Clear Harmonic Prism projection if it's the only thing active.
+    if (store.getState().harmonicPrism.projectionSourceId) {
+      e.preventDefault();
+      store.setPrismProjectionSource(null);
+      bgDirty = true;
+      return;
+    }
   }
 
   // Undo / Redo
@@ -1202,6 +1221,22 @@ window.addEventListener('keydown', (e) => {
     case 's': {
       const snapEnabled = !store.getState().snapEnabled;
       store.setSnap(snapEnabled);
+      break;
+    }
+    case 'h':
+    case 'H': {
+      // Harmonic Prism — toggle Projection mode on the selected curve.
+      const prism = store.getState().harmonicPrism;
+      if (prism.projectionSourceId) {
+        store.setPrismProjectionSource(null);
+        bgDirty = true; // staff comes back
+      } else {
+        const sel = store.getSelectedCurveId();
+        if (sel) {
+          store.setPrismProjectionSource(sel);
+          bgDirty = true; // staff hides
+        }
+      }
       break;
     }
     case 'l':
@@ -1859,20 +1894,34 @@ function render() {
   // Compose perform: record-sample capture each frame while armed + sounding + playing.
   captureComposeRecordingSample();
 
-  // Background: staff grid
+  // Background: staff grid. Stays visible during Harmonic Prism projection
+  // so the user can see where they are in the pitch spectrum; snap itself
+  // switches to echo-only targets (see snapToGrid).
   if (bgDirty) {
     const scaleRoot = state.scaleRoot;
     const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
     const measureLen = measureLengthInBeats(comp);
+    bgCtx.clearRect(0, 0, rect.width, rect.height);
     renderStaff(bgCtx, viewport, rect.width, rect.height, measureLen, scaleRoot, scale);
     renderRuler(bgCtx, viewport, rect.width, measureLen, comp.bpm);
     bgDirty = false;
   }
 
-  // Clear stale drawingCurve reference (e.g. after undo removed the curve)
+  // Clear stale drawingCurve reference. Three cases:
+  //   • the curve was deleted (e.g. undo)
+  //   • the user selected a different single curve while in Draw — honor the
+  //     new selection so the preview line and the next click both target it
+  //   • the active tool isn't Draw anymore (hotkey switch bypasses the
+  //     toolPanel.onToolChange clear)
   if (interaction.drawingCurve) {
     const track = comp.tracks.find(t => t.id === state.selectedTrackId);
-    if (!track || !track.curves.includes(interaction.drawingCurve)) {
+    const singleSelectedId = store.getSelectedCurveId();
+    const stale =
+      !track ||
+      !track.curves.includes(interaction.drawingCurve) ||
+      state.activeTool !== 'draw' ||
+      (singleSelectedId !== null && singleSelectedId !== interaction.drawingCurve.id);
+    if (stale) {
       interaction.drawingCurve = null;
       interaction.dragging = null;
     }
@@ -1884,6 +1933,33 @@ function render() {
   // Transform box (rendered behind curves so unselected curves remain clickable)
   if (interaction.transformBox) {
     renderTransformBox(fgCtx, viewport, interaction.transformBox.bbox, interaction.transformBox.activeHandle);
+  }
+
+  // Harmonic Prism — resolve the projection source curve up front. If it no
+  // longer exists (deleted), exit projection mode automatically.
+  let prismSource: BezierCurve | null = null;
+  if (state.harmonicPrism.projectionSourceId) {
+    const prismSrcId = state.harmonicPrism.projectionSourceId;
+    for (const track of comp.tracks) {
+      const found = track.curves.find(c => c.id === prismSrcId);
+      if (found) { prismSource = found; break; }
+    }
+    if (!prismSource) {
+      store.setPrismProjectionSource(null);
+    }
+  }
+
+  // Projection echoes: rendered behind curves.
+  if (prismSource) {
+    renderProjection(
+      fgCtx,
+      viewport,
+      prismSource,
+      state.harmonicPrism.chordSpec,
+      state.harmonicPrism.projectionOctaveRange,
+      rect.width,
+      rect.height,
+    );
   }
 
   // Render curves for all tracks
@@ -1900,6 +1976,12 @@ function render() {
       isActiveTrack ? store.getSelectedCurveId() : null,
       isActiveTrack ? state.selectedPointIndex : null,
     );
+  }
+
+  // Rainbow highlight on the projection-source curve (drawn last so it sits
+  // on top of the normal curve stroke).
+  if (prismSource) {
+    renderProjectionSourceHighlight(fgCtx, viewport, prismSource);
   }
 
   // Draw preview line when in draw mode (hidden during Ctrl-select)
@@ -2113,13 +2195,14 @@ syncCompositionDerived();
 window.addEventListener('resize', () => { resizeCanvases(); updateZoom(); });
 resizeCanvases();
 
-// Default view: zoomed all the way out in X, middle 3 octaves in Y
-// (within the area below the top rulers).
+// Default view: about 30 seconds visible in X (at the composition's BPM),
+// middle 3 octaves in Y (within the area below the top rulers).
 {
   const rect = canvasContainer.getBoundingClientRect();
   const midNote = (MIN_NOTE + MAX_NOTE) / 2;          // F#4 for the 12–120 range
   const visibleSemitones = 36;                         // 3 octaves
-  viewport.setZoomX(MIN_ZOOM_X);
+  const visibleBeats = (30 / 60) * store.getComposition().bpm;  // 30s of beats
+  viewport.setZoomX(rect.width / visibleBeats);
   viewport.setZoomY((rect.height - viewport.topInset) / visibleSemitones);
   viewport.state.offsetX = 0;
   viewport.state.offsetY = midNote + visibleSemitones / 2 + viewport.topInset / viewport.state.zoomY;
@@ -2132,4 +2215,39 @@ renderTrackList();
 renderPropertyPanel(document.getElementById('prop-content')!);
 renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
 updateRecordButtonVisuals();
+
+// ── Collapsible panel sections ──────────────────────────────────
+// Each .panel-header toggles the visibility of its sibling content
+// (everything between this header and the next .panel-header). State
+// is persisted in localStorage keyed by header text.
+{
+  const STORAGE_KEY = 'slidesynth.collapsedPanels';
+  let collapsedSet: Set<string>;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    collapsedSet = new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    collapsedSet = new Set();
+  }
+  function persist() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...collapsedSet])); } catch { /* ignore */ }
+  }
+  function setCollapsed(header: HTMLElement, collapsed: boolean) {
+    const key = (header.textContent ?? '').trim();
+    header.classList.toggle('collapsed', collapsed);
+    let sib = header.nextElementSibling as HTMLElement | null;
+    while (sib && !sib.classList.contains('panel-header')) {
+      sib.style.display = collapsed ? 'none' : '';
+      sib = sib.nextElementSibling as HTMLElement | null;
+    }
+    if (collapsed) collapsedSet.add(key); else collapsedSet.delete(key);
+    persist();
+  }
+  document.querySelectorAll<HTMLElement>('.panel-header').forEach(h => {
+    const key = (h.textContent ?? '').trim();
+    if (collapsedSet.has(key)) setCollapsed(h, true);
+    h.addEventListener('click', () => setCollapsed(h, !h.classList.contains('collapsed')));
+  });
+}
+
 requestAnimationFrame(render);

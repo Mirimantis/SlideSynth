@@ -1,6 +1,7 @@
-import type { AppState, Composition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState } from '../types';
+import type { AppState, Composition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode } from '../types';
 import { createComposition } from '../model/composition';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_NOTE, AUTO_SMOOTH_X_RATIO } from '../constants';
+import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 
 type Listener = () => void;
 
@@ -23,6 +24,8 @@ const MAGNETIC_STRENGTH_STORAGE_KEY = 'slidesynth.magneticStrength';
 const MAGNETIC_SPRING_K_STORAGE_KEY = 'slidesynth.magneticSpringK';
 const MAGNETIC_DAMPING_STORAGE_KEY = 'slidesynth.magneticDamping';
 const AUTO_SMOOTH_X_RATIO_STORAGE_KEY = 'slidesynth.autoSmoothXRatio';
+const PRISM_CHORD_SPEC_STORAGE_KEY = 'slidesynth.prismChordSpec';
+const PRISM_OCTAVE_RANGE_STORAGE_KEY = 'slidesynth.prismOctaveRange';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -58,6 +61,32 @@ function saveNumberPref(key: string, value: number): void {
     localStorage.setItem(key, String(value));
   } catch {
     // Silently ignore — preference just won't persist.
+  }
+}
+
+function loadChordSpecPref(defaultSpec: ChordSpec): ChordSpec {
+  try {
+    const raw = localStorage.getItem(PRISM_CHORD_SPEC_STORAGE_KEY);
+    if (raw === null) return { ...defaultSpec };
+    const parsed = JSON.parse(raw);
+    // Shallow validation: only accept fields we recognize; fall back per-field.
+    return {
+      stacking: parsed.stacking ?? defaultSpec.stacking,
+      quality: parsed.quality ?? defaultSpec.quality,
+      numVoices: parsed.numVoices ?? defaultSpec.numVoices,
+      tuning: parsed.tuning ?? defaultSpec.tuning,
+      direction: parsed.direction ?? defaultSpec.direction,
+    };
+  } catch {
+    return { ...defaultSpec };
+  }
+}
+
+function saveChordSpecPref(spec: ChordSpec): void {
+  try {
+    localStorage.setItem(PRISM_CHORD_SPEC_STORAGE_KEY, JSON.stringify(spec));
+  } catch {
+    // Silently ignore.
   }
 }
 
@@ -100,6 +129,12 @@ function createInitialState(): AppState {
     magneticSpringK: Math.max(1, Math.min(50, loadNumberPref(MAGNETIC_SPRING_K_STORAGE_KEY, 30))),
     magneticDamping: Math.max(0.25, Math.min(15, loadNumberPref(MAGNETIC_DAMPING_STORAGE_KEY, 3))),
     autoSmoothXRatio: Math.max(0, Math.min(1, loadNumberPref(AUTO_SMOOTH_X_RATIO_STORAGE_KEY, AUTO_SMOOTH_X_RATIO))),
+    harmonicPrism: {
+      chordSpec: loadChordSpecPref(DEFAULT_CHORD_SPEC),
+      projectionOctaveRange: Math.max(0, Math.min(3, Math.round(loadNumberPref(PRISM_OCTAVE_RANGE_STORAGE_KEY, 2)))),
+      activeMode: null,
+      projectionSourceId: null,
+    },
   };
 }
 
@@ -385,6 +420,42 @@ class Store {
     this.state.selectedTrackId = comp.tracks[0]?.id ?? null;
     this.state.selectedCurveIds = new Set();
     this.state.selectedPointIndex = null;
+    this.notify();
+  }
+
+  // ── Harmonic Prism ──────────────────────────────────────────────
+
+  setPrismChordSpec(spec: Partial<ChordSpec>) {
+    const current = this.state.harmonicPrism.chordSpec;
+    const next: ChordSpec = { ...current, ...spec };
+    this.state.harmonicPrism.chordSpec = next;
+    saveChordSpecPref(next);
+    this.notify();
+  }
+
+  setPrismOctaveRange(n: number) {
+    const clamped = Math.max(0, Math.min(3, Math.round(n)));
+    if (this.state.harmonicPrism.projectionOctaveRange === clamped) return;
+    this.state.harmonicPrism.projectionOctaveRange = clamped;
+    saveNumberPref(PRISM_OCTAVE_RANGE_STORAGE_KEY, clamped);
+    this.notify();
+  }
+
+  setPrismActiveMode(mode: HarmonicPrismMode | null) {
+    if (this.state.harmonicPrism.activeMode === mode) return;
+    this.state.harmonicPrism.activeMode = mode;
+    this.notify();
+  }
+
+  setPrismProjectionSource(curveId: string | null) {
+    if (this.state.harmonicPrism.projectionSourceId === curveId) return;
+    this.state.harmonicPrism.projectionSourceId = curveId;
+    // When clearing, also clear the active-mode flag if it was projection.
+    if (curveId === null && this.state.harmonicPrism.activeMode === 'projection') {
+      this.state.harmonicPrism.activeMode = null;
+    } else if (curveId !== null) {
+      this.state.harmonicPrism.activeMode = 'projection';
+    }
     this.notify();
   }
 }
