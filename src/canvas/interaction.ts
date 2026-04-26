@@ -6,6 +6,7 @@ import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle,
 import { snapToGrid, getAdaptiveSubdivisions } from '../utils/snap';
 import type { SnapConfig } from '../utils/snap';
 import { getScaleById } from '../utils/scales';
+import { computeProjectionTargetsAtX } from './projection-renderer';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { distToPoint, nearestPointOnCubic, nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
@@ -105,7 +106,7 @@ export function createInteraction(
       }
     }
     if (bestPointX !== null) return Math.max(0, bestPointX);
-    const snap = buildSnapConfig(zoomX);
+    const snap = buildSnapConfig(zoomX, worldX);
     const snapped = snap.enabled ? snapToGrid(worldX, 0, snap).wx : worldX;
     return Math.max(0, snapped);
   }
@@ -134,7 +135,7 @@ export function createInteraction(
       return;
     }
 
-    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig(vp.state.zoomX));
+    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig(vp.state.zoomX, world.wx));
 
     // Determine effective coordinates:
     // - Handles: raw (no snap) to allow smooth curve shaping
@@ -254,7 +255,7 @@ export function createInteraction(
     const sy = e.clientY - rect.top;
     const world = vp.screenToWorld(sx, sy);
     const rawPt: Vec2 = { x: world.wx, y: world.wy };
-    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig(vp.state.zoomX));
+    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig(vp.state.zoomX, world.wx));
     const snappedPt: Vec2 = { x: snapped.wx, y: snapped.wy };
 
     // Ruler zone: first try loop-marker drag (if Loop is on), then fall through
@@ -450,8 +451,22 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
   const track = getSelectedTrack();
   if (!track) return;
 
-  // Determine the target curve: either the one being drawn, or the single selected curve
+  // Determine the target curve. If the user has explicitly selected a curve
+  // that differs from the stale drawingCurve (e.g. they switched tools via
+  // hotkey, picked a different curve, then came back to Draw), honor the
+  // selection instead of the stale draw target.
   const singleSelectedId = store.getSelectedCurveId();
+  if (
+    istate.drawingCurve &&
+    singleSelectedId &&
+    singleSelectedId !== istate.drawingCurve.id
+  ) {
+    istate.drawingCurve = null;
+  }
+  // Also clear if the previous drawingCurve was deleted out from under us.
+  if (istate.drawingCurve && !track.curves.includes(istate.drawingCurve)) {
+    istate.drawingCurve = null;
+  }
   const targetCurve = istate.drawingCurve
     ?? (singleSelectedId
       ? track.curves.find(c => c.id === singleSelectedId)
@@ -859,15 +874,36 @@ function getSelectedTrack(): Track | undefined {
   return state.composition.tracks.find(t => t.id === state.selectedTrackId);
 }
 
-function buildSnapConfig(zoomX?: number): SnapConfig {
+function buildSnapConfig(zoomX?: number, wxForProjection?: number): SnapConfig {
   const state = store.getState();
   const subdivisions = zoomX !== undefined
     ? getAdaptiveSubdivisions(zoomX)
     : SUBDIVISIONS_PER_BEAT;
+
+  // Harmonic Prism: when projection mode is active, add echo Y targets
+  // at the cursor X as additional snap candidates.
+  let projectionTargets: readonly number[] | undefined;
+  const prism = state.harmonicPrism;
+  if (prism.projectionSourceId && wxForProjection !== undefined) {
+    const track = state.composition.tracks.find(t =>
+      t.curves.some(c => c.id === prism.projectionSourceId),
+    );
+    const source = track?.curves.find(c => c.id === prism.projectionSourceId);
+    if (source) {
+      projectionTargets = computeProjectionTargetsAtX(
+        source,
+        prism.chordSpec,
+        prism.projectionOctaveRange,
+        wxForProjection,
+      );
+    }
+  }
+
   return {
     enabled: state.snapEnabled,
     subdivisionsPerBeat: subdivisions,
     scaleRoot: state.scaleRoot,
     scale: state.scaleId ? getScaleById(state.scaleId) ?? null : null,
+    projectionTargets,
   };
 }

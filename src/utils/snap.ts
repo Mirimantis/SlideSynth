@@ -7,12 +7,20 @@ export interface SnapConfig {
   subdivisionsPerBeat: number;
   scaleRoot: number | null;
   scale: ScaleDefinition | null;
+  /** Harmonic Prism projection echo pitches (MIDI float). Optional. */
+  projectionTargets?: readonly number[];
 }
 
 /**
  * Snap world coordinates to the grid.
- * X snaps to 1/16 beat boundaries.
- * Y snaps to nearest in-scale note if a scale is active, otherwise nearest integer note.
+ * X always snaps to 1/subdivisionsPerBeat boundaries.
+ * Y snap behavior:
+ *   • When Harmonic Prism projection is active (projectionTargets provided
+ *     and non-empty) → Y snaps EXCLUSIVELY to the nearest projection echo.
+ *     Grid lines and scale notes are ignored so the user can reliably hit
+ *     echo targets.
+ *   • Otherwise → Y snaps to the nearest in-scale note (if a scale is set)
+ *     or the nearest integer semitone.
  * Returns original coordinates if snap is disabled.
  */
 export function snapToGrid(
@@ -26,7 +34,20 @@ export function snapToGrid(
   const snappedX = Math.round(wx / step) * step;
 
   let snappedY: number;
-  if (config.scaleRoot !== null && config.scale) {
+  if (config.projectionTargets && config.projectionTargets.length > 0) {
+    // Projection mode: snap ONLY to echo targets.
+    let best = config.projectionTargets[0]!;
+    let bestDist = Math.abs(wy - best);
+    for (let i = 1; i < config.projectionTargets.length; i++) {
+      const pt = config.projectionTargets[i]!;
+      const d = Math.abs(wy - pt);
+      if (d < bestDist) {
+        bestDist = d;
+        best = pt;
+      }
+    }
+    snappedY = best;
+  } else if (config.scaleRoot !== null && config.scale) {
     snappedY = nearestScaleNote(wy, config.scaleRoot, config.scale);
   } else {
     snappedY = Math.round(Math.max(MIN_NOTE, Math.min(MAX_NOTE, wy)));

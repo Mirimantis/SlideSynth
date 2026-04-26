@@ -1,3 +1,5 @@
+import type { ChordSpec } from './utils/harmonics';
+
 // ── Vector ──────────────────────────────────────────────────────
 
 export interface Vec2 {
@@ -43,6 +45,7 @@ export interface ControlPoint {
 export interface BezierCurve {
   id: string;
   points: ControlPoint[];   // ordered by increasing position.x
+  chordGroupId?: string | null;  // Harmonic Prism: sibling curves share a group id
 }
 
 // ── Track ───────────────────────────────────────────────────────
@@ -120,6 +123,17 @@ export interface PerformanceState {
   currentRecordedCurveIds: Record<VoiceId, string | null>;
 }
 
+// ── Harmonic Prism ──────────────────────────────────────────────
+
+export type HarmonicPrismMode = 'draw' | 'perform' | 'projection';
+
+export interface HarmonicPrismState {
+  chordSpec: ChordSpec;                    // persisted
+  projectionOctaveRange: number;           // ±octaves to echo; persisted; 0..3
+  activeMode: HarmonicPrismMode | null;    // runtime only (which mode is engaged)
+  projectionSourceId: string | null;       // curve id driving projection, or null
+}
+
 // ── App State ───────────────────────────────────────────────────
 
 export interface AppState {
@@ -145,6 +159,7 @@ export interface AppState {
   magneticSpringK: number;                    // 0..50 — cursor-to-pitch spring stiffness for Magnetic mode (localStorage-backed)
   magneticDamping: number;                    // 0..20 — velocity damping for Magnetic mode (low = long wobbles, high = quick settle) (localStorage-backed)
   autoSmoothXRatio: number;                   // 0..1 — fraction of neighbor segment length used for Draw auto-smooth + Smooth Curve action (localStorage-backed)
+  harmonicPrism: HarmonicPrismState;          // Harmonic Prism feature (chordSpec + octaveRange localStorage-backed)
 }
 
 // ── Transform Box ──────────────────────────────────────────────

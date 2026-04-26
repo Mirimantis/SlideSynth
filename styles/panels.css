@@ -1,6 +1,7 @@
-/* ── Transport Section ────────────────────────────────────────── */
+/* ── Transport / Snap Section ─────────────────────────────────── */
 
-#transport-section {
+#transport-section,
+#snap-section {
   padding: 8px;
   border-bottom: 1px solid #335;
   display: flex;
@@ -167,4 +168,60 @@
 
 .track-panel-actions button:hover {
   background: #1a4a80;
+}
+
+/* ── Harmonic Prism Panel ─────────────────────────────────────── */
+
+#prism-panel {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-bottom: 1px solid #335;
+}
+
+.prism-status {
+  font-size: 0.75rem;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(200, 160, 255, 0.08);
+  color: var(--text-dim);
+  border: 1px dashed rgba(200, 160, 255, 0.35);
+  text-align: center;
+}
+
+.prism-status-active {
+  background: rgba(200, 160, 255, 0.18);
+  color: #d0b0ff;
+  border-style: solid;
+  font-weight: 600;
+}
+
+.prism-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+.prism-row label {
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-size: 0.8rem;
+  width: 60px;
+}
+
+.prism-row select,
+.prism-row input[type="number"] {
+  flex: 1;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+}
+
+.prism-row input[type="number"] {
+  max-width: 60px;
 }

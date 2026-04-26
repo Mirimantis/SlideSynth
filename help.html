@@ -223,6 +223,7 @@
     <a href="#midi-input">Live MIDI Input</a>
     <a href="#snapping">Snap & Grid</a>
     <a href="#scales">Key & Scale</a>
+    <a href="#prism">Harmonic Prism</a>
     <a href="#viewport">Zoom & Pan</a>
     <a href="#clipboard">Copy, Paste & Duplicate</a>
     <a href="#undo">Undo & Redo</a>
@@ -579,6 +580,96 @@
     </div>
   </details>
 
+  <!-- Harmonic Prism -->
+  <h2 id="prism">Harmonic Prism</h2>
+  <p>
+    The <strong>Harmonic Prism</strong> turns single-pitch curves into chord
+    gestures. Phase 1 ships <strong>Projection Mode</strong>: select a curve,
+    press <kbd>H</kbd>, and visual "echoes" of that curve are projected up
+    and down the canvas at harmonic intervals. Echoes are silent but snappable
+    — you can draw or perform new curves along them to harmonise by ear.
+    While projection is active, snap locks to echo pitches only (staff and
+    scale snaps are suspended) so you can reliably land on a harmonic voice.
+  </p>
+
+  <details open>
+    <summary>Using Projection Mode</summary>
+    <div class="detail-body">
+      <ol>
+        <li>Draw a single curve (the "source").</li>
+        <li>Select it (click with the Select tool).</li>
+        <li>Press <kbd>H</kbd>. Dashed lavender echoes appear. The staff stays visible so you can read absolute pitch.</li>
+        <li>Tune the chord spec in the <strong>Harmonic Prism</strong> panel (left sidebar).</li>
+        <li>Draw a new curve — the cursor snaps exclusively to echo pitches for the duration of projection.</li>
+        <li>Press <kbd>H</kbd> or <kbd>Esc</kbd> to clear projection. Normal snap resumes.</li>
+      </ol>
+    </div>
+  </details>
+
+  <details>
+    <summary>Chord spec controls</summary>
+    <div class="detail-body">
+      <ul>
+        <li><strong>Stacking</strong> — the interval used to stack voices. Tertian (3rds) for conventional harmony, Quartal (4ths) for modal/jazz, Quintal (5ths) for open sound, Secondal (2nds) for clusters.</li>
+        <li><strong>Quality</strong> — major / minor / dominant / diminished / augmented / sus2 / sus4. Fully applies to tertian; limited options for other stackings.</li>
+        <li><strong>Voices</strong> — 2 (dyad) through 5 (pentad). More voices extend the chord: triad → 7th → 9th.</li>
+        <li><strong>Tuning</strong> — 12-TET (grid-aligned) or Just Intonation (pure acoustic ratios).</li>
+        <li><strong>Direction</strong> — voices sit above the base, below, or around it.</li>
+        <li><strong>Octaves ±</strong> — how many octaves above and below the source to echo (0–3).</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>A brief acoustics primer</summary>
+    <div class="detail-body">
+      <h3>Harmonic series</h3>
+      <p>
+        Every pitched sound is a stack of integer-multiple frequencies (1×, 2×, 3×, …).
+        Intervals that sound consonant are simple ratios between these multiples — the
+        octave is 2:1, the perfect fifth is 3:2, the major third is 5:4.
+      </p>
+      <h3>12-TET vs Just Intonation</h3>
+      <p>
+        <strong>12-TET (equal temperament)</strong>: the octave is split into 12 logarithmically-equal
+        semitones. Every key sounds equally acceptable — and equally compromised. The
+        12-TET major third is 400¢.
+      </p>
+      <p>
+        <strong>Just Intonation</strong>: use the acoustic ratio directly. The JI major third
+        (5/4) is 386.31¢ — about 14¢ flatter than 12-TET, but it "locks" on sustained tones
+        without the beating you hear in equal temperament. SlideSynth's JI dominant 7th
+        uses the harmonic seventh (7/4 ≈ 969¢), noticeably flatter than the 12-TET m7
+        (1000¢).
+      </p>
+      <h3>Why microtonal matters</h3>
+      <p>
+        SlideSynth pitches are continuous floats, not quantised to semitones. A chord
+        built at MIDI 60.4 is just as valid as one at 60 — the harmonic maths is
+        invariant to the base pitch.
+      </p>
+      <h3>Stacking styles</h3>
+      <p>
+        <strong>Tertian</strong> is conventional Western harmony (stacked 3rds).
+        <strong>Quartal</strong> stacks 4ths (think modal jazz, McCoy Tyner).
+        <strong>Quintal</strong> stacks 5ths (open, power-chord-like).
+        <strong>Secondal</strong> stacks 2nds (cluster chords).
+      </p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Snapping to echoes</summary>
+    <div class="detail-body">
+      <ul>
+        <li>While Projection is active, <strong>snap locks exclusively to echo pitches</strong>. Staff lines and scale snapping are suspended so you can land precisely on a JI interval between staff lines.</li>
+        <li>X still snaps to the beat grid as usual.</li>
+        <li>The staff stays visible as a reference — use it to read absolute pitch, but trust the snap to your ear.</li>
+        <li>Turn projection off (<kbd>H</kbd> or <kbd>Esc</kbd>) and normal staff/scale snapping returns.</li>
+      </ul>
+    </div>
+  </details>
+
   <!-- Zoom & Pan -->
   <h2 id="viewport">Zoom & Pan</h2>
   <details>
@@ -650,7 +741,8 @@
     <tr><td><kbd>X</kbd></td><td>Delete tool</td></tr>
     <tr><td><kbd>C</kbd></td><td>Slice tool (split curve)</td></tr>
     <tr><td><kbd>S</kbd></td><td>Toggle snap</td></tr>
-    <tr><td><kbd>Escape</kbd> / <kbd>Enter</kbd></td><td>Finish drawing</td></tr>
+    <tr><td><kbd>H</kbd></td><td>Toggle Harmonic Prism projection on the selected curve</td></tr>
+    <tr><td><kbd>Escape</kbd> / <kbd>Enter</kbd></td><td>Finish drawing / clear Prism projection</td></tr>
     <tr><td><kbd>Ctrl</kbd> (hold in Draw)</td><td>Temporary Select</td></tr>
     <tr><td><kbd>Shift</kbd> (hold while dragging)</td><td>Constrain to axis</td></tr>
     <tr><td><kbd>Alt</kbd>+drag</td><td>Pan canvas (Compose)</td></tr>
