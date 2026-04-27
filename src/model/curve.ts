@@ -255,6 +255,18 @@ export function splitCurveAtSegment(
   // Adjust the first original point's handleIn to match the subdivision
   right.points[1]!.handleIn = { x: R2.x - R3.x, y: R2.y - R3.y };
 
+  // Group inheritance: both halves inherit the parent's groupId/voiceIndex
+  // so a chord-cluster member that's been split keeps its cluster membership
+  // (Phase 2 design: split preserves group).
+  if (curve.groupId) {
+    left.groupId = curve.groupId;
+    right.groupId = curve.groupId;
+  }
+  if (curve.voiceIndex !== undefined) {
+    left.voiceIndex = curve.voiceIndex;
+    right.voiceIndex = curve.voiceIndex;
+  }
+
   return { left, right };
 }
 
@@ -274,6 +286,15 @@ export function splitCurveAtPoint(
   const right = createCurve();
   right.points = deepCopyPoints(curve.points.slice(pointIndex));
   right.points[0]!.handleIn = null;
+
+  if (curve.groupId) {
+    left.groupId = curve.groupId;
+    right.groupId = curve.groupId;
+  }
+  if (curve.voiceIndex !== undefined) {
+    left.voiceIndex = curve.voiceIndex;
+    right.voiceIndex = curve.voiceIndex;
+  }
 
   return { left, right };
 }

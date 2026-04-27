@@ -45,7 +45,8 @@ export interface ControlPoint {
 export interface BezierCurve {
   id: string;
   points: ControlPoint[];   // ordered by increasing position.x
-  chordGroupId?: string | null;  // Harmonic Prism: sibling curves share a group id
+  groupId?: string | null;  // grouped curves move/delete/transform together (chord clusters and freehand groups)
+  voiceIndex?: number;      // Harmonic Prism: 0 = primary, 1..N-1 = harmonies (chord-cluster siblings only)
 }
 
 // ── Track ───────────────────────────────────────────────────────
@@ -132,6 +133,7 @@ export interface HarmonicPrismState {
   projectionOctaveRange: number;           // ±octaves to echo; persisted; 0..3
   activeMode: HarmonicPrismMode | null;    // runtime only (which mode is engaged)
   projectionSourceId: string | null;       // curve id driving projection, or null
+  drawMode: boolean;                       // Draw-tool chord placement on/off; persisted
 }
 
 // ── App State ───────────────────────────────────────────────────

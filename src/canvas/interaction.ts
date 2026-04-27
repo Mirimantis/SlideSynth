@@ -7,7 +7,9 @@ import { snapToGrid, getAdaptiveSubdivisions } from '../utils/snap';
 import type { SnapConfig } from '../utils/snap';
 import { getScaleById } from '../utils/scales';
 import { computeProjectionTargetsAtX } from './projection-renderer';
-import { SUBDIVISIONS_PER_BEAT } from '../constants';
+import { SUBDIVISIONS_PER_BEAT, MIN_NOTE, MAX_NOTE } from '../constants';
+import { chordOffsets } from '../utils/harmonics';
+import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/curve-groups';
 import { distToPoint, nearestPointOnCubic, nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
 import { hitTestLoopMarkers } from './loop-markers';
@@ -184,19 +186,27 @@ export function createInteraction(
               }
             }
           });
-          // Create duplicates and switch the transform box to them
+          // Create duplicates and switch the transform box to them. Preserve
+          // chord-group / freehand-group identity within the dupe set with a
+          // fresh id (so the duplicated cluster moves together but doesn't
+          // collide with the source).
           const newIds: string[] = [];
           const newOrigMap = new Map<string, ControlPoint[]>();
+          const created: BezierCurve[] = [];
           store.mutate(() => {
             for (const curveId of tb.curveIds) {
               const original = track.curves.find(c => c.id === curveId);
               if (!original || original.points.length === 0) continue;
               const dup = createCurve();
               dup.points = deepCopyPoints(original.points);
+              dup.groupId = original.groupId ?? null;
+              if (original.voiceIndex !== undefined) dup.voiceIndex = original.voiceIndex;
               track.curves.push(dup);
               newIds.push(dup.id);
               newOrigMap.set(dup.id, deepCopyPoints(dup.points));
+              created.push(dup);
             }
+            remapGroupIds(created);
           });
           tb.curveIds = newIds;
           tb.originalPointsMap = newOrigMap;
@@ -451,6 +461,12 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
   const track = getSelectedTrack();
   if (!track) return;
 
+  // Harmonic Prism Draw mode: dispatch to chord-cluster placement.
+  if (state.harmonicPrism.drawMode) {
+    handleDrawClickPrism(istate, worldPt);
+    return;
+  }
+
   // Determine the target curve. If the user has explicitly selected a curve
   // that differs from the stale drawingCurve (e.g. they switched tools via
   // hotkey, picked a different curve, then came back to Draw), honor the
@@ -655,10 +671,17 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
   }
 }
 
-/** Rebuild the transform box from the current selectedCurveIds. */
+/** Rebuild the transform box from the current selectedCurveIds, expanding to
+ *  include every chord-group sibling so the box wraps the whole cluster. */
 export function rebuildTransformBox(istate: InteractionState, track: Track): void {
   const state = store.getState();
-  const selectedIds = [...state.selectedCurveIds];
+  const expanded = expandSelectionToGroups(state.selectedCurveIds, track);
+  const selectedIds = [...expanded];
+  // If group expansion added members not currently in selectedCurveIds, sync the
+  // selection so the rest of the UI reflects the cluster.
+  if (selectedIds.length !== state.selectedCurveIds.size) {
+    store.setSelectedCurves(selectedIds);
+  }
   const curves = selectedIds
     .map(id => track.curves.find(c => c.id === id))
     .filter((c): c is BezierCurve => !!c);
@@ -692,6 +715,17 @@ function handleDeleteClick(worldPt: Vec2, vp: Viewport): void {
       const pt = curve.points[i]!;
       if (distToPoint(worldPt, pt.position) < hitRadius) {
         history.snapshot();
+        // Group-aware: deleting any point on a grouped curve removes the entire
+        // group (matches Phase 2 design: groups couple delete actions).
+        if (curve.groupId) {
+          const groupId = curve.groupId;
+          store.mutate(() => {
+            for (let j = track.curves.length - 1; j >= 0; j--) {
+              if (track.curves[j]!.groupId === groupId) track.curves.splice(j, 1);
+            }
+          });
+          return;
+        }
         store.mutate(() => {
           curve.points.splice(i, 1);
           // Remove curve if empty
@@ -804,12 +838,118 @@ function findScissorsPreview(worldPt: Vec2, vp: Viewport): Vec2 | null {
   return cut ? cut.point : null;
 }
 
+/**
+ * Harmonic Prism Draw mode click handler — places N grouped sibling curves
+ * (or extends an existing chord cluster) at the snapped (X, base Y), with
+ * each voice at base Y + chord offset.
+ */
+function handleDrawClickPrism(istate: InteractionState, worldPt: Vec2): void {
+  const state = store.getState();
+  const track = getSelectedTrack();
+  if (!track) return;
+
+  const spec = state.harmonicPrism.chordSpec;
+  const offsets = chordOffsets(spec);
+  if (offsets.length === 0) return;
+
+  // Identify a chord-cluster primary to extend, if any:
+  //   - the active drawingCurve, if it's voiceIndex 0 of a group, OR
+  //   - the singly-selected curve, if it's voiceIndex 0 of a group.
+  let primary: BezierCurve | null = istate.drawingCurve;
+  if (primary && (!primary.groupId || primary.voiceIndex !== 0 || !track.curves.includes(primary))) {
+    primary = null;
+  }
+  if (!primary) {
+    const selId = store.getSelectedCurveId();
+    if (selId) {
+      const sel = track.curves.find(c => c.id === selId);
+      if (sel && sel.groupId && sel.voiceIndex === 0) primary = sel;
+    }
+  }
+
+  const clampY = (y: number) => Math.max(MIN_NOTE, Math.min(MAX_NOTE, y));
+
+  if (primary && primary.groupId) {
+    // EXTEND existing chord cluster: add a parallel point to each sibling.
+    const groupId = primary.groupId;
+    const siblings = track.curves.filter(c => c.groupId === groupId);
+    history.snapshot();
+    let primaryNewIdx = 0;
+    store.mutate(() => {
+      for (const sib of siblings) {
+        const vIdx = sib.voiceIndex ?? 0;
+        if (vIdx >= offsets.length) continue; // current spec has fewer voices than placed; skip
+        const offset = offsets[vIdx]!;
+        const point = createControlPoint(worldPt.x, clampY(worldPt.y + offset));
+        const idx = addPointToCurve(sib, point);
+        reclampHandlesAround(sib, idx);
+        if (state.bezierAutoSmooth) applyAutoSmoothHandles(sib, idx, state.autoSmoothXRatio);
+        if (sib.id === primary!.id) primaryNewIdx = idx;
+      }
+    });
+    istate.drawingCurve = primary;
+    store.setSelectedCurves(siblings.map(s => s.id));
+    store.setSelectedPoint(primaryNewIdx);
+    istate.dragging = 'handleOut';
+    istate.dragCurveId = primary.id;
+    istate.dragPointIndex = primaryNewIdx;
+    istate.dragStartWorld = { ...worldPt };
+    return;
+  }
+
+  // CREATE a brand new chord cluster.
+  history.snapshot();
+  const groupId = createGroupId();
+  const newCurves: BezierCurve[] = [];
+  let primaryCurve: BezierCurve | null = null;
+  store.mutate(comp => {
+    const t = comp.tracks.find(tt => tt.id === state.selectedTrackId);
+    if (!t) return;
+    for (let i = 0; i < offsets.length; i++) {
+      const offset = offsets[i]!;
+      const curve = createCurve();
+      curve.groupId = groupId;
+      curve.voiceIndex = i;
+      const point = createControlPoint(worldPt.x, clampY(worldPt.y + offset));
+      addPointToCurve(curve, point);
+      t.curves.push(curve);
+      newCurves.push(curve);
+      if (i === 0) primaryCurve = curve;
+    }
+  });
+  if (!primaryCurve) return;
+  // Re-fetch primary from track since store.mutate may have replaced refs (it doesn't here, but be safe).
+  istate.drawingCurve = primaryCurve;
+  store.setSelectedCurves(newCurves.map(c => c.id));
+  store.setSelectedPoint(0);
+  istate.dragging = 'handleOut';
+  istate.dragCurveId = (primaryCurve as BezierCurve).id;
+  istate.dragPointIndex = 0;
+  istate.dragStartWorld = { ...worldPt };
+}
+
 function handleDrag(istate: InteractionState, snapped: { wx: number; wy: number }): void {
   const track = getSelectedTrack();
   if (!track || !istate.dragCurveId) return;
 
   const curve = track.curves.find(c => c.id === istate.dragCurveId);
   if (!curve) return;
+
+  // Identify chord-cluster siblings for placement-time handle propagation.
+  // We mirror handle deltas across siblings only during the in-progress draw
+  // (post-click handle pull). Once the user leaves Draw mode or starts editing
+  // the cluster via Select tool, point/handle drags are local to one curve.
+  const state = store.getState();
+  const isPlacementDrag = state.activeTool === 'draw'
+    && istate.drawingCurve !== null
+    && istate.drawingCurve.id === istate.dragCurveId;
+  const propagateToSiblings = isPlacementDrag
+    && curve.groupId
+    && curve.voiceIndex === 0
+    && (istate.dragging === 'handleOut' || istate.dragging === 'handleIn');
+  const siblings = propagateToSiblings
+    ? track.curves.filter(c => c.groupId === curve.groupId && c.id !== curve.id)
+    : [];
 
   store.mutate(() => {
     if (istate.dragging === 'point') {
@@ -830,6 +970,16 @@ function handleDrag(istate: InteractionState, snapped: { wx: number; wy: number 
       const opposite = which === 'out' ? 'in' : 'out';
       const mirrorRel: Vec2 = { x: -rel.x, y: -rel.y };
       setHandle(curve, istate.dragPointIndex, opposite, mirrorRel);
+
+      // Chord-cluster placement: copy the handle relative offsets to every sibling
+      // at the same point index so all voices share the same shape.
+      if (propagateToSiblings) {
+        for (const sib of siblings) {
+          if (istate.dragPointIndex >= sib.points.length) continue;
+          setHandle(sib, istate.dragPointIndex, which, rel);
+          setHandle(sib, istate.dragPointIndex, opposite, mirrorRel);
+        }
+      }
     }
   });
 }
@@ -874,7 +1024,7 @@ function getSelectedTrack(): Track | undefined {
   return state.composition.tracks.find(t => t.id === state.selectedTrackId);
 }
 
-function buildSnapConfig(zoomX?: number, wxForProjection?: number): SnapConfig {
+export function buildSnapConfig(zoomX?: number, wxForProjection?: number): SnapConfig {
   const state = store.getState();
   const subdivisions = zoomX !== undefined
     ? getAdaptiveSubdivisions(zoomX)
