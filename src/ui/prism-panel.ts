@@ -32,12 +32,22 @@ export function createPrismPanel(container: HTMLElement): { refresh(): void } {
     const s = store.getState().harmonicPrism;
     const spec = s.chordSpec;
     const active = s.projectionSourceId !== null;
+    const drawOn = s.drawMode;
 
     const qualityOptions = RELEVANT_QUALITIES[spec.stacking] ?? ['major'];
 
     container.innerHTML = `
       <div class="prism-row prism-toggle-row">
-        <label class="toggle-switch" title="Press H on a selected curve to toggle Projection mode">
+        <label class="toggle-switch" title="Press H to toggle Draw mode — clicks place chord clusters at the cursor">
+          <span class="toggle-switch-track">
+            <input type="checkbox" id="prism-draw-toggle" ${drawOn ? 'checked' : ''} />
+            <span class="toggle-switch-thumb"></span>
+          </span>
+          <span class="toggle-switch-label">Draw</span>
+        </label>
+      </div>
+      <div class="prism-row prism-toggle-row">
+        <label class="toggle-switch" title="Press Ctrl+H on a selected curve to toggle Projection mode">
           <span class="toggle-switch-track">
             <input type="checkbox" id="prism-projection-toggle" ${active ? 'checked' : ''} />
             <span class="toggle-switch-thumb"></span>
@@ -85,6 +95,9 @@ export function createPrismPanel(container: HTMLElement): { refresh(): void } {
   }
 
   function wireInputs() {
+    container.querySelector('#prism-draw-toggle')?.addEventListener('change', (e) => {
+      store.setPrismDrawMode((e.target as HTMLInputElement).checked);
+    });
     container.querySelector('#prism-projection-toggle')?.addEventListener('change', (e) => {
       const checked = (e.target as HTMLInputElement).checked;
       if (checked) {

@@ -584,25 +584,84 @@
   <h2 id="prism">Harmonic Prism</h2>
   <p>
     The <strong>Harmonic Prism</strong> turns single-pitch curves into chord
-    gestures. Phase 1 ships <strong>Projection Mode</strong>: select a curve,
-    press <kbd>H</kbd>, and visual "echoes" of that curve are projected up
-    and down the canvas at harmonic intervals. Echoes are silent but snappable
-    — you can draw or perform new curves along them to harmonise by ear.
-    While projection is active, snap locks to echo pitches only (staff and
-    scale snaps are suspended) so you can reliably land on a harmonic voice.
+    gestures. Two modes share one chord-spec engine:
   </p>
+  <ul>
+    <li><strong>Draw Mode</strong> (<kbd>H</kbd>) — clicking with the Draw
+      tool places <em>N grouped sibling curves</em> at chord-related Y
+      offsets. The cursor shows a multi-color preview of where each voice
+      will land.</li>
+    <li><strong>Projection Mode</strong> (<kbd>Ctrl</kbd>+<kbd>H</kbd>) —
+      visual "echoes" of a selected curve are projected up and down the
+      canvas at harmonic intervals. Echoes are silent but snappable — you
+      can draw or perform new curves along them. While projection is
+      active, snap locks to echo pitches only.</li>
+  </ul>
 
   <details open>
+    <summary>Using Draw Mode</summary>
+    <div class="detail-body">
+      <ol>
+        <li>Pick the Draw tool. Toggle <strong>Draw</strong> on in the
+          Harmonic Prism panel (or press <kbd>H</kbd>).</li>
+        <li>Hover the canvas. The cursor shows a primary planchette
+          (rainbow-filled disc) plus N&minus;1 harmony planchettes (solid
+          rainbow stops) at the chord-spec Y offsets.</li>
+        <li>Click + drag once. <em>N</em> sibling curves appear with
+          parallel handles, sharing a single group id.</li>
+        <li>Click again to extend the cluster — every sibling gets a new
+          point at the cursor X with its harmony offset.</li>
+        <li>Selecting one sibling selects the whole group; the Transform
+          Box wraps the cluster and resize / translate / octave-shift
+          affect all voices.</li>
+        <li>Editing one sibling's points (in the Select tool) does
+          <em>not</em> cascade — grouping is for placement, deletion, and
+          transforms, not point-level edits. Use Projection mode if you
+          want locked parallelism.</li>
+      </ol>
+    </div>
+  </details>
+
+  <details>
     <summary>Using Projection Mode</summary>
     <div class="detail-body">
       <ol>
         <li>Draw a single curve (the "source").</li>
         <li>Select it (click with the Select tool).</li>
-        <li>Press <kbd>H</kbd>. Dashed lavender echoes appear. The staff stays visible so you can read absolute pitch.</li>
-        <li>Tune the chord spec in the <strong>Harmonic Prism</strong> panel (left sidebar).</li>
-        <li>Draw a new curve — the cursor snaps exclusively to echo pitches for the duration of projection.</li>
-        <li>Press <kbd>H</kbd> or <kbd>Esc</kbd> to clear projection. Normal snap resumes.</li>
+        <li>Press <kbd>Ctrl</kbd>+<kbd>H</kbd>. Dashed lavender echoes
+          appear. The staff stays visible so you can read absolute pitch.</li>
+        <li>Tune the chord spec in the <strong>Harmonic Prism</strong>
+          panel (left sidebar).</li>
+        <li>Draw a new curve — the cursor snaps exclusively to echo
+          pitches for the duration of projection.</li>
+        <li>Press <kbd>Ctrl</kbd>+<kbd>H</kbd> or <kbd>Esc</kbd> to clear
+          projection. Normal snap resumes.</li>
       </ol>
+    </div>
+  </details>
+
+  <details>
+    <summary>Group / Ungroup</summary>
+    <div class="detail-body">
+      <p>
+        Chord-cluster siblings drawn in Draw Mode share a <em>group id</em>.
+        Group is also a first-class freehand action you can apply to any
+        selection of curves on a track:
+      </p>
+      <ul>
+        <li><kbd>Ctrl</kbd>+<kbd>G</kbd> — group ≥2 selected curves so
+          they move, delete, copy, paste, and transform as a unit.</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — dissolve the
+          group on every selected curve (and its siblings); the curves
+          become independent again.</li>
+        <li>Both actions are also in the right-click context menu.</li>
+        <li>Copy / paste / duplicate / continue / Alt+drag preserve group
+          identity within the new copy with a fresh id, so you can build
+          up multiple independent clusters from one original.</li>
+        <li>Splitting a grouped curve with the Slice tool keeps both
+          halves in the same group. Joining two curves from different
+          groups is refused (a toast explains why).</li>
+      </ul>
     </div>
   </details>
 
@@ -741,7 +800,9 @@
     <tr><td><kbd>X</kbd></td><td>Delete tool</td></tr>
     <tr><td><kbd>C</kbd></td><td>Slice tool (split curve)</td></tr>
     <tr><td><kbd>S</kbd></td><td>Toggle snap</td></tr>
-    <tr><td><kbd>H</kbd></td><td>Toggle Harmonic Prism projection on the selected curve</td></tr>
+    <tr><td><kbd>H</kbd></td><td>Toggle Harmonic Prism Draw mode (chord-cluster placement on click)</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>H</kbd></td><td>Toggle Harmonic Prism Projection on the selected curve</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td><td>Group / Ungroup selected curves</td></tr>
     <tr><td><kbd>Escape</kbd> / <kbd>Enter</kbd></td><td>Finish drawing / clear Prism projection</td></tr>
     <tr><td><kbd>Ctrl</kbd> (hold in Draw)</td><td>Temporary Select</td></tr>
     <tr><td><kbd>Shift</kbd> (hold while dragging)</td><td>Constrain to axis</td></tr>

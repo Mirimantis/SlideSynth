@@ -3,12 +3,12 @@ import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZO
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
-import { renderProjection, renderProjectionSourceHighlight } from './canvas/projection-renderer';
+import { renderProjection, renderProjectionSourceHighlight, renderPrismDrawPreview } from './canvas/projection-renderer';
 import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, getAdaptiveSubdivisions } from './utils/snap';
-import { createInteraction, rebuildTransformBox, RULER_HEIGHT } from './canvas/interaction';
+import { createInteraction, rebuildTransformBox, RULER_HEIGHT, buildSnapConfig } from './canvas/interaction';
 import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
@@ -33,6 +33,8 @@ import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, co
 import { createTrack } from './model/track';
 import { getCompositionLength, measureLengthInBeats } from './model/composition';
 import { computeMultiCurveBBox, deepCopyPoints, joinCurves, sharpenCurveHandles, smoothCurveHandles } from './model/curve';
+import { assignGroup, dissolveGroup, allShareGroup, anyGrouped } from './model/curve-groups';
+import { showToast } from './ui/toast';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { getScaleById } from './utils/scales';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
@@ -1011,9 +1013,21 @@ function performJoin() {
     .map(id => track.curves.find(c => c.id === id))
     .filter((c): c is import('./types').BezierCurve => !!c);
   if (curves.length < 2) return;
+  // Refuse to join curves from different groups (a chord-cluster member
+  // can't be merged with a curve from a different cluster). Ungrouped
+  // curves can always join each other; same-group siblings join freely
+  // and the joined result keeps the group id.
+  const groupIds = new Set(curves.map(c => c.groupId).filter((g): g is string => !!g));
+  if (groupIds.size > 1) {
+    showToast("Can't join curves from different groups");
+    return;
+  }
   const threshold = Math.max(8 / viewport.state.zoomX, 8 / viewport.state.zoomY);
   const { merged, consumedIds } = joinCurves(curves, threshold);
   if (consumedIds.size < 2) return;
+  // Inherit the shared group id (if any) onto the merged curve.
+  const sharedGroup = groupIds.size === 1 ? [...groupIds][0]! : null;
+  if (sharedGroup) merged.groupId = sharedGroup;
   history.snapshot();
   store.mutate(() => {
     for (let i = track.curves.length - 1; i >= 0; i--) {
@@ -1055,6 +1069,44 @@ function performSmooth() {
     const ratio = store.getState().autoSmoothXRatio;
     for (const curve of curves) smoothCurveHandles(curve, ratio);
   });
+}
+
+// ── Group / Ungroup helpers ────────────────────────────────────
+function performGroup() {
+  const state = store.getState();
+  if (state.selectedCurveIds.size < 2) return;
+  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  if (!track) return;
+  const curves = [...state.selectedCurveIds]
+    .map(id => track.curves.find(c => c.id === id))
+    .filter((c): c is import('./types').BezierCurve => !!c);
+  if (curves.length < 2) return;
+  if (allShareGroup(curves)) return;  // already grouped
+  history.snapshot();
+  store.mutate(() => {
+    assignGroup(curves);
+  });
+  rebuildTransformBox(interaction, track);
+}
+
+function performUngroup() {
+  const state = store.getState();
+  if (state.selectedCurveIds.size === 0) return;
+  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  if (!track) return;
+  const selected = [...state.selectedCurveIds]
+    .map(id => track.curves.find(c => c.id === id))
+    .filter((c): c is import('./types').BezierCurve => !!c);
+  if (!anyGrouped(selected)) return;
+  // Expand: every member of every selected curve's group is dissolved.
+  const groupIds = new Set(selected.map(c => c.groupId).filter((g): g is string => !!g));
+  const allMembers = track.curves.filter(c => c.groupId && groupIds.has(c.groupId));
+  if (allMembers.length === 0) return;
+  history.snapshot();
+  store.mutate(() => {
+    dissolveGroup(allMembers);
+  });
+  rebuildTransformBox(interaction, track);
 }
 // ── Undo / Redo buttons ────────────────────────────────────────
 function clearInteractionForUndo() {
@@ -1173,6 +1225,36 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
+  // Harmonic Prism — Ctrl+H toggles Projection mode on the selected curve
+  // (browser binds Ctrl+H to the History panel, so always preventDefault).
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'h') {
+    e.preventDefault();
+    const prism = store.getState().harmonicPrism;
+    if (prism.projectionSourceId) {
+      store.setPrismProjectionSource(null);
+      bgDirty = true; // staff comes back
+    } else {
+      const sel = store.getSelectedCurveId();
+      if (sel) {
+        store.setPrismProjectionSource(sel);
+        bgDirty = true; // staff hides
+      }
+    }
+    return;
+  }
+
+  // Group / Ungroup
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'g') {
+    e.preventDefault();
+    performUngroup();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'g') {
+    e.preventDefault();
+    performGroup();
+    return;
+  }
+
   // Sharpen selected curve(s) — clear all bezier handles to make every point sharp.
   // Uses e.code for Alt-letter because some layouts (e.g. macOS) remap e.key with Option.
   if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === 'KeyS') {
@@ -1225,18 +1307,9 @@ window.addEventListener('keydown', (e) => {
     }
     case 'h':
     case 'H': {
-      // Harmonic Prism — toggle Projection mode on the selected curve.
+      // Harmonic Prism — toggle Draw mode (chord-cluster placement).
       const prism = store.getState().harmonicPrism;
-      if (prism.projectionSourceId) {
-        store.setPrismProjectionSource(null);
-        bgDirty = true; // staff comes back
-      } else {
-        const sel = store.getSelectedCurveId();
-        if (sel) {
-          store.setPrismProjectionSource(sel);
-          bgDirty = true; // staff hides
-        }
-      }
+      store.setPrismDrawMode(!prism.drawMode);
       break;
     }
     case 'l':
@@ -1778,6 +1851,14 @@ fgCanvas.addEventListener('contextmenu', (e) => {
   if (isComposePerformActive()) return;
   const state = store.getState();
   const selectedCount = state.selectedCurveIds.size;
+  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  const selectedCurves = track
+    ? [...state.selectedCurveIds]
+        .map(id => track.curves.find(c => c.id === id))
+        .filter((c): c is import('./types').BezierCurve => !!c)
+    : [];
+  const canGroup = selectedCount >= 2 && !allShareGroup(selectedCurves);
+  const canUngroup = selectedCount >= 1 && anyGrouped(selectedCurves);
   openContextMenu(e.pageX, e.pageY, [
     {
       label: 'Smooth Curve',
@@ -1796,6 +1877,18 @@ fgCanvas.addEventListener('contextmenu', (e) => {
       shortcut: 'Ctrl+J',
       disabled: selectedCount < 2,
       onClick: performJoin,
+    },
+    {
+      label: 'Group',
+      shortcut: 'Ctrl+G',
+      disabled: !canGroup,
+      onClick: performGroup,
+    },
+    {
+      label: 'Ungroup',
+      shortcut: 'Ctrl+Shift+G',
+      disabled: !canUngroup,
+      onClick: performUngroup,
     },
   ]);
 });
@@ -2031,6 +2124,25 @@ function render() {
       fgCtx.fill();
       fgCtx.globalAlpha = 1;
     }
+  }
+
+  // Harmonic Prism Draw mode: render the multi-planchette chord preview at the
+  // cursor. Each click will place N grouped sibling curves at these Y offsets.
+  if (state.activeTool === 'draw'
+      && state.harmonicPrism.drawMode
+      && interaction.cursorWorld) {
+    const snap = buildSnapConfig(viewport.state.zoomX, interaction.cursorWorld.x);
+    const snapped = snapToGrid(interaction.cursorWorld.x, interaction.cursorWorld.y, snap);
+    const cursorScreenX = viewport.worldToScreen(snapped.wx, 0).sx;
+    renderPrismDrawPreview(
+      fgCtx,
+      viewport,
+      cursorScreenX,
+      snapped.wy,
+      state.harmonicPrism.chordSpec,
+      rect.height,
+      RULER_HEIGHT,
+    );
   }
 
   // Scissors preview dot

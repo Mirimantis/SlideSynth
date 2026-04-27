@@ -24,6 +24,16 @@ export function deserializeComposition(json: string): Composition {
   if (typeof data.loopEndBeats !== 'number') data.loopEndBeats = 2 * data.beatsPerMeasure;
   if (typeof data.timeSignatureDenominator !== 'number') data.timeSignatureDenominator = 4;
 
+  // Migrate Phase-1 chord groupings: chordGroupId → groupId.
+  for (const track of data.tracks) {
+    for (const curve of track.curves as Array<{ chordGroupId?: string | null; groupId?: string | null }>) {
+      if (curve.chordGroupId !== undefined && curve.groupId === undefined) {
+        curve.groupId = curve.chordGroupId;
+      }
+      delete curve.chordGroupId;
+    }
+  }
+
   // Future migration logic would go here
   // if (data.version < COMPOSITION_VERSION) { migrate(data); }
 

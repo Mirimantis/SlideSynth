@@ -26,6 +26,7 @@ const MAGNETIC_DAMPING_STORAGE_KEY = 'slidesynth.magneticDamping';
 const AUTO_SMOOTH_X_RATIO_STORAGE_KEY = 'slidesynth.autoSmoothXRatio';
 const PRISM_CHORD_SPEC_STORAGE_KEY = 'slidesynth.prismChordSpec';
 const PRISM_OCTAVE_RANGE_STORAGE_KEY = 'slidesynth.prismOctaveRange';
+const PRISM_DRAW_MODE_STORAGE_KEY = 'slidesynth.prismDrawMode';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -134,6 +135,7 @@ function createInitialState(): AppState {
       projectionOctaveRange: Math.max(0, Math.min(3, Math.round(loadNumberPref(PRISM_OCTAVE_RANGE_STORAGE_KEY, 2)))),
       activeMode: null,
       projectionSourceId: null,
+      drawMode: loadBoolPref(PRISM_DRAW_MODE_STORAGE_KEY, false),
     },
   };
 }
@@ -456,6 +458,13 @@ class Store {
     } else if (curveId !== null) {
       this.state.harmonicPrism.activeMode = 'projection';
     }
+    this.notify();
+  }
+
+  setPrismDrawMode(enabled: boolean) {
+    if (this.state.harmonicPrism.drawMode === enabled) return;
+    this.state.harmonicPrism.drawMode = enabled;
+    saveBoolPref(PRISM_DRAW_MODE_STORAGE_KEY, enabled);
     this.notify();
   }
 }
