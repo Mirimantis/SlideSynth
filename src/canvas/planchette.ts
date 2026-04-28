@@ -1,6 +1,7 @@
 import type { PlanchetteState } from '../types';
 import type { Viewport } from './viewport';
 import { RULER_HEIGHT } from './interaction';
+import { PRISM_RAINBOW_STOPS } from './projection-renderer';
 
 // Terminology:
 //   Rail       — the stationary vertical line in the middle of the canvas while
@@ -23,6 +24,46 @@ const LOOP_FLASH_COLOR = '#ffffff';
 const CIRCLE_RADIUS = 9;
 
 /**
+ * Build a horizontal rainbow gradient sized to the planchette circle. Used as
+ * the stroke style for the primary planchette when Prism Draw is on, so the
+ * primary reads as the "prism" voice while harmonies render in solid rainbow
+ * stops around it.
+ */
+export function rainbowGlyphStroke(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+): CanvasGradient {
+  const grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
+  const stops = PRISM_RAINBOW_STOPS;
+  for (let i = 0; i < stops.length; i++) {
+    grad.addColorStop(i / Math.max(1, stops.length - 1), stops[i]!);
+  }
+  return grad;
+}
+
+/** Pick the stroke color for a Prism-mode rail planchette by voiceId.
+ *  Primary returns a gradient (built per-call from cx/cy/r); harmonies
+ *  return solid rainbow stops. */
+export function prismPlanchetteStroke(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  voiceId: string,
+): string | CanvasGradient {
+  if (voiceId === 'primary') return rainbowGlyphStroke(ctx, cx, cy, r);
+  if (voiceId.startsWith('harmony-')) {
+    const idx = Number(voiceId.slice('harmony-'.length));
+    if (Number.isInteger(idx) && idx >= 0 && idx < PRISM_RAINBOW_STOPS.length) {
+      return PRISM_RAINBOW_STOPS[idx]!;
+    }
+  }
+  return PRIMARY_COLOR;
+}
+
+/**
  * Draw the planchette visual: a hollow circle with a small crosshair inside
  * and a triangle on each side pointing inward at the circle's horizontal axis.
  * Same glyph is used for rail-bound and free-moving planchettes.
@@ -31,7 +72,7 @@ export function renderPlanchetteGlyph(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
-  color: string = PRIMARY_COLOR,
+  color: string | CanvasGradient = PRIMARY_COLOR,
 ): void {
   const r = CIRCLE_RADIUS;
   ctx.save();
@@ -123,6 +164,7 @@ export function renderPlanchettes(
   canvasHeight: number,
   planchettes: PlanchetteState[],
   lastLoopWrapAt: number = 0,
+  prismMode: boolean = false,
 ): void {
   renderRail(ctx, canvasWidth, canvasHeight, lastLoopWrapAt);
   const railX = canvasWidth * RAIL_SCREEN_X_RATIO;
@@ -144,7 +186,10 @@ export function renderPlanchettes(
       }
     }
 
-    renderPlanchetteGlyph(ctx, railX, snappedScreenY, PRIMARY_COLOR);
+    const color: string | CanvasGradient = prismMode
+      ? prismPlanchetteStroke(ctx, railX, snappedScreenY, CIRCLE_RADIUS, p.voiceId)
+      : PRIMARY_COLOR;
+    renderPlanchetteGlyph(ctx, railX, snappedScreenY, color);
 
     // Snap-line-cross pulse — brief horizontal flash at the planchette's Y.
     const pulseAge = now - p.lastCrossedAt;

@@ -33,7 +33,8 @@ import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, co
 import { createTrack } from './model/track';
 import { getCompositionLength, measureLengthInBeats } from './model/composition';
 import { computeMultiCurveBBox, deepCopyPoints, joinCurves, sharpenCurveHandles, smoothCurveHandles } from './model/curve';
-import { assignGroup, dissolveGroup, allShareGroup, anyGrouped } from './model/curve-groups';
+import { assignGroup, dissolveGroup, allShareGroup, anyGrouped, createGroupId } from './model/curve-groups';
+import { chordOffsets } from './utils/harmonics';
 import { showToast } from './ui/toast';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { getScaleById } from './utils/scales';
@@ -305,7 +306,7 @@ function activateSpacePreview() {
     if (state.drawPreviewMode === 'composition' && interaction.cursorWorld) {
       preview.startScrubPreview(state.composition);
       preview.updateScrubPosition(interaction.cursorWorld.x, state.composition);
-      if (tone) preview.startDrawPreview(tone, interaction.cursorWorld.y);
+      if (tone) startPrismDrawPreview(tone, interaction.cursorWorld.y);
       previewActive = true;
       // Classic-playhead mode: snap the playhead to the cursor so the user sees the scrub
       // location. Leaves it there on preview end (easy way to summon a far-away playhead).
@@ -313,7 +314,7 @@ function activateSpacePreview() {
         store.setPlaybackPosition(Math.max(0, interaction.cursorWorld.x));
       }
     } else if (tone && interaction.cursorWorld) {
-      preview.startDrawPreview(tone, interaction.cursorWorld.y);
+      startPrismDrawPreview(tone, interaction.cursorWorld.y);
       previewActive = true;
     }
   } else if (inScrubContext) {
@@ -380,7 +381,7 @@ const interaction = createInteraction(fgCanvas, viewport, {
   onCursorMove(worldX, worldY, _screenY) {
     if (!previewActive) return;
     if (preview.isDrawPreviewActive()) {
-      preview.updateDrawPitch(worldY);
+      updatePrismDrawPreview(worldY);
     }
     if (preview.isScrubPreviewActive() && store.getState().activeTool === 'draw') {
       preview.updateScrubPosition(worldX, store.getComposition());
@@ -1640,6 +1641,36 @@ function composeUpdatePlanchette(sy: number) {
     store.markPlanchetteCrossed('primary', Date.now());
   }
   prevSnapTarget = snapTarget;
+  // Drive harmony voices off the primary's snapped Y. No-op outside Prism Draw
+  // perform (no harmony planchettes exist) so cheap to call unconditionally.
+  updateHarmonyVoices(snappedWorldY);
+}
+
+/** Harmony voiceId for chord index i (1..N-1, since 0 = primary). */
+function harmonyVoiceId(harmonyIndex: number): string {
+  return `harmony-${harmonyIndex}`;
+}
+
+/** Re-tune all currently-active harmony voices' pitch and synth from the primary's
+ *  snapped Y. Called every cursor-update tick during Prism-Draw perform. */
+function updateHarmonyVoices(snappedBaseY: number) {
+  const st = store.getState();
+  const planchettes = st.performance.planchettes;
+  if (planchettes.length <= 1) return; // only primary present — no harmonies active
+  const offsets = chordOffsets(st.harmonicPrism.chordSpec);
+  for (let i = 1; i < offsets.length; i++) {
+    const voiceId = harmonyVoiceId(i - 1);
+    const planchette = planchettes.find(p => p.voiceId === voiceId);
+    if (!planchette) continue; // harmony index disabled this gesture (e.g. spec changed numVoices)
+    const harmonyY = snappedBaseY + offsets[i]!;
+    const inRange = harmonyY >= MIN_NOTE && harmonyY <= MAX_NOTE;
+    // cursorWorldY mirrors snapped (harmonies never have an independent raw
+    // cursor — they're math offsets), so the rail render skips the ghost dot.
+    store.setPlanchetteY(voiceId, inRange ? harmonyY : null, inRange ? harmonyY : null);
+    if (inRange && preview.isDrawPreviewActive(voiceId)) {
+      preview.updateDrawPitch(harmonyY, voiceId);
+    }
+  }
 }
 
 /** Per-frame pitch-mode tick: re-runs composeUpdatePlanchette with the last
@@ -1705,46 +1736,206 @@ function getSelectedTrackTone() {
   return st.composition.toneLibrary.find(t => t.id === track.toneId) ?? null;
 }
 
-function startComposePerformSounding(snappedY: number) {
+function startComposePerformSounding(snappedBaseY: number) {
   const tone = getSelectedTrackTone();
   if (!tone) return;
-  preview.startDrawPreview(tone, snappedY, 'primary');
+  // The planchette array is already populated by syncHarmonyPlanchettes
+  // (which runs every frame and tracks drawMode + playback/record state).
+  // Just spin up a synth for each currently-active voice.
+  const st = store.getState();
+  const offsets = chordOffsets(st.harmonicPrism.chordSpec);
+  for (const p of st.performance.planchettes) {
+    const y = voiceYFromBase(p.voiceId, snappedBaseY, offsets);
+    if (y == null) continue;
+    preview.startDrawPreview(tone, y, p.voiceId);
+  }
   store.setPerformLmbSounding(true);
 }
-function updateComposePerformPitch(snappedY: number) {
+function updateComposePerformPitch(snappedBaseY: number) {
+  // Primary's pitch update; harmony pitch updates are driven by
+  // composeUpdatePlanchette → updateHarmonyVoices.
   if (preview.isDrawPreviewActive('primary')) {
-    preview.updateDrawPitch(snappedY, 'primary');
+    preview.updateDrawPitch(snappedBaseY, 'primary');
   }
 }
 function stopComposePerformSounding() {
-  preview.stopDrawPreview('primary');
+  // Stop every active synth (primary + any harmonies). Planchette removal is
+  // handled by syncHarmonyPlanchettes when playback ends or drawMode toggles
+  // off; leaving the planchettes in place during continuing playback gives
+  // the user persistent chord-shape feedback even between LMB presses.
+  const planchettes = store.getState().performance.planchettes;
+  for (const p of planchettes) preview.stopDrawPreview(p.voiceId);
   store.setPerformLmbSounding(false);
+}
+
+/** Compute the world Y a voice should sit at, given the primary's snapped Y
+ *  and the current chord-spec offsets. Returns null if voice is out of range
+ *  or if the spec doesn't include a slot for this voiceId. */
+function voiceYFromBase(voiceId: string, snappedBaseY: number, offsets: readonly number[]): number | null {
+  let y: number;
+  if (voiceId === 'primary') {
+    y = snappedBaseY;
+  } else {
+    const harmonyIdx = parseHarmonyIndex(voiceId);
+    if (harmonyIdx == null) return null;
+    const offsetIdx = harmonyIdx + 1;
+    if (offsetIdx >= offsets.length) return null;
+    y = snappedBaseY + offsets[offsetIdx]!;
+  }
+  if (y < MIN_NOTE || y > MAX_NOTE) return null;
+  return y;
+}
+
+/** Parse 'harmony-N' → N. Returns null for non-harmony voiceIds. */
+function parseHarmonyIndex(voiceId: string): number | null {
+  if (!voiceId.startsWith('harmony-')) return null;
+  const n = Number(voiceId.slice('harmony-'.length));
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+/** Reconcile the planchette array with current Prism Draw + playback/record
+ *  state. Called every render frame; cheap when state already matches. */
+function syncHarmonyPlanchettes() {
+  const st = store.getState();
+  const wantHarmonies = st.harmonicPrism.drawMode &&
+    (playback.isPlaying() || st.performance.recordArmed);
+
+  if (!wantHarmonies) {
+    for (const p of st.performance.planchettes) {
+      if (p.voiceId !== 'primary') preview.stopDrawPreview(p.voiceId);
+    }
+    store.removeHarmonyPlanchettes();
+    return;
+  }
+
+  const offsets = chordOffsets(st.harmonicPrism.chordSpec);
+  const desiredHarmonyIds = new Set<string>();
+  for (let i = 1; i < offsets.length; i++) desiredHarmonyIds.add(harmonyVoiceId(i - 1));
+
+  // Remove voices no longer in spec (numVoices reduced).
+  const toRemove: string[] = [];
+  for (const p of st.performance.planchettes) {
+    if (p.voiceId === 'primary') continue;
+    if (!desiredHarmonyIds.has(p.voiceId)) toRemove.push(p.voiceId);
+  }
+  for (const voiceId of toRemove) {
+    preview.stopDrawPreview(voiceId);
+    store.removePerformPlanchette(voiceId);
+  }
+
+  // Add voices not yet present (numVoices increased or first time entering).
+  // Seed each new harmony's Y from the primary so the rail shows it immediately
+  // (otherwise the planchette has null Y until the next mousemove tick).
+  const primary = st.performance.planchettes.find(pp => pp.voiceId === 'primary');
+  for (let i = 1; i < offsets.length; i++) {
+    const voiceId = harmonyVoiceId(i - 1);
+    if (st.performance.planchettes.some(p => p.voiceId === voiceId)) continue;
+    let initialY: number | null = null;
+    if (primary?.snappedWorldY != null) {
+      const y = primary.snappedWorldY + offsets[i]!;
+      if (y >= MIN_NOTE && y <= MAX_NOTE) initialY = y;
+    }
+    store.addPerformPlanchette({
+      voiceId,
+      trackId: st.selectedTrackId,
+      cursorWorldY: initialY,
+      snappedWorldY: initialY,
+      lastCrossedAt: 0,
+    });
+    // If LMB is held when a new voice spawns (e.g. user just toggled drawMode
+    // mid-perform), start its synth at the right pitch immediately.
+    if (composeEngine.isLmbDown() && initialY != null) {
+      const tone = getSelectedTrackTone();
+      if (tone) preview.startDrawPreview(tone, initialY, voiceId);
+    }
+  }
+}
+
+// ── Prism idle preview (Spacebar) ──────────────────────────────
+/** Start the Spacebar idle preview as a Prism chord cluster when drawMode is
+ *  on, otherwise a single voice. Mirrors the perform-time multi-voice setup
+ *  but uses the Spacebar-preview path (no recording, no planchettes added —
+ *  the active draw-mode preview dots already show the cursor cluster). */
+function startPrismDrawPreview(tone: import('./types').ToneDefinition, snappedBaseY: number) {
+  preview.startDrawPreview(tone, snappedBaseY, 'primary');
+  const st = store.getState();
+  if (!st.harmonicPrism.drawMode) return;
+  const offsets = chordOffsets(st.harmonicPrism.chordSpec);
+  for (let i = 1; i < offsets.length; i++) {
+    const voiceId = harmonyVoiceId(i - 1);
+    const y = snappedBaseY + offsets[i]!;
+    if (y < MIN_NOTE || y > MAX_NOTE) continue;
+    preview.startDrawPreview(tone, y, voiceId);
+  }
+}
+
+/** Re-tune all currently-active idle preview voices from the primary's Y. */
+function updatePrismDrawPreview(snappedBaseY: number) {
+  preview.updateDrawPitch(snappedBaseY, 'primary');
+  const st = store.getState();
+  if (!st.harmonicPrism.drawMode) return;
+  const offsets = chordOffsets(st.harmonicPrism.chordSpec);
+  for (let i = 1; i < offsets.length; i++) {
+    const voiceId = harmonyVoiceId(i - 1);
+    if (!preview.isDrawPreviewActive(voiceId)) continue;
+    const y = snappedBaseY + offsets[i]!;
+    if (y >= MIN_NOTE && y <= MAX_NOTE) preview.updateDrawPitch(y, voiceId);
+  }
 }
 
 function captureComposeRecordingSample() {
   const g = store.getState().performance;
   if (g.phase !== 'playing' || !g.recordArmed || !composeEngine.isLmbDown()) return;
-  const planchette = g.planchettes[0];
-  if (!planchette || planchette.snappedWorldY == null) return;
-  composeEngine.captureSample('primary', {
-    beat: playback.getPositionBeats(),
-    note: planchette.snappedWorldY,
-    volume: 0.8,
-  });
+  const beat = playback.getPositionBeats();
+  // Capture every active voice (primary + any chord-cluster harmonies). The
+  // engine's captureSample is keyed by voiceId and already supports N parallel
+  // buffers — this is the multi-voice extension of the single-voice path.
+  for (const p of g.planchettes) {
+    if (p.snappedWorldY == null) continue;
+    composeEngine.captureSample(p.voiceId, {
+      beat,
+      note: p.snappedWorldY,
+      volume: 0.8,
+    });
+  }
 }
 
-function finalizeComposeRecordedCurve() {
+function finalizeComposeRecordedCurves() {
   const st = store.getState();
   const trackId = st.selectedTrackId;
   const track = trackId ? st.composition.tracks.find(t => t.id === trackId) : null;
+  // Voice ids that may have buffers to flush (primary + every active harmony).
+  const voiceIds = st.performance.planchettes.map(p => p.voiceId);
   if (!track) {
-    composeEngine.clearBuffer('primary');
+    for (const v of voiceIds) composeEngine.clearBuffer(v);
     return;
   }
-  const curve = composeEngine.finalizeCurve('primary', () => history.snapshot());
-  if (!curve) return;
-  store.mutate(() => { track.curves.push(curve); });
-  store.setPerformCurrentCurve('primary', curve.id);
+  // Finalize each voice's buffer. finalizeCurve handles the once-per-session
+  // history snapshot — passing the same callback for every voice is safe
+  // because the engine debounces it via sessionHistorySnapshotted.
+  const finalized: Array<{ voiceId: string; curve: import('./types').BezierCurve }> = [];
+  for (const voiceId of voiceIds) {
+    const curve = composeEngine.finalizeCurve(voiceId, () => history.snapshot());
+    if (curve) finalized.push({ voiceId, curve });
+  }
+  if (finalized.length === 0) return;
+
+  // If multi-voice, stamp the finalized curves as a chord cluster so they
+  // behave like a Phase-2 Draw-mode placement (group selection, group delete,
+  // group transform). Single-voice (no harmonies) records ungrouped as today.
+  const isCluster = finalized.length > 1;
+  const groupId = isCluster ? createGroupId() : null;
+  store.mutate(() => {
+    for (let i = 0; i < finalized.length; i++) {
+      const { curve, voiceId } = finalized[i]!;
+      if (groupId) {
+        curve.groupId = groupId;
+        curve.voiceIndex = i;
+      }
+      track.curves.push(curve);
+      store.setPerformCurrentCurve(voiceId, curve.id);
+    }
+  });
 }
 
 function tickComposePerform() {
@@ -1759,7 +1950,7 @@ function tickComposePerform() {
     playbackBeat: playback.getPositionBeats(),
     onCountdownElapsed: startComposePerformPlayback,
     onLoopWrap: () => {
-      if (g.recordArmed && composeEngine.isLmbDown()) finalizeComposeRecordedCurve();
+      if (g.recordArmed && composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
     },
     onAfkTimeout: composePerformStop,
   });
@@ -1843,7 +2034,7 @@ function composeToggleArmed() {
 function composePerformStop() {
   const g = store.getState().performance;
   if (g.phase === 'playing' && g.recordArmed && composeEngine.isLmbDown()) {
-    finalizeComposeRecordedCurve();
+    finalizeComposeRecordedCurves();
   }
   if (composeEngine.isLmbDown()) {
     stopComposePerformSounding();
@@ -1958,12 +2149,20 @@ window.addEventListener('mouseup', (e) => {
   if (!composeEngine.isLmbDown()) return;
   if (e.button !== 0) return;
   composeEngine.onLmbUp();
-  stopComposePerformSounding();
+  // CRITICAL ORDERING: finalize BEFORE stopping synths so the planchette array
+  // (and therefore the voiceIds we finalize) still contains every active voice.
+  // syncHarmonyPlanchettes only removes harmonies when playback ends or drawMode
+  // toggles off, neither of which happens at LMB-up — so the array is stable here.
   if (store.getState().performance.recordArmed) {
-    finalizeComposeRecordedCurve();
+    finalizeComposeRecordedCurves();
   } else {
-    composeEngine.clearBuffer('primary');
+    // Clear every voice's buffer (not just primary), since perform without
+    // recording still ran captures into N buffers in Prism mode.
+    for (const p of store.getState().performance.planchettes) {
+      composeEngine.clearBuffer(p.voiceId);
+    }
   }
+  stopComposePerformSounding();
 });
 
 // ── Shared HUD + countdown DOM updaters ─────────────────────────
@@ -1998,6 +2197,11 @@ function updateCountdownOverlayDom(state: AppState) {
 
 // ── Render loop ─────────────────────────────────────────────────
 function render() {
+  // Reconcile harmony planchettes against current state. Cheap no-op when
+  // state hasn't changed; covers playback start/stop, drawMode toggle, and
+  // mid-playback chord-spec voice-count changes.
+  syncHarmonyPlanchettes();
+
   const state = store.getState();
   const comp = state.composition;
   const rect = canvasContainer.getBoundingClientRect();
@@ -2181,9 +2385,16 @@ function render() {
 
   // Harmonic Prism Draw mode: render the multi-planchette chord preview at the
   // cursor. Each click will place N grouped sibling curves at these Y offsets.
+  // Hidden during Playback / Record / countdown — the rail planchettes show
+  // the active or imminent tone positions instead, and a stationary chord
+  // preview at the cursor would be visually conflicting.
+  const isPerformActiveOrPending = playback.isPlaying()
+    || state.performance.phase !== 'idle'
+    || state.performance.recordArmed;
   if (state.activeTool === 'draw'
       && state.harmonicPrism.drawMode
-      && interaction.cursorWorld) {
+      && interaction.cursorWorld
+      && !isPerformActiveOrPending) {
     const snap = buildSnapConfig(viewport.state.zoomX, interaction.cursorWorld.x);
     const snapped = snapToGrid(interaction.cursorWorld.x, interaction.cursorWorld.y, snap);
     const cursorScreenX = viewport.worldToScreen(snapped.wx, 0).sx;
@@ -2247,7 +2458,12 @@ function render() {
         renderPlayhead(fgCtx, viewport, interaction.cursorWorld.x, rect.height);
       }
     } else if (railPlanchetteVisible) {
-      renderPlanchettes(fgCtx, viewport, rect.width, rect.height, state.performance.planchettes, composeEngine.getLastLoopWrapAt());
+      renderPlanchettes(
+        fgCtx, viewport, rect.width, rect.height,
+        state.performance.planchettes,
+        composeEngine.getLastLoopWrapAt(),
+        state.harmonicPrism.drawMode,
+      );
     } else {
       renderRail(fgCtx, rect.width, rect.height, composeEngine.getLastLoopWrapAt());
     }

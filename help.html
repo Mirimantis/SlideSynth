@@ -623,6 +623,36 @@
   </details>
 
   <details>
+    <summary>Performing &amp; recording chord clusters</summary>
+    <div class="detail-body">
+      <p>
+        With <strong>Draw</strong> mode on, holding LMB on the canvas
+        sounds <em>all N voices simultaneously</em> — primary at the
+        cursor pitch, harmonies at the chord-spec offsets above (or
+        around) it. The rail shows every voice as a planchette so you
+        can see the cluster's shape while you play.
+      </p>
+      <ul>
+        <li>Move the cursor while LMB is held — every voice transposes
+          together; chord shape stays constant.</li>
+        <li>Harmonies that fall outside the staff range are silenced
+          and hidden from the rail until they come back into range.</li>
+        <li>If you change tuning (12-TET ↔ Just Intonation) or chord
+          quality while still holding LMB, the active harmonies retune
+          live to the new spec.</li>
+        <li>Voice <em>count</em> is locked at LMB-down — switching to
+          a higher voice count mid-hold doesn't add new voices to the
+          active gesture. Release and press again to engage the new
+          count.</li>
+        <li>Arm Record (<kbd>R</kbd>), then hold LMB and play — every
+          voice records to its own curve buffer. On release, the N
+          captured curves commit as a chord cluster (same group id,
+          one undo step) onto the active track.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
     <summary>Using Projection Mode</summary>
     <div class="detail-body">
       <ol>
