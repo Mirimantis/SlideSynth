@@ -1189,7 +1189,17 @@ window.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
     e.preventDefault();
     const state = store.getState();
-    const atBeat = state.playback.positionBeats;
+    // In Scroll Canvas mode the rail (visible canvas-centre beat) is what the
+    // user reads as "current position". When playback is stopped, the stored
+    // playhead can lag behind a manual pan, so derive the rail beat from the
+    // viewport instead. During playback the two coincide (scrolling-play
+    // tracks the playhead), so this is also safe there.
+    let atBeat = state.playback.positionBeats;
+    if (state.scrollCanvasEnabled && !playback.isPlaying()) {
+      const rect = fgCanvas.getBoundingClientRect();
+      const centreX = rect.width * RAIL_SCREEN_X_RATIO;
+      atBeat = viewport.state.offsetX + centreX / viewport.state.zoomX;
+    }
     const newIds = pasteCurves(atBeat);
     if (newIds) {
       const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
@@ -1647,6 +1657,45 @@ function tickComposePitchMode() {
   }
 }
 
+// ── Y auto-scroll during Perform / Record ──────────────────────
+// When LMB is held (perform / record), if the cursor approaches the top or
+// bottom of the canvas, pan the viewport Y so the user can drag past the
+// current visible pitch range without releasing. Pan rate scales with how
+// close the cursor is to the edge.
+const PERFORM_Y_EDGE_PX = 30;            // distance from edge that triggers scroll
+const PERFORM_Y_PAN_PX_PER_FRAME = 4;    // peak scroll speed (at the very edge / off-canvas)
+
+function tickPerformYAutoScroll() {
+  if (!composeEngine.isLmbDown()) return;
+  if (lastComposeSy === null) return;
+  const rect = fgCanvas.getBoundingClientRect();
+  const top = RULER_HEIGHT;
+  const bottom = rect.height;
+  let dsy = 0;
+  if (lastComposeSy < top + PERFORM_Y_EDGE_PX) {
+    // Near top → reveal higher pitches above (pan world up = increase offsetY).
+    const closeness = Math.min(1, (top + PERFORM_Y_EDGE_PX - lastComposeSy) / PERFORM_Y_EDGE_PX);
+    dsy = +PERFORM_Y_PAN_PX_PER_FRAME * closeness;
+  } else if (lastComposeSy > bottom - PERFORM_Y_EDGE_PX) {
+    // Near bottom (or off-canvas below) → reveal lower pitches.
+    const closeness = Math.min(1, (lastComposeSy - (bottom - PERFORM_Y_EDGE_PX)) / PERFORM_Y_EDGE_PX);
+    dsy = -PERFORM_Y_PAN_PX_PER_FRAME * closeness;
+  }
+  if (dsy === 0) return;
+  const beforeOffsetY = viewport.state.offsetY;
+  viewport.panBy(0, dsy);
+  viewport.clampOffset(rect.width, rect.height, minPanOffsetX(rect.width));
+  // If clampOffset rejected the pan (already at the Y bound), stop here so we
+  // don't waste work re-evaluating the planchette / synth pitch.
+  if (viewport.state.offsetY === beforeOffsetY) return;
+  bgDirty = true;
+  // The world Y under the (unchanged screen) cursor has shifted — re-snap and
+  // re-tune the held perform tone.
+  composeUpdatePlanchette(lastComposeSy);
+  const p = store.getState().performance.planchettes[0];
+  if (p?.snappedWorldY != null) updateComposePerformPitch(p.snappedWorldY);
+}
+
 function getSelectedTrackTone() {
   const st = store.getState();
   const trackId = st.selectedTrackId;
@@ -1974,6 +2023,10 @@ function render() {
   // Compose performance tick: countdown advance, loop-wrap detection, AFK auto-stop.
   tickComposePerform();
 
+  // Y auto-scroll while LMB held in Perform / Record so the user can drag
+  // past the visible pitch range without releasing.
+  tickPerformYAutoScroll();
+
   // Per-frame pitch-mode tick — keeps Glide/Magnetic advancing toward the
   // current target even when the mouse is still. No-op when neither mode is
   // active or snap is off.
@@ -2172,6 +2225,16 @@ function render() {
     && previewActive
     && interaction.cursorInCanvas
     && interaction.cursorWorld != null;
+  // Rail-bound planchette dot is only meaningful when an actual or potential
+  // tone is sounding/recording — Playback running, Record armed, or LMB held
+  // in Perform. In Scroll Canvas idle the rail still shows (so the user knows
+  // where Play would start), but the planchette dot is hidden so it doesn't
+  // visually promise a tone is sounding when none is.
+  const railPlanchetteVisible = railVisible
+    && !freePlanchetteVisible
+    && (playback.isPlaying()
+        || state.performance.recordArmed
+        || composeEngine.isLmbDown());
   if (railVisible) {
     if (freePlanchetteVisible) {
       // Free planchette at cursor is the action location (preview tone follows cursor),
@@ -2183,8 +2246,10 @@ function render() {
       if (state.drawPreviewMode === 'composition' && interaction.cursorWorld) {
         renderPlayhead(fgCtx, viewport, interaction.cursorWorld.x, rect.height);
       }
-    } else {
+    } else if (railPlanchetteVisible) {
       renderPlanchettes(fgCtx, viewport, rect.width, rect.height, state.performance.planchettes, composeEngine.getLastLoopWrapAt());
+    } else {
+      renderRail(fgCtx, rect.width, rect.height, composeEngine.getLastLoopWrapAt());
     }
   } else {
     const playheadBeat = playback.isPlaying()

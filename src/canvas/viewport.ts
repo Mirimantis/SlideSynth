@@ -93,7 +93,13 @@ export function createViewport(): Viewport {
     clampOffset(canvasWidth: number, canvasHeight: number, minOffsetX: number = 0) {
       // X: can't scroll before minOffsetX (default 0), can't scroll past the canvas extent.
       const visibleBeats = canvasWidth / state.zoomX;
-      const maxOffsetX = Math.max(minOffsetX, vp.canvasExtent - visibleBeats);
+      // Scale pannable extent with zoom: always allow at least one full screen-width
+      // of pan room past the content extent so empty/sparse canvases stay
+      // navigable when zoomed wide. (canvasExtent alone — sized at MIN_CANVAS_EXTENT
+      // + SCROLL_BUFFER for an empty composition — falls inside one screen at
+      // low zoomX, leaving no pan room at all.)
+      const effectiveExtent = Math.max(vp.canvasExtent, visibleBeats * 2);
+      const maxOffsetX = Math.max(minOffsetX, effectiveExtent - visibleBeats);
       state.offsetX = clamp(state.offsetX, minOffsetX, maxOffsetX);
 
       // Y: can't scroll past the note range plus a small margin for edge work.
