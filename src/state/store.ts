@@ -271,6 +271,32 @@ class Store {
     this.state.performance.currentRecordedCurveIds[voiceId] = curveId;
   }
 
+  /** Add a planchette to the perform array (e.g. harmony voice on LMB-down with Prism Draw). */
+  addPerformPlanchette(planchette: PlanchetteState) {
+    if (this.state.performance.planchettes.some(p => p.voiceId === planchette.voiceId)) return;
+    this.state.performance.planchettes.push(planchette);
+    this.notify();
+  }
+
+  /** Remove a planchette by voiceId. Primary is never removable here (use a fresh init). */
+  removePerformPlanchette(voiceId: string) {
+    if (voiceId === 'primary') return;
+    const arr = this.state.performance.planchettes;
+    const idx = arr.findIndex(p => p.voiceId === voiceId);
+    if (idx >= 0) {
+      arr.splice(idx, 1);
+      this.notify();
+    }
+  }
+
+  /** Strip every non-primary planchette (chord-cluster cleanup on LMB-up). */
+  removeHarmonyPlanchettes() {
+    const before = this.state.performance.planchettes.length;
+    this.state.performance.planchettes = this.state.performance.planchettes
+      .filter(p => p.voiceId === 'primary');
+    if (this.state.performance.planchettes.length !== before) this.notify();
+  }
+
   setDrawPreviewMode(mode: 'tone' | 'composition') {
     this.state.drawPreviewMode = mode;
     this.notify();
