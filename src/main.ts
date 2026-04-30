@@ -883,6 +883,18 @@ nameInput.spellcheck = false;
 nameInput.addEventListener('change', () => {
   store.mutate(c => { c.name = nameInput.value || 'Untitled'; });
 });
+nameInput.addEventListener('keydown', (e) => {
+  // Enter commits and blurs (the change event then fires from the blur).
+  // Escape reverts to the stored name and blurs.
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    nameInput.blur();
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    nameInput.value = store.getComposition().name || 'Untitled';
+    nameInput.blur();
+  }
+});
 nameGroup.appendChild(nameInput);
 const lengthDisplay = document.createElement('span');
 lengthDisplay.id = 'comp-length';
@@ -1129,7 +1141,7 @@ history.subscribe(() => {
 
 // ── Keyboard shortcuts ──────────────────────────────────────────
 window.addEventListener('keydown', (e) => {
-  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
 
   if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
@@ -1338,7 +1350,9 @@ window.addEventListener('keydown', (e) => {
     case 'PageUp':
     case 'PageDown': {
       // Jump the viewport to the first (PageUp) or last (PageDown) control point
-      // across all tracks in the composition. No-op when the composition is empty.
+      // across all tracks in the composition. PageUp on an empty canvas falls
+      // back to beat 0 so there's always a reliable home position; PageDown on
+      // an empty canvas is a no-op.
       e.preventDefault();
       const comp = store.getComposition();
       let minX: number | null = null;
@@ -1351,10 +1365,29 @@ window.addEventListener('keydown', (e) => {
           }
         }
       }
-      if (minX === null || maxX === null) return;
-      const target = e.key === 'PageUp' ? minX : maxX;
+      let target: number;
+      if (e.key === 'PageUp') {
+        target = minX ?? 0;
+      } else {
+        if (maxX === null) return;
+        target = maxX;
+      }
       const r = canvasContainer.getBoundingClientRect();
       scrollViewportToBeat(viewport, target, r.width, r.height);
+      bgDirty = true;
+      return;
+    }
+    case 'Home': {
+      // Centre the viewport on the current playhead beat regardless of where
+      // the user has panned. While playing, the audio engine owns the position;
+      // when stopped, ruler-scrub updates `state.playback.positionBeats` —
+      // matches the renderer's playhead lookup.
+      e.preventDefault();
+      const r = canvasContainer.getBoundingClientRect();
+      const playheadBeat = playback.isPlaying()
+        ? playback.getPositionBeats()
+        : store.getState().playback.positionBeats;
+      scrollViewportToBeat(viewport, playheadBeat, r.width, r.height);
       bgDirty = true;
       return;
     }
@@ -1386,6 +1419,9 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
   if (e.key !== ' ') return;
+  // Mirror the keydown guard — otherwise typing a space into a form field still
+  // releases through to the transport tap action.
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
   // If the timer is still pending, the key was a tap — run the transport action.
   // If it already fired, decide based on whether preview actually started:
   //   - previewActive: hold-release, just stop preview (no tap action).
