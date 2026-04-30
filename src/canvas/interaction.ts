@@ -406,6 +406,10 @@ export function createInteraction(
   // Delete/Backspace deletes selected curve (when no point is selected)
   window.addEventListener('keydown', (e) => {
     if (isComposePerformLocked()) return;
+    // Don't hijack keys while the user is typing in a form field — matches the
+    // global hotkey handler's guard in main.ts so Enter/Delete/Backspace/Escape
+    // stay native to inputs (e.g. comp-name, BPM).
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
     const state = store.getState();
     const inDrawMode = state.activeTool === 'draw';
     const hasDrawTarget = istate.drawingCurve || store.getSelectedCurveId();
