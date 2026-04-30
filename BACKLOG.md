@@ -62,10 +62,18 @@ Items marked **own planning session** need a dedicated design pass before any co
 
 ---
 
-## Phase 6 — Reserved
+## Phase 6 — Harmonic Prism
 
-- [ ] **6.1 Harmonic Prism** *(XL, own planning session — user has additional notes)*
-  Dynamic chords at selectable harmonic frequencies. Out of scope until dedicated planning pass.
+Dynamic chords at selectable harmonic frequencies. Three sub-phases shipped.
+
+- [x] **6.1 Projection mode** *(L, PR #36)*
+  Pure-math chord engine (`src/utils/harmonics.ts`) with prescribed JI ratio chains. Selecting a curve and pressing `Ctrl+H` projects dashed echoes up/down the canvas at chord intervals; snap pulls Y exclusively to echo pitches while active. Source curve gets a rainbow gradient highlight.
+
+- [x] **6.2 Draw mode + freehand grouping** *(L, PR #37)*
+  `H` toggles draw-mode chord placement: drawing places N grouped sibling curves at chord-spec offsets, all editable as a unit. Generalised the chord-group concept to a plain `groupId` on `BezierCurve`; `Ctrl+G` / `Ctrl+Shift+G` group/ungroup any selection. Group expansion threaded through delete, cut, copy, paste, duplicate, continue, alt-drag, transform-box, scissors split, and join (cross-group join refused with toast).
+
+- [x] **6.3 Perform mode** *(L, PR #39)*
+  Holding LMB during Scroll-Canvas Playback sounds the whole chord cluster simultaneously; recording captures every voice and commits N grouped sibling curves on release. Rail planchettes use rainbow voice colours (gradient primary + solid harmonies); idle Spacebar preview plays the full chord. Planchette lifecycle synced to `(drawMode && (playback || record-armed))`; synths tied to LMB. Chord-spec changes during a held LMB retune voices live.
 
 ---
 
@@ -88,6 +96,71 @@ Items marked **own planning session** need a dedicated design pass before any co
 
 - [x] **7.6 MIDI unsupported tooltip wording** *(XS, polish)*
   When Web MIDI is unavailable, the device dropdown should show the tooltip `"MIDI Input Not Supported By Browser."` (current wording is "Web MIDI not supported in this browser"). Confirm the existing disabled-state logic fires correctly and update the string.
+
+---
+
+## Phase 8 — Captured during Harmonic Prism work (unsequenced)
+
+Items that came up while building Phase 6 but are independent features. Each becomes its own planning pass when picked up.
+
+### Bug fixes / small UX
+- [ ] **8.1 Hotkeys fire while editing the composition name** *(S, bug)*
+  When `#comp-name` is focused, suppress global hotkeys (D / V / X / C / S / H / Space / etc.). Enter should commit the edit and blur the input. Verify the existing `e.target instanceof HTMLInputElement` guard in [src/main.ts](src/main.ts) — bug may be specifically Enter behaviour or some hotkey path that bypasses the check.
+
+- [ ] **8.2 Move curve to a different track** *(M, feature)*
+  Track-picker dropdown in Object Properties (when a single curve is selected) listing existing tracks plus "+ New track". Single `store.mutate()` with one history snapshot. Edge case: clear `groupId` on move so the moved curve doesn't accidentally couple with siblings on the new track.
+
+### Selection & editing
+- [ ] **8.3 Multi-select points: shift-click + drag-marquee** *(M, feature)*
+  Select tool currently supports shift+click on whole curves; extend to (a) shift+click on individual points and (b) drag-marquee on empty canvas. Likely needs a new `selectedPointIndices: Set<{curveId, idx}>` shape on `AppState`. Transform Box already handles multi-curve geometry — likely reusable for multi-point bounds.
+
+### Volume editing
+- [ ] **8.4 Per-curve volume timeline lane** *(L, own planning session)*
+  Volume currently lives as a per-control-point property; complex curves make volume editing unwieldy. Concept: a separate panel below the main canvas, sharing the X zoom and ruler, hosting secondary animatable curves per track or per source curve. First inhabitant is volume; future inhabitants could include per-tone-layer mixes, filter cutoff, etc. Needs a dedicated design session covering interaction, data model, and rendering.
+
+### Snap
+- [ ] **8.5 Persist snap settings to the composition file** *(S, feature)*
+  Currently snap config is global / localStorage; should be per-composition so projects with bespoke snap setups round-trip cleanly. Add to `Composition` schema with a version bump.
+
+- [ ] **8.6 Snap presets** *(S, feature)*
+  Built-in presets covering common combos of (subdivisions, magnetic strength, spring, damping). User can save current config as a named preset and load presets from a dropdown. Stored in localStorage (user presets) and in code (built-ins).
+
+- [ ] **8.7 User-definable snap guides** *(M, feature)*
+  New first-class entity — X-oriented and Y-oriented guides placed like loop markers (drag on the appropriate ruler). Guides are *additive* to other snap targets (don't replace them like projection echoes do). Selected guide gets a label field in Object Properties; label renders along the guide. A "Guides" toggle controls visibility for all guides. Persisted in the composition file.
+
+### Tone generator
+- [ ] **8.8 FM synthesis with waveform visualizer** *(XL, own planning session)*
+  Major upgrade beyond the current additive layer model: frequency modulation, waveform visualizer, multiple waveform options, noise options, keyframe-animatable mixes (with keyframes tied to curve or track — TBD). Needs its own design pass covering synth architecture, the keyframe model (overlaps with 8.4), and the UI for editing FM operator graphs.
+
+### Viewport navigation
+- [ ] **8.9 Home key takes the view to the playhead** *(S, feature)*
+  Centers the viewport on the current playhead beat (or rail beat in Scroll Canvas mode) regardless of where the user has panned. Useful when scrolled far away from the active position.
+
+- [ ] **8.10 PageUp on an empty canvas returns to X=0** *(XS, bug/polish)*
+  When no control points exist, `PageUp` (currently "scroll to first control point") has nothing to target — fall back to scrolling the viewport back to beat 0 so the user has a reliable home position on a fresh canvas.
+
+### MIDI
+- [ ] **8.11 MIDI input recording (no snap)** *(M, feature)*
+  Phase 4.1 added live MIDI input as a perform source; extend it to record incoming MIDI directly to curves the same way LMB-held perform records. Don't snap the captured pitch — MIDI input is already discrete. May need per-track "MIDI input" arming separate from the LMB record-arm flow, plus clear visual feedback during MIDI recording.
+
+### Harmonic Prism nice-to-haves
+- [ ] **8.12 Chord-spec hotkeys / number-key favorites** *(M, feature)*
+  Phase 6.3's state plumbing already retunes voices live whenever the chord spec changes — the missing piece is a non-LMB way to trigger the change so the user can shape-shift mid-perform. Concept: user-definable chord-shape favorites bound to number keys.
+
+- [ ] **8.13 Inversion controls** *(S, feature)*
+  Reorder the ratio chain or add octave offsets to specific voices.
+
+- [ ] **8.14 Chord-label readout on selected groups** *(S, feature)*
+  Honest about microtonal bases ("C(+17¢) major"). Shown in Object Properties when a chord cluster is selected.
+
+- [ ] **8.15 "Lite harmonies" audio mode** *(S, feature)*
+  Sine-only for harmony voices, for CPU relief when running 5×multi-layer voices.
+
+- [ ] **8.16 Secondal stacking** *(S, feature)*
+  Cluster chords. Listed as low priority in the original Harmonic Prism design doc.
+
+- [ ] **8.17 CPU monitoring under heavy loads** *(S, ops)*
+  Verify multi-voice perform + multi-layer tones + playback CPU on target hardware. Measure before optimising.
 
 ---
 
