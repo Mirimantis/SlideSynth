@@ -2268,8 +2268,15 @@ function finalizeComposeRecordedCurves() {
   const st = store.getState();
   const trackId = st.selectedTrackId;
   const track = trackId ? st.composition.tracks.find(t => t.id === trackId) : null;
-  // Voice ids that may have buffers to flush (primary + every active harmony).
-  const voiceIds = st.performance.planchettes.map(p => p.voiceId);
+  // Voice ids the LMB session owns (primary + every active harmony). MIDI
+  // voices ('midi-*') deliberately excluded — they live on the MIDI-armed
+  // track, not the LMB-selected track, and have their own finalize path
+  // (finalizeMidiVoice / finalizeAllInFlightMidiVoices). Without this filter
+  // an LMB release that lands on the same beat as a MIDI noteOff would push
+  // the MIDI curve onto the LMB track.
+  const voiceIds = st.performance.planchettes
+    .map(p => p.voiceId)
+    .filter(v => !v.startsWith('midi-'));
   if (!track) {
     for (const v of voiceIds) composeEngine.clearBuffer(v);
     return;
