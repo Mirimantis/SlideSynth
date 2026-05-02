@@ -189,6 +189,11 @@ export interface AppState {
   magneticStrength: number;
   magneticSpringK: number;
   magneticDamping: number;
+  /** Track ID currently armed for MIDI input recording (Phase 8.11). Null = no
+   *  track armed. Mutually exclusive — arming a different track replaces the
+   *  value. Distinct from PerformanceState.recordArmed (LMB record-arm), which
+   *  can be active in parallel. Workspace state (not persisted across reloads). */
+  midiArmedTrackId: string | null;
   /** Snap guides (Phase 8.7) — workspace toggle for visibility (and snap participation).
    *  Persisted to localStorage; not in the composition file (it's a viewing pref). */
   guidesVisible: boolean;

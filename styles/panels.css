@@ -97,7 +97,8 @@
 }
 
 .track-mute,
-.track-solo {
+.track-solo,
+.track-midi-arm {
   background: var(--surface);
   color: var(--text-dim);
   border: 1px solid #335;
@@ -110,7 +111,8 @@
 }
 
 .track-mute:hover,
-.track-solo:hover {
+.track-solo:hover,
+.track-midi-arm:hover {
   background: #1a4a80;
 }
 
@@ -124,6 +126,19 @@
   background: #f9a825;
   color: #000;
   border-color: #f9a825;
+}
+
+/* MIDI input arm button — armed = solid grey, recording = pulsing red. */
+.track-midi-arm.armed {
+  background: #555;
+  color: #fff;
+  border-color: #555;
+}
+.track-midi-arm.recording {
+  background: #e53935;
+  color: #fff;
+  border-color: #e53935;
+  animation: recordPulse 1s infinite;
 }
 
 .track-edit-tone,
