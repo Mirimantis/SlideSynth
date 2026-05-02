@@ -938,6 +938,21 @@ const addGuideXBtn = document.getElementById('add-guide-x-btn') as HTMLButtonEle
 const addGuideYBtn = document.getElementById('add-guide-y-btn') as HTMLButtonElement;
 guidesVisibleToggle.checked = store.getState().guidesVisible;
 guidesLockedToggle.checked = store.getState().guidesLocked;
+
+/** Disable the + X / + Y buttons when guides are locked so the user can't add a
+ *  new guide and leave it stuck-selected (the lock prevents deselect-on-canvas). */
+function syncGuideAddButtonsEnabled(): void {
+  const locked = store.getState().guidesLocked;
+  addGuideXBtn.disabled = locked;
+  addGuideYBtn.disabled = locked;
+  const tip = locked
+    ? 'Unlock guides to add a new one'
+    : null;
+  addGuideXBtn.title = tip ?? 'Add a vertical (beat) guide at the centre of the viewport';
+  addGuideYBtn.title = tip ?? 'Add a horizontal (pitch) guide at the centre of the viewport';
+}
+syncGuideAddButtonsEnabled();
+
 guidesVisibleToggle.addEventListener('change', () => {
   store.setGuidesVisible(guidesVisibleToggle.checked);
   bgDirty = true;
@@ -945,6 +960,7 @@ guidesVisibleToggle.addEventListener('change', () => {
 });
 guidesLockedToggle.addEventListener('change', () => {
   store.setGuidesLocked(guidesLockedToggle.checked);
+  syncGuideAddButtonsEnabled();
   bgDirty = true;
   guidesLockedToggle.blur();
 });
