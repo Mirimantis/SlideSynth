@@ -701,9 +701,12 @@ midiInput.onDevicesChanged(refreshMidiDeviceList);
 
 midiInput.onNoteOn((note, velocity) => {
   const state = store.getState();
-  const trackId = state.selectedTrackId;
-  if (!trackId) return;
-  const track = state.composition.tracks.find(t => t.id === trackId);
+  // When a track is MIDI-armed it owns the audio path so what you hear is
+  // what gets recorded. Otherwise fall back to the selected track (existing
+  // preview-only behavior).
+  const targetTrackId = state.midiArmedTrackId ?? state.selectedTrackId;
+  if (!targetTrackId) return;
+  const track = state.composition.tracks.find(t => t.id === targetTrackId);
   if (!track) return;
   const tone = state.composition.toneLibrary.find(t => t.id === track.toneId);
   if (!tone) return;
