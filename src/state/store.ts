@@ -165,6 +165,9 @@ function createInitialState(): AppState {
     guidesVisible: loadBoolPref(GUIDES_VISIBLE_STORAGE_KEY, true),
     guidesLocked: loadBoolPref(GUIDES_LOCKED_STORAGE_KEY, false),
     selectedGuideId: null,
+    // Phase 8.11 — MIDI input recording arm. Workspace-only; not persisted
+    // (record-arm shouldn't silently re-engage on app reload).
+    midiArmedTrackId: null,
     drawPreviewMode: 'tone',
     bezierAutoSmooth: false,
     scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, true),
@@ -285,6 +288,15 @@ class Store {
 
   setPerformArmed(on: boolean) {
     this.state.performance.recordArmed = on;
+    this.notify();
+  }
+
+  /** Arm a track for MIDI input recording. Mutually exclusive — passing a
+   *  trackId replaces any existing arm; passing null disarms. Distinct from
+   *  setPerformArmed (LMB record-arm). */
+  setMidiArmedTrackId(trackId: string | null) {
+    if (this.state.midiArmedTrackId === trackId) return;
+    this.state.midiArmedTrackId = trackId;
     this.notify();
   }
 

@@ -1681,6 +1681,14 @@ function renderTrackList() {
   for (const track of comp.tracks) {
     const tone = comp.toneLibrary.find(t => t.id === track.toneId);
     const isSelected = track.id === state.selectedTrackId;
+    const isMidiArmed = state.midiArmedTrackId === track.id;
+    const isMidiRecording = isMidiArmed && state.performance.planchettes.some(
+      p => p.voiceId.startsWith('midi-') && p.trackId === track.id,
+    );
+    const midiArmClass = isMidiRecording ? 'recording' : isMidiArmed ? 'armed' : '';
+    const midiArmTitle = isMidiArmed
+      ? 'MIDI input armed — click to disarm'
+      : 'Arm this track for MIDI input recording';
     const div = document.createElement('div');
     div.className = `track-item${isSelected ? ' selected' : ''}${track.muted ? ' muted' : ''}`;
     div.innerHTML = `
@@ -1692,6 +1700,7 @@ function renderTrackList() {
       <div class="track-controls">
         <button class="track-mute ${track.muted ? 'active' : ''}" title="Mute">M</button>
         <button class="track-solo ${track.solo ? 'active' : ''}" title="Solo">S</button>
+        <button class="track-midi-arm ${midiArmClass}" title="${midiArmTitle}">I</button>
         <button class="track-edit-tone" title="Edit tone">T</button>
       </div>
     `;
@@ -1706,6 +1715,12 @@ function renderTrackList() {
       if (target.classList.contains('track-solo')) {
         history.snapshot();
         store.mutate(() => { track.solo = !track.solo; });
+        return;
+      }
+      if (target.classList.contains('track-midi-arm')) {
+        // Toggle: arm this track if not already armed; disarm if it was.
+        const current = store.getState().midiArmedTrackId;
+        store.setMidiArmedTrackId(current === track.id ? null : track.id);
         return;
       }
       if (target.classList.contains('track-edit-tone')) {
