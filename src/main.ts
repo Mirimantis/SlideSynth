@@ -24,6 +24,8 @@ import { renderPropertyPanel } from './ui/property-panel';
 import { renderToolPropertyPanel } from './ui/tool-property-panel';
 import { openToneBuilder } from './ui/tone-builder';
 import { openTonePicker } from './ui/tone-picker';
+import { openPresetSaveDialog } from './ui/preset-save-dialog';
+import { BUILTIN_SNAP_PRESETS, loadUserSnapPresets, saveUserSnapPresets, presetMatches, snapshotPreset, type SnapPreset } from './utils/snap-presets';
 import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile } from './export/json-export';
 import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
@@ -128,6 +130,12 @@ app.innerHTML = `
       <div id="tool-panel"></div>
       <div class="panel-header">Snap</div>
       <div id="snap-section">
+        <div class="transport-row snap-preset-row">
+          <label for="snap-preset-select">Preset</label>
+          <select id="snap-preset-select" title="Snap preset — load a saved combo of snap + magnetic settings"></select>
+          <button id="snap-preset-save" class="snap-preset-btn" title="Save current snap settings as a new preset">Save</button>
+          <button id="snap-preset-delete" class="snap-preset-btn" title="Delete the active user preset" disabled>Del</button>
+        </div>
         <div class="transport-row">
           <label class="toggle-switch" title="Toggle snap (S)">
             <span class="toggle-switch-track">
@@ -725,6 +733,7 @@ const snapToggleInput = document.getElementById('snap-toggle') as HTMLInputEleme
 snapToggleInput.checked = store.getState().snapEnabled;
 snapToggleInput.addEventListener('change', () => {
   store.setSnap(snapToggleInput.checked);
+  syncSnapPresetUi();
   snapToggleInput.blur();
 });
 
@@ -736,8 +745,16 @@ const magneticSpringSlider = document.getElementById('input-magnetic-spring') as
 const magneticSpringValue = document.querySelector('.magnetic-spring-value') as HTMLSpanElement;
 const magneticDampingSlider = document.getElementById('input-magnetic-damping') as HTMLInputElement;
 const magneticDampingValue = document.querySelector('.magnetic-damping-value') as HTMLSpanElement;
-{
+
+function formatDamping(d: number): string {
+  return Number.isInteger(d) ? String(d) : d.toFixed(1);
+}
+
+/** Push the current snap-section AppState values back into the DOM controls.
+ *  Called on initial load and after a preset is applied. */
+function syncSnapSectionDom(): void {
   const st = store.getState();
+  snapToggleInput.checked = st.snapEnabled;
   magneticToggle.checked = st.magneticEnabled;
   magneticStrengthSlider.value = String(st.magneticStrength);
   magneticStrengthValue.textContent = st.magneticStrength.toFixed(2);
@@ -746,28 +763,153 @@ const magneticDampingValue = document.querySelector('.magnetic-damping-value') a
   magneticDampingSlider.value = String(st.magneticDamping);
   magneticDampingValue.textContent = formatDamping(st.magneticDamping);
 }
+syncSnapSectionDom();
 
-function formatDamping(d: number): string {
-  return Number.isInteger(d) ? String(d) : d.toFixed(1);
-}
 magneticToggle.addEventListener('change', () => {
   store.setMagneticEnabled(magneticToggle.checked);
+  syncSnapPresetUi();
   magneticToggle.blur();
 });
 magneticStrengthSlider.addEventListener('input', () => {
   const s = Number(magneticStrengthSlider.value);
   store.setMagneticStrength(s);
   magneticStrengthValue.textContent = s.toFixed(2);
+  syncSnapPresetUi();
 });
 magneticSpringSlider.addEventListener('input', () => {
   const k = Number(magneticSpringSlider.value);
   store.setMagneticSpringK(k);
   magneticSpringValue.textContent = String(Math.round(k));
+  syncSnapPresetUi();
 });
 magneticDampingSlider.addEventListener('input', () => {
   const d = Number(magneticDampingSlider.value);
   store.setMagneticDamping(d);
   magneticDampingValue.textContent = formatDamping(d);
+  syncSnapPresetUi();
+});
+
+// ── Snap presets (BACKLOG 8.6) ─────────────────────────────────
+const snapPresetSelect = document.getElementById('snap-preset-select') as HTMLSelectElement;
+const snapPresetSaveBtn = document.getElementById('snap-preset-save') as HTMLButtonElement;
+const snapPresetDeleteBtn = document.getElementById('snap-preset-delete') as HTMLButtonElement;
+
+const CUSTOM_PRESET_VALUE = '__custom__';
+let userSnapPresets: SnapPreset[] = loadUserSnapPresets();
+/** The preset the user explicitly picked (via dropdown change or Save). Cleared
+ *  when settings drift away from it. Lets the dropdown stick on the user's
+ *  intended preset even when a built-in also matches. */
+let activeSnapPresetId: string | null = null;
+
+function getAllPresets(): SnapPreset[] {
+  return [...BUILTIN_SNAP_PRESETS, ...userSnapPresets];
+}
+
+/** Repopulate the dropdown, then sync its selected value to the active preset
+ *  (if it still matches), else the first matching preset, else "Custom". Also
+ *  drives the Delete button enabled state. */
+function syncSnapPresetUi(): void {
+  const liveSnap = store.getComposition().snap;
+
+  // Repopulate (cheap; only ~4 builtins + a handful of user presets).
+  snapPresetSelect.innerHTML = '';
+  const customOpt = document.createElement('option');
+  customOpt.value = CUSTOM_PRESET_VALUE;
+  customOpt.textContent = 'Custom';
+  customOpt.disabled = true;
+  customOpt.hidden = true;   // only shown when actually selected (no preset matches)
+  snapPresetSelect.appendChild(customOpt);
+
+  const builtinGroup = document.createElement('optgroup');
+  builtinGroup.label = 'Built-in';
+  for (const p of BUILTIN_SNAP_PRESETS) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    builtinGroup.appendChild(opt);
+  }
+  snapPresetSelect.appendChild(builtinGroup);
+
+  if (userSnapPresets.length > 0) {
+    const userGroup = document.createElement('optgroup');
+    userGroup.label = 'User';
+    for (const p of userSnapPresets) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      userGroup.appendChild(opt);
+    }
+    snapPresetSelect.appendChild(userGroup);
+  }
+
+  // Resolve which preset to show as selected:
+  //   1. If the active preset still matches → keep it.
+  //   2. Else clear active and fall back to first matching preset.
+  //   3. Else show "Custom".
+  let active: SnapPreset | null = activeSnapPresetId
+    ? getAllPresets().find(p => p.id === activeSnapPresetId) ?? null
+    : null;
+  if (active && !presetMatches(active, liveSnap)) {
+    active = null;
+    activeSnapPresetId = null;
+  }
+  const match = active ?? getAllPresets().find(p => presetMatches(p, liveSnap)) ?? null;
+  if (match) {
+    snapPresetSelect.value = match.id;
+    customOpt.hidden = true;
+  } else {
+    customOpt.hidden = false;
+    snapPresetSelect.value = CUSTOM_PRESET_VALUE;
+  }
+
+  // Delete is only valid for an active USER preset.
+  snapPresetDeleteBtn.disabled = !match || !userSnapPresets.some(u => u.id === match.id);
+}
+syncSnapPresetUi();
+
+snapPresetSelect.addEventListener('change', () => {
+  const id = snapPresetSelect.value;
+  if (id === CUSTOM_PRESET_VALUE) return;
+  const preset = getAllPresets().find(p => p.id === id);
+  if (!preset) return;
+  // Apply each defined field via the corresponding setter (write-through to comp.snap).
+  // Note: no history.snapshot() — preset loading mirrors the magnetic-slider precedent.
+  const s = preset.settings;
+  if (s.enabled !== undefined) store.setSnap(s.enabled);
+  if (s.magneticEnabled !== undefined) store.setMagneticEnabled(s.magneticEnabled);
+  if (s.magneticStrength !== undefined) store.setMagneticStrength(s.magneticStrength);
+  if (s.magneticSpringK !== undefined) store.setMagneticSpringK(s.magneticSpringK);
+  if (s.magneticDamping !== undefined) store.setMagneticDamping(s.magneticDamping);
+  activeSnapPresetId = preset.id;
+  syncSnapSectionDom();
+  syncSnapPresetUi();
+  snapPresetSelect.blur();
+});
+
+snapPresetSaveBtn.addEventListener('click', async () => {
+  const existingNames = getAllPresets().map(p => p.name);
+  const name = await openPresetSaveDialog({
+    title: 'Save Snap Preset',
+    existingNames,
+  });
+  if (!name) return;
+  const preset = snapshotPreset(name, store.getComposition().snap);
+  userSnapPresets = [...userSnapPresets, preset];
+  saveUserSnapPresets(userSnapPresets);
+  activeSnapPresetId = preset.id;   // make the new preset the active one
+  syncSnapPresetUi();
+  showToast(`Saved snap preset "${name}".`);
+});
+
+snapPresetDeleteBtn.addEventListener('click', () => {
+  const id = snapPresetSelect.value;
+  const target = userSnapPresets.find(p => p.id === id);
+  if (!target) return;
+  if (!confirm(`Delete user preset "${target.name}"?`)) return;
+  userSnapPresets = userSnapPresets.filter(p => p.id !== id);
+  saveUserSnapPresets(userSnapPresets);
+  if (activeSnapPresetId === id) activeSnapPresetId = null;
+  syncSnapPresetUi();
 });
 
 // ── Metronome controls ─────────────────────────────────────────
