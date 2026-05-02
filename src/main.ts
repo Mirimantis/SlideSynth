@@ -715,10 +715,32 @@ midiInput.onNoteOn((note, velocity) => {
   preview.startDrawPreview(tone, note, `midi-${note}`);
   // velocity reserved for a future loudness-mapped preview; stable mid-volume for now.
   void velocity;
+
+  // Recording (Phase 8.11): if the armed track AND playback are active, start
+  // capturing this voice. A planchette in performance state both visualises the
+  // held note on the rail and signals captureComposeRecordingSample to push a
+  // sample each frame. Re-trigger before noteOff: finalize the in-flight voice
+  // first so we don't lose its samples.
+  if (state.midiArmedTrackId !== null && playback.isPlaying()) {
+    const voiceId = `midi-${note}`;
+    const existing = state.performance.planchettes.find(p => p.voiceId === voiceId);
+    if (existing) finalizeMidiVoice(note);
+    store.addPerformPlanchette({
+      voiceId,
+      trackId: state.midiArmedTrackId,
+      cursorWorldY: note,
+      snappedWorldY: note,
+      lastCrossedAt: performance.now(),
+    });
+    bgDirty = true;
+  }
 });
 
 midiInput.onNoteOff((note) => {
   preview.stopDrawPreview(`midi-${note}`);
+  // If this voice was recording, finalize the curve into the MIDI-armed track.
+  // Safe to call unconditionally — finalizeMidiVoice no-ops if no planchette.
+  finalizeMidiVoice(note);
 });
 
 midiDeviceSelect.addEventListener('change', async () => {
@@ -1721,8 +1743,12 @@ function renderTrackList() {
         return;
       }
       if (target.classList.contains('track-midi-arm')) {
-        // Toggle: arm this track if not already armed; disarm if it was.
         const current = store.getState().midiArmedTrackId;
+        // If switching arm or disarming while notes are still held, finalize
+        // those in-flight voices first so we don't lose recorded samples (the
+        // arm change would orphan the planchettes otherwise).
+        if (current !== null) finalizeAllInFlightMidiVoices();
+        // Toggle: arm this track if not already armed; disarm if it was.
         store.setMidiArmedTrackId(current === track.id ? null : track.id);
         return;
       }
@@ -2180,20 +2206,59 @@ function updatePrismDrawPreview(snappedBaseY: number) {
 }
 
 function captureComposeRecordingSample() {
-  const g = store.getState().performance;
-  if (g.phase !== 'playing' || !g.recordArmed || !composeEngine.isLmbDown()) return;
+  const st = store.getState();
+  const g = st.performance;
+  if (g.phase !== 'playing') return;
+  const lmbActive = g.recordArmed && composeEngine.isLmbDown();
+  const midiActive = st.midiArmedTrackId !== null;
+  if (!lmbActive && !midiActive) return;
   const beat = playback.getPositionBeats();
-  // Capture every active voice (primary + any chord-cluster harmonies). The
-  // engine's captureSample is keyed by voiceId and already supports N parallel
-  // buffers — this is the multi-voice extension of the single-voice path.
+  // Capture every active voice (primary + any chord-cluster harmonies + every
+  // held MIDI note). The engine's captureSample is keyed by voiceId and already
+  // supports N parallel buffers. Per-voice gating: LMB voices when LMB is the
+  // active source; MIDI voices when MIDI input is the armed source. Both can
+  // run in parallel, recording into independent voices.
   for (const p of g.planchettes) {
     if (p.snappedWorldY == null) continue;
+    const isMidiVoice = p.voiceId.startsWith('midi-');
+    if (isMidiVoice ? !midiActive : !lmbActive) continue;
     composeEngine.captureSample(p.voiceId, {
       beat,
       note: p.snappedWorldY,
       volume: 0.8,
     });
   }
+}
+
+/** Finalize one MIDI voice's recording into the MIDI-armed track. Called on
+ *  noteOff and on stop boundaries (composePerformStop, loop wrap, disarm). */
+function finalizeMidiVoice(midiNote: number) {
+  const voiceId = `midi-${midiNote}`;
+  const st = store.getState();
+  const planchettePresent = st.performance.planchettes.some(p => p.voiceId === voiceId);
+  if (!planchettePresent) return;
+  const trackId = st.midiArmedTrackId;
+  const track = trackId ? st.composition.tracks.find(t => t.id === trackId) : null;
+  const curve = composeEngine.finalizeCurve(voiceId, () => history.snapshot());
+  if (curve && track) {
+    store.mutate(() => { track.curves.push(curve); });
+  } else if (!track) {
+    composeEngine.clearBuffer(voiceId);
+  }
+  store.removePerformPlanchette(voiceId);
+  bgDirty = true;
+}
+
+/** Finalize every in-flight MIDI voice. Used on stop boundaries (Stop button,
+ *  ESC, AFK, loop wrap) and when un-arming MIDI mid-recording. */
+function finalizeAllInFlightMidiVoices() {
+  const notes: number[] = [];
+  for (const p of store.getState().performance.planchettes) {
+    if (!p.voiceId.startsWith('midi-')) continue;
+    const n = Number(p.voiceId.slice('midi-'.length));
+    if (Number.isFinite(n)) notes.push(n);
+  }
+  for (const n of notes) finalizeMidiVoice(n);
 }
 
 function finalizeComposeRecordedCurves() {
@@ -2235,18 +2300,25 @@ function finalizeComposeRecordedCurves() {
 }
 
 function tickComposePerform() {
-  const g = store.getState().performance;
+  const st = store.getState();
+  const g = st.performance;
+  // Treat MIDI-armed as record-armed for engine purposes (countdown, AFK gate)
+  // so the player gets the same affordances when arming via MIDI alone.
+  const anyArmed = g.recordArmed || st.midiArmedTrackId !== null;
   composeEngine.tick({
     now: performance.now(),
     audioNow: getAudioContext().currentTime,
     isPlaying: playback.isPlaying(),
     phase: g.phase,
-    recordArmed: g.recordArmed,
+    recordArmed: anyArmed,
     countdownStartedAt: g.countdownStartedAt,
     playbackBeat: playback.getPositionBeats(),
     onCountdownElapsed: startComposePerformPlayback,
     onLoopWrap: () => {
       if (g.recordArmed && composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
+      // Loop wrap during sustained MIDI notes splits the curves at the wrap so
+      // recordings don't cross the loop boundary as a single curve.
+      finalizeAllInFlightMidiVoices();
     },
     onAfkTimeout: composePerformStop,
   });
@@ -2332,6 +2404,9 @@ function composePerformStop() {
   if (g.phase === 'playing' && g.recordArmed && composeEngine.isLmbDown()) {
     finalizeComposeRecordedCurves();
   }
+  // Finalize any in-flight MIDI voices before tearing down — otherwise their
+  // buffers would be discarded by composeEngine.stopSession() below.
+  finalizeAllInFlightMidiVoices();
   if (composeEngine.isLmbDown()) {
     stopComposePerformSounding();
   }

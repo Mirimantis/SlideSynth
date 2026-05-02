@@ -499,9 +499,10 @@
   <!-- MIDI input -->
   <h2 id="midi-input">Live MIDI Input</h2>
   <p>
-    Connect a MIDI keyboard or controller and play notes straight into the selected
-    track's tone. Distinct from <strong>File &gt; Import MIDI</strong>, which reads
-    an existing <code>.mid</code> file into new curves.
+    Connect a MIDI keyboard or controller and play notes straight into a track's
+    tone — and optionally record what you play as curves. Distinct from
+    <strong>File &gt; Import MIDI</strong>, which reads an existing
+    <code>.mid</code> file into new curves.
   </p>
   <details>
     <summary>MIDI input details</summary>
@@ -509,15 +510,50 @@
       <ul>
         <li>Pick a device from the <strong>MIDI Input</strong> dropdown in the
             Transport panel. On first selection the browser prompts for MIDI access.</li>
-        <li><kbd>Note On</kbd> sounds the selected track's tone at the note's pitch;
+        <li><kbd>Note On</kbd> sounds a track's tone at the note's pitch;
             <kbd>Note Off</kbd> stops it. Held notes play in parallel (polyphonic),
-            so you can sound chords against the track's tone.</li>
+            so you can sound chords.</li>
+        <li>Audio target: when no track is MIDI-armed (see below), notes sound through
+            the <em>selected</em> track's tone. When a track is MIDI-armed, the
+            <em>armed</em> track's tone takes over so what you hear matches what
+            would be recorded.</li>
         <li>The dropdown updates automatically when devices are plugged or unplugged.</li>
-        <li>Recording from live MIDI (capturing played notes as curves) is not yet
-            wired up in this first pass — use mouse Perform or Import MIDI for that.
-            Pitch-bend and CC messages are also ignored for now.</li>
+        <li>Pitch-bend and CC messages are ignored for now.</li>
         <li>Requires a browser with Web MIDI support (Chromium-based browsers). The
             dropdown is disabled when the API is unavailable.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>Recording MIDI input to curves</summary>
+    <div class="detail-body">
+      <p>
+        Each track row has an <strong>I</strong> button (alongside Mute / Solo /
+        Edit Tone) that arms the track for MIDI input recording. While playback
+        is running, MIDI notes captured into the armed track land as curves on
+        release — separate per note, so chords record as multiple parallel curves
+        on the same track.
+      </p>
+      <ul>
+        <li>Mutually exclusive — clicking <strong>I</strong> on a different track
+            disarms the previous one. Click the same track's <strong>I</strong>
+            again to disarm.</li>
+        <li>The <strong>I</strong> button shows the current state: hollow when
+            disarmed, solid grey when armed-but-quiet, pulsing red while one or
+            more MIDI notes are actively recording into that track.</li>
+        <li>Distinct from the global <strong>Record</strong> button (which arms
+            LMB-held perform recording). Both can be active in parallel — your
+            mouse perform records to the selected track while MIDI records to the
+            armed track, in independent voices.</li>
+        <li>Pitch is <em>not</em> snapped — MIDI notes record at their exact MIDI
+            pitch (no scale or grid quantization).</li>
+        <li>Recording requires playback to be running. Arming a track and pressing
+            <strong>Play</strong> from idle gives you the same countdown affordance
+            as the LMB record-arm flow.</li>
+        <li>Stop boundaries (Stop / Pause / Escape / loop wrap / disarming the
+            track) finalize any in-flight notes cleanly so you don't lose mid-note
+            captures.</li>
       </ul>
     </div>
   </details>
