@@ -346,11 +346,13 @@ class Store {
     }
   }
 
-  /** Strip every non-primary planchette (chord-cluster cleanup on LMB-up). */
+  /** Strip every Harmonic-Prism harmony planchette (chord-cluster cleanup on
+   *  LMB-up). Leaves the primary planchette and any MIDI input planchettes
+   *  (voice id 'midi-*') alone — those have independent lifecycles. */
   removeHarmonyPlanchettes() {
     const before = this.state.performance.planchettes.length;
     this.state.performance.planchettes = this.state.performance.planchettes
-      .filter(p => p.voiceId === 'primary');
+      .filter(p => !p.voiceId.startsWith('harmony-'));
     if (this.state.performance.planchettes.length !== before) this.notify();
   }
 

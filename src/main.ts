@@ -2116,7 +2116,10 @@ function parseHarmonyIndex(voiceId: string): number | null {
 }
 
 /** Reconcile the planchette array with current Prism Draw + playback/record
- *  state. Called every render frame; cheap when state already matches. */
+ *  state. Called every render frame; cheap when state already matches.
+ *  Only touches Harmonic Prism harmony voices ('harmony-*'); MIDI input
+ *  planchettes ('midi-*') have their own lifecycle (noteOn / noteOff) and
+ *  must not be reaped here. */
 function syncHarmonyPlanchettes() {
   const st = store.getState();
   const wantHarmonies = st.harmonicPrism.drawMode &&
@@ -2124,7 +2127,7 @@ function syncHarmonyPlanchettes() {
 
   if (!wantHarmonies) {
     for (const p of st.performance.planchettes) {
-      if (p.voiceId !== 'primary') preview.stopDrawPreview(p.voiceId);
+      if (p.voiceId.startsWith('harmony-')) preview.stopDrawPreview(p.voiceId);
     }
     store.removeHarmonyPlanchettes();
     return;
@@ -2134,10 +2137,10 @@ function syncHarmonyPlanchettes() {
   const desiredHarmonyIds = new Set<string>();
   for (let i = 1; i < offsets.length; i++) desiredHarmonyIds.add(harmonyVoiceId(i - 1));
 
-  // Remove voices no longer in spec (numVoices reduced).
+  // Remove harmony voices no longer in spec (numVoices reduced).
   const toRemove: string[] = [];
   for (const p of st.performance.planchettes) {
-    if (p.voiceId === 'primary') continue;
+    if (!p.voiceId.startsWith('harmony-')) continue;
     if (!desiredHarmonyIds.has(p.voiceId)) toRemove.push(p.voiceId);
   }
   for (const voiceId of toRemove) {
