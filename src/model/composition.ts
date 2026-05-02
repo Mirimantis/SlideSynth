@@ -1,14 +1,31 @@
-import type { Composition } from '../types';
-import { DEFAULT_BPM, DEFAULT_BEATS_PER_MEASURE } from '../constants';
+import type { Composition, SnapSettings } from '../types';
+import {
+  DEFAULT_BPM, DEFAULT_BEATS_PER_MEASURE,
+  DEFAULT_SNAP_ENABLED, DEFAULT_MAGNETIC_ENABLED,
+  DEFAULT_MAGNETIC_STRENGTH, DEFAULT_MAGNETIC_SPRING_K, DEFAULT_MAGNETIC_DAMPING,
+} from '../constants';
 import { createDefaultToneLibrary } from './tone';
 import { createTrack } from './track';
+
+/** Default snap settings for a new composition. Also the migration target for v1 files. */
+export function createDefaultSnapSettings(): SnapSettings {
+  return {
+    enabled: DEFAULT_SNAP_ENABLED,
+    scaleRoot: null,
+    scaleId: null,
+    magneticEnabled: DEFAULT_MAGNETIC_ENABLED,
+    magneticStrength: DEFAULT_MAGNETIC_STRENGTH,
+    magneticSpringK: DEFAULT_MAGNETIC_SPRING_K,
+    magneticDamping: DEFAULT_MAGNETIC_DAMPING,
+  };
+}
 
 export function createComposition(): Composition {
   const toneLibrary = createDefaultToneLibrary();
   const firstTone = toneLibrary[0]!;
 
   return {
-    version: 1,
+    version: 2,
     name: 'Untitled',
     bpm: DEFAULT_BPM,
     beatsPerMeasure: DEFAULT_BEATS_PER_MEASURE,
@@ -17,6 +34,8 @@ export function createComposition(): Composition {
     tracks: [createTrack('Track 1', firstTone.id)],
     loopStartBeats: 0,
     loopEndBeats: 2 * DEFAULT_BEATS_PER_MEASURE,
+    snap: createDefaultSnapSettings(),
+    guides: [],
   };
 }
 

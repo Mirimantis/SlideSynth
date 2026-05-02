@@ -3,6 +3,10 @@ import { createComposition } from '../model/composition';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_NOTE, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 
+// Snap-section AppState fields (snapEnabled / scaleRoot / scaleId / magnetic*) are
+// now mirrors of `composition.snap` (Phase 8.5 — schema v2). Setters write through
+// to both. No localStorage keys for those fields anymore — composition file owns them.
+
 type Listener = () => void;
 
 function createInitialPrimaryPlanchette(trackId: string | null): PlanchetteState {
@@ -19,10 +23,6 @@ const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollCanvas';
 const PITCH_HUD_STORAGE_KEY = 'slidesynth.pitchHud';
 const METRONOME_ENABLED_STORAGE_KEY = 'slidesynth.metronomeEnabled';
 const METRONOME_VOLUME_STORAGE_KEY = 'slidesynth.metronomeVolume';
-const MAGNETIC_ENABLED_STORAGE_KEY = 'slidesynth.magneticEnabled';
-const MAGNETIC_STRENGTH_STORAGE_KEY = 'slidesynth.magneticStrength';
-const MAGNETIC_SPRING_K_STORAGE_KEY = 'slidesynth.magneticSpringK';
-const MAGNETIC_DAMPING_STORAGE_KEY = 'slidesynth.magneticDamping';
 const AUTO_SMOOTH_X_RATIO_STORAGE_KEY = 'slidesynth.autoSmoothXRatio';
 const PRISM_CHORD_SPEC_STORAGE_KEY = 'slidesynth.prismChordSpec';
 const PRISM_OCTAVE_RANGE_STORAGE_KEY = 'slidesynth.prismOctaveRange';
@@ -91,9 +91,45 @@ function saveChordSpecPref(spec: ChordSpec): void {
   }
 }
 
+/** One-time migration (Phase 8.5): if the user had legacy localStorage values for the
+ *  four magnetic params, seed the initial composition's snap block with them so their
+ *  tuning isn't reset on first load with the v2 code. Cleans the keys after reading
+ *  so this only runs once. Returns nothing — mutates the composition in place. */
+function migrateLegacyMagneticPrefs(comp: Composition): void {
+  const legacyKeys = [
+    ['slidesynth.magneticEnabled',  'magneticEnabled',  (raw: string) => raw === 'true'] as const,
+    ['slidesynth.magneticStrength', 'magneticStrength', (raw: string) => Math.max(0, Math.min(1, Number(raw)))] as const,
+    ['slidesynth.magneticSpringK',  'magneticSpringK',  (raw: string) => Math.max(1, Math.min(50, Number(raw)))] as const,
+    ['slidesynth.magneticDamping',  'magneticDamping',  (raw: string) => Math.max(0.25, Math.min(15, Number(raw)))] as const,
+  ];
+  let migrated = false;
+  for (const [key, field, parse] of legacyKeys) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === null) continue;
+      const v = parse(raw);
+      if (typeof v === 'boolean' || Number.isFinite(v)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (comp.snap as any)[field] = v;
+        migrated = true;
+      }
+      localStorage.removeItem(key);
+    } catch {
+      // Silently ignore — user just gets the defaults.
+    }
+  }
+  if (migrated) {
+    // Log once so it's discoverable when a user reports "my settings changed".
+    console.info('[snap migration] Seeded composition.snap from legacy magnetic localStorage keys.');
+  }
+}
+
 function createInitialState(): AppState {
+  const composition = createComposition();
+  migrateLegacyMagneticPrefs(composition);
+  const snap = composition.snap;
   return {
-    composition: createComposition(),
+    composition,
     selectedTrackId: null,
     selectedCurveIds: new Set(),
     selectedPointIndex: null,
@@ -116,19 +152,20 @@ function createInitialState(): AppState {
       state: 'stopped',
       positionBeats: 0,
     },
-    snapEnabled: true,
-    scaleRoot: null,
-    scaleId: null,
+    // AppState mirrors of composition.snap — keep in sync via setters / loadComposition.
+    snapEnabled: snap.enabled,
+    scaleRoot: snap.scaleRoot,
+    scaleId: snap.scaleId,
+    magneticEnabled: snap.magneticEnabled,
+    magneticStrength: snap.magneticStrength,
+    magneticSpringK: snap.magneticSpringK,
+    magneticDamping: snap.magneticDamping,
     drawPreviewMode: 'tone',
     bezierAutoSmooth: false,
     scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, true),
     pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
     metronomeEnabled: loadBoolPref(METRONOME_ENABLED_STORAGE_KEY, false),
     metronomeVolume: loadNumberPref(METRONOME_VOLUME_STORAGE_KEY, 0.6),
-    magneticEnabled: loadBoolPref(MAGNETIC_ENABLED_STORAGE_KEY, false),
-    magneticStrength: Math.max(0, Math.min(1, loadNumberPref(MAGNETIC_STRENGTH_STORAGE_KEY, 0.75))),
-    magneticSpringK: Math.max(1, Math.min(50, loadNumberPref(MAGNETIC_SPRING_K_STORAGE_KEY, 30))),
-    magneticDamping: Math.max(0.25, Math.min(15, loadNumberPref(MAGNETIC_DAMPING_STORAGE_KEY, 3))),
     autoSmoothXRatio: Math.max(0, Math.min(1, loadNumberPref(AUTO_SMOOTH_X_RATIO_STORAGE_KEY, AUTO_SMOOTH_X_RATIO))),
     harmonicPrism: {
       chordSpec: loadChordSpecPref(DEFAULT_CHORD_SPEC),
@@ -339,7 +376,7 @@ class Store {
   setMagneticEnabled(on: boolean) {
     if (this.state.magneticEnabled === on) return;
     this.state.magneticEnabled = on;
-    saveBoolPref(MAGNETIC_ENABLED_STORAGE_KEY, on);
+    this.state.composition.snap.magneticEnabled = on;
     this.notify();
   }
 
@@ -347,7 +384,7 @@ class Store {
     const clamped = Math.max(0, Math.min(1, strength));
     if (this.state.magneticStrength === clamped) return;
     this.state.magneticStrength = clamped;
-    saveNumberPref(MAGNETIC_STRENGTH_STORAGE_KEY, clamped);
+    this.state.composition.snap.magneticStrength = clamped;
     this.notify();
   }
 
@@ -355,7 +392,7 @@ class Store {
     const clamped = Math.max(1, Math.min(50, k));
     if (this.state.magneticSpringK === clamped) return;
     this.state.magneticSpringK = clamped;
-    saveNumberPref(MAGNETIC_SPRING_K_STORAGE_KEY, clamped);
+    this.state.composition.snap.magneticSpringK = clamped;
     this.notify();
   }
 
@@ -363,7 +400,7 @@ class Store {
     const clamped = Math.max(0.25, Math.min(15, d));
     if (this.state.magneticDamping === clamped) return;
     this.state.magneticDamping = clamped;
-    saveNumberPref(MAGNETIC_DAMPING_STORAGE_KEY, clamped);
+    this.state.composition.snap.magneticDamping = clamped;
     this.notify();
   }
 
@@ -385,19 +422,23 @@ class Store {
 
   setSnap(enabled: boolean) {
     this.state.snapEnabled = enabled;
+    this.state.composition.snap.enabled = enabled;
     this.notify();
   }
 
   setScaleRoot(root: number | null) {
     this.state.scaleRoot = root;
+    this.state.composition.snap.scaleRoot = root;
     if (root === null) {
       this.state.scaleId = null;
+      this.state.composition.snap.scaleId = null;
     }
     this.notify();
   }
 
   setScaleId(scaleId: string | null) {
     this.state.scaleId = scaleId;
+    this.state.composition.snap.scaleId = scaleId;
     this.notify();
   }
 
@@ -442,12 +483,22 @@ class Store {
     this.notify();
   }
 
-  /** Replace entire composition (for load). */
+  /** Replace entire composition (for load). Hydrates AppState mirrors of `comp.snap`
+   *  so the UI re-reads them without churn. */
   loadComposition(comp: Composition) {
     this.state.composition = comp;
     this.state.selectedTrackId = comp.tracks[0]?.id ?? null;
     this.state.selectedCurveIds = new Set();
     this.state.selectedPointIndex = null;
+    // Hydrate snap-section mirrors from the loaded composition.
+    const snap = comp.snap;
+    this.state.snapEnabled = snap.enabled;
+    this.state.scaleRoot = snap.scaleRoot;
+    this.state.scaleId = snap.scaleId;
+    this.state.magneticEnabled = snap.magneticEnabled;
+    this.state.magneticStrength = snap.magneticStrength;
+    this.state.magneticSpringK = snap.magneticSpringK;
+    this.state.magneticDamping = snap.magneticDamping;
     this.notify();
   }
 
