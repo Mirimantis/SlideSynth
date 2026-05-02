@@ -1,4 +1,4 @@
-import type { AppState, Composition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode } from '../types';
+import type { AppState, Composition, GuideDefinition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode } from '../types';
 import { createComposition } from '../model/composition';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_NOTE, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
@@ -27,6 +27,7 @@ const AUTO_SMOOTH_X_RATIO_STORAGE_KEY = 'slidesynth.autoSmoothXRatio';
 const PRISM_CHORD_SPEC_STORAGE_KEY = 'slidesynth.prismChordSpec';
 const PRISM_OCTAVE_RANGE_STORAGE_KEY = 'slidesynth.prismOctaveRange';
 const PRISM_DRAW_MODE_STORAGE_KEY = 'slidesynth.prismDrawMode';
+const GUIDES_VISIBLE_STORAGE_KEY = 'slidesynth.guidesVisible';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -160,6 +161,8 @@ function createInitialState(): AppState {
     magneticStrength: snap.magneticStrength,
     magneticSpringK: snap.magneticSpringK,
     magneticDamping: snap.magneticDamping,
+    guidesVisible: loadBoolPref(GUIDES_VISIBLE_STORAGE_KEY, true),
+    selectedGuideId: null,
     drawPreviewMode: 'tone',
     bezierAutoSmooth: false,
     scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, true),
@@ -214,6 +217,7 @@ class Store {
     this.state.selectedTrackId = trackId;
     this.state.selectedCurveIds = new Set();
     this.state.selectedPointIndex = null;
+    this.state.selectedGuideId = null;
     // Keep the primary planchette pointing at the selected track for recording/sounding.
     const primary = this.state.performance.planchettes.find(p => p.voiceId === 'primary');
     if (primary) primary.trackId = trackId;
@@ -224,6 +228,7 @@ class Store {
   setSelectedCurve(curveId: string | null) {
     this.state.selectedCurveIds = curveId ? new Set([curveId]) : new Set();
     this.state.selectedPointIndex = null;
+    if (curveId !== null) this.state.selectedGuideId = null;
     this.notify();
   }
 
@@ -231,6 +236,7 @@ class Store {
   setSelectedCurves(curveIds: string[]) {
     this.state.selectedCurveIds = new Set(curveIds);
     this.state.selectedPointIndex = null;
+    if (curveIds.length > 0) this.state.selectedGuideId = null;
     this.notify();
   }
 
@@ -477,6 +483,51 @@ class Store {
     this.notify();
   }
 
+  // ── Snap guides (Phase 8.7) ─────────────────────────────────
+
+  setGuidesVisible(visible: boolean): void {
+    if (this.state.guidesVisible === visible) return;
+    this.state.guidesVisible = visible;
+    saveBoolPref(GUIDES_VISIBLE_STORAGE_KEY, visible);
+    this.notify();
+  }
+
+  /** Select a guide (clears curve/point selection). Pass null to clear. */
+  setSelectedGuide(id: string | null): void {
+    if (this.state.selectedGuideId === id) return;
+    this.state.selectedGuideId = id;
+    if (id !== null) {
+      this.state.selectedCurveIds = new Set();
+      this.state.selectedPointIndex = null;
+    }
+    this.notify();
+  }
+
+  /** Append a guide to the composition. Caller is responsible for snapshotting history. */
+  addGuide(guide: GuideDefinition): void {
+    this.state.composition.guides.push(guide);
+    this.notify();
+  }
+
+  /** Remove a guide. Clears guide selection if it was the selected one. */
+  removeGuide(id: string): void {
+    const arr = this.state.composition.guides;
+    const idx = arr.findIndex(g => g.id === id);
+    if (idx < 0) return;
+    arr.splice(idx, 1);
+    if (this.state.selectedGuideId === id) this.state.selectedGuideId = null;
+    this.notify();
+  }
+
+  /** Patch a guide's mutable fields (label / position). */
+  updateGuide(id: string, fields: Partial<Pick<GuideDefinition, 'label' | 'position'>>): void {
+    const g = this.state.composition.guides.find(g => g.id === id);
+    if (!g) return;
+    if (fields.label !== undefined) g.label = fields.label;
+    if (fields.position !== undefined) g.position = fields.position;
+    this.notify();
+  }
+
   /** Mutate composition directly and notify. Use for curve/track mutations. */
   mutate(fn: (comp: Composition) => void) {
     fn(this.state.composition);
@@ -490,6 +541,7 @@ class Store {
     this.state.selectedTrackId = comp.tracks[0]?.id ?? null;
     this.state.selectedCurveIds = new Set();
     this.state.selectedPointIndex = null;
+    this.state.selectedGuideId = null;
     // Hydrate snap-section mirrors from the loaded composition.
     const snap = comp.snap;
     this.state.snapEnabled = snap.enabled;

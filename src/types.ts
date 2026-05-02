@@ -189,6 +189,12 @@ export interface AppState {
   magneticStrength: number;
   magneticSpringK: number;
   magneticDamping: number;
+  /** Snap guides (Phase 8.7) — workspace toggle for visibility (and snap participation).
+   *  Persisted to localStorage; not in the composition file (it's a viewing pref). */
+  guidesVisible: boolean;
+  /** ID of the currently selected guide (for Object Properties / Delete). Mutually
+   *  exclusive with curve/point selection. */
+  selectedGuideId: string | null;
   drawPreviewMode: 'tone' | 'composition';   // Draw-tool spacebar preview scope
   bezierAutoSmooth: boolean;                  // Draw-tool: click-placed points get horizontal handles
   scrollCanvasEnabled: boolean;               // Compose Playback view preference (localStorage-backed)

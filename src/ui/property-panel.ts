@@ -11,6 +11,55 @@ export function renderPropertyPanel(container: HTMLElement): void {
   const state = store.getState();
   const comp = state.composition;
 
+  // Selected guide takes precedence over track/curve/point — guide selection is
+  // mutually exclusive with curve/point selection per setSelectedGuide / setSelectedCurve.
+  if (state.selectedGuideId) {
+    const guide = comp.guides.find(g => g.id === state.selectedGuideId);
+    if (guide) {
+      const positionLabel = guide.orientation === 'x'
+        ? `${guide.position.toFixed(3)} beats`
+        : `${noteNumberToName(Math.round(guide.position))} (MIDI ${guide.position.toFixed(2)})`;
+      container.innerHTML = `
+        <div class="prop-section">
+          <div class="prop-label">Snap Guide</div>
+          <div class="prop-value">${guide.orientation === 'x' ? 'Vertical (beat)' : 'Horizontal (pitch)'}</div>
+        </div>
+        <div class="prop-section">
+          <div class="prop-label">Position</div>
+          <div class="prop-value">${positionLabel}</div>
+        </div>
+        <div class="prop-section">
+          <div class="prop-label">Label</div>
+          <input type="text" id="prop-guide-label" value="${escapeAttr(guide.label)}" placeholder="(empty)" style="width: 100%; box-sizing: border-box;" />
+        </div>
+        <div class="prop-section">
+          <button id="prop-guide-delete" class="snap-preset-btn" title="Delete this guide">Delete Guide</button>
+        </div>
+      `;
+      const labelInput = container.querySelector('#prop-guide-label') as HTMLInputElement;
+      labelInput.addEventListener('change', () => {
+        history.snapshot();
+        store.updateGuide(guide.id, { label: labelInput.value });
+      });
+      labelInput.addEventListener('keydown', (e) => {
+        // Mirror comp-name pattern: Enter commits + blurs, Escape reverts + blurs.
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          labelInput.blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          labelInput.value = guide.label;
+          labelInput.blur();
+        }
+      });
+      container.querySelector('#prop-guide-delete')?.addEventListener('click', () => {
+        history.snapshot();
+        store.removeGuide(guide.id);
+      });
+      return;
+    }
+  }
+
   const track = comp.tracks.find(t => t.id === state.selectedTrackId);
   if (!track) {
     container.innerHTML = '<p class="placeholder-text">No track selected</p>';
@@ -114,4 +163,8 @@ export function renderPropertyPanel(container: HTMLElement): void {
     const span = container.querySelector('.prop-val-text');
     if (span) span.textContent = v.toFixed(2);
   });
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[c]!));
 }

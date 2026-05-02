@@ -6,6 +6,7 @@ import { renderTransformBox } from './canvas/transform-box-renderer';
 import { renderProjection, renderProjectionSourceHighlight, renderPrismDrawPreview } from './canvas/projection-renderer';
 import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
+import { renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, getAdaptiveSubdivisions } from './utils/snap';
 import { createInteraction, rebuildTransformBox, RULER_HEIGHT, buildSnapConfig } from './canvas/interaction';
@@ -165,6 +166,17 @@ app.innerHTML = `
           <label for="input-magnetic-damping">Damping</label>
           <input type="range" id="input-magnetic-damping" class="magnetic-damping-slider" min="0.25" max="15" value="3" step="0.25" title="Velocity damping (low = long tremolo wobbles, high = quick settle)" />
           <span class="magnetic-damping-value">3</span>
+        </div>
+        <div class="transport-row guides-row">
+          <label class="toggle-switch" title="Show snap guides — when off, guides are hidden and don't snap">
+            <span class="toggle-switch-track">
+              <input type="checkbox" id="guides-visible-toggle" checked />
+              <span class="toggle-switch-thumb"></span>
+            </span>
+            <span class="toggle-switch-label">Guides</span>
+          </label>
+          <button id="add-guide-x-btn" class="snap-preset-btn" title="Add a vertical (beat) guide at the centre of the viewport">+ X</button>
+          <button id="add-guide-y-btn" class="snap-preset-btn" title="Add a horizontal (pitch) guide at the centre of the viewport">+ Y</button>
         </div>
       </div>
       <div class="panel-header" title="Harmonic Prism — press H on a selected curve to project harmonic echoes">Harmonic Prism</div>
@@ -912,6 +924,44 @@ snapPresetDeleteBtn.addEventListener('click', () => {
   syncSnapPresetUi();
 });
 
+// ── Snap guides (BACKLOG 8.7) ──────────────────────────────────
+const guidesVisibleToggle = document.getElementById('guides-visible-toggle') as HTMLInputElement;
+const addGuideXBtn = document.getElementById('add-guide-x-btn') as HTMLButtonElement;
+const addGuideYBtn = document.getElementById('add-guide-y-btn') as HTMLButtonElement;
+guidesVisibleToggle.checked = store.getState().guidesVisible;
+guidesVisibleToggle.addEventListener('change', () => {
+  store.setGuidesVisible(guidesVisibleToggle.checked);
+  bgDirty = true;
+  guidesVisibleToggle.blur();
+});
+
+/** Add a guide at the centre of the current viewport on the requested axis,
+ *  then auto-select it so the user can immediately drag or rename it. */
+function addGuideAtViewportCenter(orientation: 'x' | 'y'): void {
+  const r = canvasContainer.getBoundingClientRect();
+  const centre = viewport.screenToWorld(r.width / 2, r.height / 2);
+  const position = orientation === 'x'
+    ? Math.max(0, Math.round(centre.wx * 4) / 4)   // round to nearest 1/4 beat for tidiness
+    : Math.round(centre.wy);                        // nearest semitone
+  const guide = {
+    id: `guide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    orientation,
+    position,
+    label: '',
+  };
+  history.snapshot();
+  store.addGuide(guide);
+  store.setSelectedGuide(guide.id);
+  // Force the viewport to re-show the guides if they were hidden.
+  if (!store.getState().guidesVisible) {
+    store.setGuidesVisible(true);
+    guidesVisibleToggle.checked = true;
+  }
+  bgDirty = true;
+}
+addGuideXBtn.addEventListener('click', () => { addGuideAtViewportCenter('x'); addGuideXBtn.blur(); });
+addGuideYBtn.addEventListener('click', () => { addGuideAtViewportCenter('y'); addGuideYBtn.blur(); });
+
 // ── Metronome controls ─────────────────────────────────────────
 const metronomeToggle = document.getElementById('metronome-toggle') as HTMLInputElement;
 const metronomeVolumeSlider = document.getElementById('metronome-volume') as HTMLInputElement;
@@ -1535,8 +1585,16 @@ window.addEventListener('keydown', (e) => {
     }
     case 'Delete':
     case 'Backspace': {
-      // Delete selected point (only when a single curve is selected with a point)
       const s = store.getState();
+      // Delete selected guide first — guides are mutually exclusive with curve
+      // selection, but check explicitly so a stale ID doesn't fall through.
+      if (s.selectedGuideId) {
+        history.snapshot();
+        store.removeGuide(s.selectedGuideId);
+        bgDirty = true;
+        break;
+      }
+      // Delete selected point (only when a single curve is selected with a point)
       const delCurveId = store.getSelectedCurveId();
       if (delCurveId && s.selectedPointIndex !== null) {
         const track = s.composition.tracks.find(t => t.id === s.selectedTrackId);
@@ -2602,6 +2660,12 @@ function render() {
   // Loop markers (behind the playhead so it stays on top)
   if (playback.isLoopEnabled()) {
     renderLoopMarkers(fgCtx, viewport, comp.loopStartBeats, comp.loopEndBeats, rect.height);
+  }
+
+  // Snap guides — between loop markers and the playhead so the playhead always
+  // wins Z-order. Skipped when guidesVisible is off (matches snap participation).
+  if (state.guidesVisible && comp.guides.length > 0) {
+    renderGuides(fgCtx, viewport, comp.guides, rect.width, rect.height, state.selectedGuideId);
   }
 
   // Playhead vs Rail.
