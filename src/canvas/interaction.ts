@@ -312,10 +312,16 @@ export function createInteraction(
       return;
     }
 
-    // Snap-guide hit-test (Phase 8.7) — runs before tool actions so a click on
-    // a visible guide line selects + drags it regardless of active tool. Only
-    // when guides are visible (hidden guides shouldn't intercept clicks).
-    if (state.guidesVisible && state.composition.guides.length > 0) {
+    // Snap-guide hit-test (Phase 8.7) — only intercepts clicks in Select mode,
+    // and only when guides are visible AND not locked. Other tools fall through
+    // to their normal behavior (e.g. Draw places a point) so guides don't get
+    // in the way of authoring; users switch to Select to manage guides.
+    if (
+      state.activeTool === 'select'
+      && state.guidesVisible
+      && !state.guidesLocked
+      && state.composition.guides.length > 0
+    ) {
       const hitGuideId = hitTestGuides(vp, sx, sy, state.composition.guides);
       if (hitGuideId) {
         history.snapshot();
@@ -323,11 +329,12 @@ export function createInteraction(
         istate.draggingGuideId = hitGuideId;
         return;
       }
-    }
-    // Click missed any guide — clear guide selection so the tool actions below
-    // don't operate against a stale selection.
-    if (state.selectedGuideId) {
-      store.setSelectedGuide(null);
+      // Missed: in Select mode, clear guide selection so the tool actions below
+      // don't operate against a stale selection. (In other tools, leave guide
+      // selection alone — the user might be editing the label via the panel.)
+      if (state.selectedGuideId) {
+        store.setSelectedGuide(null);
+      }
     }
 
     if (state.activeTool === 'draw') {

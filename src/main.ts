@@ -175,6 +175,13 @@ app.innerHTML = `
             </span>
             <span class="toggle-switch-label">Guides</span>
           </label>
+          <label class="toggle-switch" title="Lock guides — when locked, guides can't be selected, dragged, or deleted from the canvas (snap pull still works)">
+            <span class="toggle-switch-track">
+              <input type="checkbox" id="guides-locked-toggle" />
+              <span class="toggle-switch-thumb"></span>
+            </span>
+            <span class="toggle-switch-label">Lock</span>
+          </label>
           <button id="add-guide-x-btn" class="snap-preset-btn" title="Add a vertical (beat) guide at the centre of the viewport">+ X</button>
           <button id="add-guide-y-btn" class="snap-preset-btn" title="Add a horizontal (pitch) guide at the centre of the viewport">+ Y</button>
         </div>
@@ -926,13 +933,20 @@ snapPresetDeleteBtn.addEventListener('click', () => {
 
 // ── Snap guides (BACKLOG 8.7) ──────────────────────────────────
 const guidesVisibleToggle = document.getElementById('guides-visible-toggle') as HTMLInputElement;
+const guidesLockedToggle = document.getElementById('guides-locked-toggle') as HTMLInputElement;
 const addGuideXBtn = document.getElementById('add-guide-x-btn') as HTMLButtonElement;
 const addGuideYBtn = document.getElementById('add-guide-y-btn') as HTMLButtonElement;
 guidesVisibleToggle.checked = store.getState().guidesVisible;
+guidesLockedToggle.checked = store.getState().guidesLocked;
 guidesVisibleToggle.addEventListener('change', () => {
   store.setGuidesVisible(guidesVisibleToggle.checked);
   bgDirty = true;
   guidesVisibleToggle.blur();
+});
+guidesLockedToggle.addEventListener('change', () => {
+  store.setGuidesLocked(guidesLockedToggle.checked);
+  bgDirty = true;
+  guidesLockedToggle.blur();
 });
 
 /** Add a guide at the centre of the current viewport on the requested axis,
@@ -1588,7 +1602,8 @@ window.addEventListener('keydown', (e) => {
       const s = store.getState();
       // Delete selected guide first — guides are mutually exclusive with curve
       // selection, but check explicitly so a stale ID doesn't fall through.
-      if (s.selectedGuideId) {
+      // Locked guides can't be deleted; the user must unlock first.
+      if (s.selectedGuideId && !s.guidesLocked) {
         history.snapshot();
         store.removeGuide(s.selectedGuideId);
         bgDirty = true;
@@ -1831,11 +1846,22 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
   const { wy } = viewport.screenToWorld(0, sy);
   const st = store.getState();
   const scale = st.scaleId ? getScaleById(st.scaleId) ?? null : null;
+  // Pull Y guides into the snap candidates so Perform/Record planchette pitch
+  // honors user-placed pitch guides. X-guides are ignored here — time progression
+  // during perform is BPM-clamped, so X-snap doesn't apply.
+  let guideYTargets: readonly number[] | undefined;
+  if (st.guidesVisible && st.composition.guides.length > 0) {
+    const ys = st.composition.guides
+      .filter(g => g.orientation === 'y')
+      .map(g => g.position);
+    if (ys.length > 0) guideYTargets = ys;
+  }
   const snapConfig = {
     enabled: st.snapEnabled,
     subdivisionsPerBeat: getAdaptiveSubdivisions(viewport.state.zoomX),
     scaleRoot: st.scaleRoot,
     scale,
+    guideYTargets,
   };
   const snapped = snapToGrid(0, wy, snapConfig);
   const nowBeats = playback.getPositionBeats();

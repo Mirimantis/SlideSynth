@@ -28,6 +28,7 @@ const PRISM_CHORD_SPEC_STORAGE_KEY = 'slidesynth.prismChordSpec';
 const PRISM_OCTAVE_RANGE_STORAGE_KEY = 'slidesynth.prismOctaveRange';
 const PRISM_DRAW_MODE_STORAGE_KEY = 'slidesynth.prismDrawMode';
 const GUIDES_VISIBLE_STORAGE_KEY = 'slidesynth.guidesVisible';
+const GUIDES_LOCKED_STORAGE_KEY = 'slidesynth.guidesLocked';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -162,6 +163,7 @@ function createInitialState(): AppState {
     magneticSpringK: snap.magneticSpringK,
     magneticDamping: snap.magneticDamping,
     guidesVisible: loadBoolPref(GUIDES_VISIBLE_STORAGE_KEY, true),
+    guidesLocked: loadBoolPref(GUIDES_LOCKED_STORAGE_KEY, false),
     selectedGuideId: null,
     drawPreviewMode: 'tone',
     bezierAutoSmooth: false,
@@ -489,6 +491,16 @@ class Store {
     if (this.state.guidesVisible === visible) return;
     this.state.guidesVisible = visible;
     saveBoolPref(GUIDES_VISIBLE_STORAGE_KEY, visible);
+    this.notify();
+  }
+
+  setGuidesLocked(locked: boolean): void {
+    if (this.state.guidesLocked === locked) return;
+    this.state.guidesLocked = locked;
+    // Locking clears any active guide selection so the property panel doesn't
+    // continue to advertise an editable label / Delete button on a locked guide.
+    if (locked) this.state.selectedGuideId = null;
+    saveBoolPref(GUIDES_LOCKED_STORAGE_KEY, locked);
     this.notify();
   }
 

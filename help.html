@@ -602,18 +602,28 @@
         (beat) or horizontal (pitch) guide at the centre of the viewport.
       </p>
       <ul>
-        <li>Click on a guide line to <strong>select</strong> it. The Object
-            Properties panel then shows a label field (which renders inline on
-            the guide) plus a Delete button.</li>
+        <li>Switch to the <strong>Select</strong> tool, then click on a guide
+            line to select it. The Object Properties panel then shows a label
+            field (which renders inline on the guide) plus a Delete button.
+            (Other tools like Draw fall through to their normal click action
+            so guides don't get in the way of authoring.)</li>
         <li>Drag a selected guide to <strong>move</strong> it (snaps to grid /
             scale, with other guides as additional targets).</li>
         <li>Press <kbd>Delete</kbd> with a guide selected to remove it.</li>
         <li>The <strong>Guides</strong> toggle hides all guides and disables
             their snap pull at once. Hidden guides aren't deleted; flip the
             toggle back on to bring them back.</li>
-        <li>Guides are saved with the composition. Their visibility, however,
-            is a per-browser preference (so you can hide them temporarily
-            without changing the file).</li>
+        <li>The <strong>Lock</strong> toggle (next to Guides) prevents existing
+            guides from being selected, dragged, or deleted on the canvas.
+            Snap pull still works while locked. Use it to protect a guide
+            layout from accidental edits while you're authoring curves.</li>
+        <li>During Compose Performance / Record, the planchette pitch snaps to
+            Y-guides as additional targets (in addition to the regular grid /
+            scale / magnetic system). X-guides only affect placement-style
+            snapping (Draw / Select), not perform-time progression.</li>
+        <li>Guides are saved with the composition. Their visibility and lock
+            state, however, are per-browser preferences (so you can hide or
+            unlock temporarily without changing the file).</li>
         <li>Harmonic Prism's projection echoes still take exclusive snap
             ownership when active — guides defer so projection mode stays
             predictable.</li>

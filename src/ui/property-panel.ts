@@ -19,9 +19,13 @@ export function renderPropertyPanel(container: HTMLElement): void {
       const positionLabel = guide.orientation === 'x'
         ? `${guide.position.toFixed(3)} beats`
         : `${noteNumberToName(Math.round(guide.position))} (MIDI ${guide.position.toFixed(2)})`;
+      // Locked guides become read-only in the property panel — the input is
+      // disabled and the Delete button hidden. Lock toggle in the Snap section
+      // is the way out.
+      const locked = state.guidesLocked;
       container.innerHTML = `
         <div class="prop-section">
-          <div class="prop-label">Snap Guide</div>
+          <div class="prop-label">Snap Guide${locked ? ' (locked)' : ''}</div>
           <div class="prop-value">${guide.orientation === 'x' ? 'Vertical (beat)' : 'Horizontal (pitch)'}</div>
         </div>
         <div class="prop-section">
@@ -30,32 +34,35 @@ export function renderPropertyPanel(container: HTMLElement): void {
         </div>
         <div class="prop-section">
           <div class="prop-label">Label</div>
-          <input type="text" id="prop-guide-label" value="${escapeAttr(guide.label)}" placeholder="(empty)" style="width: 100%; box-sizing: border-box;" />
+          <input type="text" id="prop-guide-label" value="${escapeAttr(guide.label)}" placeholder="(empty)" style="width: 100%; box-sizing: border-box;" ${locked ? 'disabled' : ''} />
         </div>
+        ${locked ? '' : `
         <div class="prop-section">
           <button id="prop-guide-delete" class="snap-preset-btn" title="Delete this guide">Delete Guide</button>
-        </div>
+        </div>`}
       `;
       const labelInput = container.querySelector('#prop-guide-label') as HTMLInputElement;
-      labelInput.addEventListener('change', () => {
-        history.snapshot();
-        store.updateGuide(guide.id, { label: labelInput.value });
-      });
-      labelInput.addEventListener('keydown', (e) => {
-        // Mirror comp-name pattern: Enter commits + blurs, Escape reverts + blurs.
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          labelInput.blur();
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          labelInput.value = guide.label;
-          labelInput.blur();
-        }
-      });
-      container.querySelector('#prop-guide-delete')?.addEventListener('click', () => {
-        history.snapshot();
-        store.removeGuide(guide.id);
-      });
+      if (!locked) {
+        labelInput.addEventListener('change', () => {
+          history.snapshot();
+          store.updateGuide(guide.id, { label: labelInput.value });
+        });
+        labelInput.addEventListener('keydown', (e) => {
+          // Mirror comp-name pattern: Enter commits + blurs, Escape reverts + blurs.
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            labelInput.blur();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            labelInput.value = guide.label;
+            labelInput.blur();
+          }
+        });
+        container.querySelector('#prop-guide-delete')?.addEventListener('click', () => {
+          history.snapshot();
+          store.removeGuide(guide.id);
+        });
+      }
       return;
     }
   }

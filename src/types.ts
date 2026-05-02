@@ -192,6 +192,10 @@ export interface AppState {
   /** Snap guides (Phase 8.7) — workspace toggle for visibility (and snap participation).
    *  Persisted to localStorage; not in the composition file (it's a viewing pref). */
   guidesVisible: boolean;
+  /** When true, existing guides can't be selected, dragged, or deleted via the
+   *  canvas / Delete key. Buttons in the Snap section still work (so the user can
+   *  unlock and add new guides). Persisted to localStorage. */
+  guidesLocked: boolean;
   /** ID of the currently selected guide (for Object Properties / Delete). Mutually
    *  exclusive with curve/point selection. */
   selectedGuideId: string | null;
