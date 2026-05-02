@@ -13,6 +13,7 @@ import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/
 import { distToPoint, nearestPointOnCubic, nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
 import { hitTestLoopMarkers } from './loop-markers';
+import { hitTestGuides } from './guides';
 
 export const SECONDS_RULER_HEIGHT = 16;
 export const BEAT_RULER_HEIGHT = 24;
@@ -46,6 +47,8 @@ export interface InteractionState {
   scrubbing: boolean;
   /** Which loop marker is being dragged in the ruler, if any. */
   draggingLoopMarker: 'start' | 'end' | null;
+  /** ID of the guide currently being dragged. */
+  draggingGuideId: string | null;
   /** Screen Y of cursor (for ruler zone detection). */
   cursorScreenY: number;
   /** Whether the cursor is currently over the canvas element. */
@@ -71,6 +74,7 @@ export function createInteraction(
     ctrlSwitchedTool: false,
     scrubbing: false,
     draggingLoopMarker: null,
+    draggingGuideId: null,
     cursorScreenY: 0,
     cursorInCanvas: false,
     scissorsPreview: null,
@@ -125,6 +129,22 @@ export function createInteraction(
     if (istate.draggingLoopMarker) {
       const beat = snapBeatForMarker(raw.wx);
       callbacks?.onLoopMarkerDrag?.(istate.draggingLoopMarker, beat, 'move');
+      return;
+    }
+
+    // Guide drag — move the guide along its perpendicular axis with the same
+    // snap behavior the cursor itself uses, but DON'T let the guide snap to
+    // itself (filter own ID out of the snap config).
+    if (istate.draggingGuideId) {
+      const guide = store.getComposition().guides.find(g => g.id === istate.draggingGuideId);
+      if (guide) {
+        const dragSnap = buildSnapConfigExcludingGuide(vp.state.zoomX, raw.wx, guide.id);
+        const snappedNow = dragSnap.enabled ? snapToGrid(raw.wx, raw.wy, dragSnap) : raw;
+        const next = guide.orientation === 'x'
+          ? Math.max(0, snappedNow.wx)
+          : Math.max(MIN_NOTE, Math.min(MAX_NOTE, snappedNow.wy));
+        store.updateGuide(guide.id, { position: next });
+      }
       return;
     }
 
@@ -292,6 +312,31 @@ export function createInteraction(
       return;
     }
 
+    // Snap-guide hit-test (Phase 8.7) — only intercepts clicks in Select mode,
+    // and only when guides are visible AND not locked. Other tools fall through
+    // to their normal behavior (e.g. Draw places a point) so guides don't get
+    // in the way of authoring; users switch to Select to manage guides.
+    if (
+      state.activeTool === 'select'
+      && state.guidesVisible
+      && !state.guidesLocked
+      && state.composition.guides.length > 0
+    ) {
+      const hitGuideId = hitTestGuides(vp, sx, sy, state.composition.guides);
+      if (hitGuideId) {
+        history.snapshot();
+        store.setSelectedGuide(hitGuideId);
+        istate.draggingGuideId = hitGuideId;
+        return;
+      }
+      // Missed: in Select mode, clear guide selection so the tool actions below
+      // don't operate against a stale selection. (In other tools, leave guide
+      // selection alone — the user might be editing the label via the panel.)
+      if (state.selectedGuideId) {
+        store.setSelectedGuide(null);
+      }
+    }
+
     if (state.activeTool === 'draw') {
       handleDrawClick(istate, snappedPt, vp);
     } else if (state.activeTool === 'select') {
@@ -379,6 +424,11 @@ export function createInteraction(
     if (istate.scrubbing) {
       istate.scrubbing = false;
       callbacks?.onPlayheadScrub?.(store.getState().playback.positionBeats, 'end');
+      return;
+    }
+    // End guide drag — snapshot was taken on mousedown, so just release.
+    if (istate.draggingGuideId) {
+      istate.draggingGuideId = null;
       return;
     }
     // Finalize transform drag
@@ -1028,6 +1078,26 @@ function getSelectedTrack(): Track | undefined {
   return state.composition.tracks.find(t => t.id === state.selectedTrackId);
 }
 
+/** Like buildSnapConfig, but filters one guide ID out of the guide targets so
+ *  a dragging guide doesn't snap to itself. */
+export function buildSnapConfigExcludingGuide(zoomX: number, wxForProjection: number, excludeGuideId: string): SnapConfig {
+  const cfg = buildSnapConfig(zoomX, wxForProjection);
+  const state = store.getState();
+  if (!state.guidesVisible) return cfg;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const g of state.composition.guides) {
+    if (g.id === excludeGuideId) continue;
+    if (g.orientation === 'x') xs.push(g.position);
+    else ys.push(g.position);
+  }
+  return {
+    ...cfg,
+    guideXTargets: xs.length > 0 ? xs : undefined,
+    guideYTargets: ys.length > 0 ? ys : undefined,
+  };
+}
+
 export function buildSnapConfig(zoomX?: number, wxForProjection?: number): SnapConfig {
   const state = store.getState();
   const subdivisions = zoomX !== undefined
@@ -1053,11 +1123,27 @@ export function buildSnapConfig(zoomX?: number, wxForProjection?: number): SnapC
     }
   }
 
+  // User-defined snap guides (Phase 8.7) — only participate in snap when visible.
+  let guideXTargets: readonly number[] | undefined;
+  let guideYTargets: readonly number[] | undefined;
+  if (state.guidesVisible && state.composition.guides.length > 0) {
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const g of state.composition.guides) {
+      if (g.orientation === 'x') xs.push(g.position);
+      else ys.push(g.position);
+    }
+    if (xs.length > 0) guideXTargets = xs;
+    if (ys.length > 0) guideYTargets = ys;
+  }
+
   return {
     enabled: state.snapEnabled,
     subdivisionsPerBeat: subdivisions,
     scaleRoot: state.scaleRoot,
     scale: state.scaleId ? getScaleById(state.scaleId) ?? null : null,
     projectionTargets,
+    guideXTargets,
+    guideYTargets,
   };
 }

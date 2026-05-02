@@ -4,6 +4,7 @@ import type { Composition } from '../types';
 import { createCurve, createControlPoint, addPointToCurve } from '../model/curve';
 import { createTrack } from '../model/track';
 import { createDefaultToneLibrary } from '../model/tone';
+import { createDefaultSnapSettings } from '../model/composition';
 import { MIN_NOTE, MAX_NOTE, DEFAULT_BPM, DEFAULT_BEATS_PER_MEASURE } from '../constants';
 
 /** A paired note event with start/end in beats. */
@@ -146,7 +147,7 @@ export function midiToComposition(buffer: ArrayBuffer): Composition {
   // Length is derived dynamically from the points themselves.
 
   return {
-    version: 1,
+    version: 2,
     name: 'Imported MIDI',
     bpm,
     beatsPerMeasure: DEFAULT_BEATS_PER_MEASURE,
@@ -155,6 +156,8 @@ export function midiToComposition(buffer: ArrayBuffer): Composition {
     toneLibrary,
     loopStartBeats: 0,
     loopEndBeats: 2 * DEFAULT_BEATS_PER_MEASURE,
+    snap: createDefaultSnapSettings(),
+    guides: [],
   };
 }
 

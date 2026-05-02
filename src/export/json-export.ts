@@ -1,6 +1,7 @@
 import type { Composition, ToneDefinition } from '../types';
+import { createDefaultSnapSettings } from '../model/composition';
 
-const COMPOSITION_VERSION = 1;
+const COMPOSITION_VERSION = 2;
 
 /**
  * Serialize a composition to JSON string.
@@ -34,8 +35,15 @@ export function deserializeComposition(json: string): Composition {
     }
   }
 
-  // Future migration logic would go here
-  // if (data.version < COMPOSITION_VERSION) { migrate(data); }
+  // v1 → v2: per-composition snap settings + guides. v1 files had no `snap` block;
+  // seed from the documented defaults so legacy saves open with the historical
+  // global defaults rather than whatever the user had set in their session.
+  if (!data.snap || typeof data.snap !== 'object') {
+    data.snap = createDefaultSnapSettings();
+  }
+  if (!Array.isArray(data.guides)) {
+    data.guides = [];
+  }
 
   return data;
 }

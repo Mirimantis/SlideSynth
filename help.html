@@ -560,6 +560,76 @@
       </ul>
     </div>
   </details>
+  <p>
+    All snap-section settings (Snap toggle, Magnetic on/off, the three magnetic
+    sliders, plus the Key &amp; Scale picks) are saved with the composition file
+    and restored on load, so a project's bespoke snap configuration round-trips
+    cleanly.
+  </p>
+
+  <details>
+    <summary>Snap presets</summary>
+    <div class="detail-body">
+      <p>
+        The <strong>Preset</strong> dropdown at the top of the Snap section
+        loads a named bundle of snap settings in one click. Built-in presets
+        cover the common workflows:
+      </p>
+      <ul>
+        <li><strong>Free Draw</strong> — snap off; the cursor follows freely (good for sketching).</li>
+        <li><strong>Chromatic 1/16</strong> — snap on, magnetic off; the classic discrete grid.</li>
+        <li><strong>Magnetic On-Pitch</strong> — tight magnetic pull (strength 0.85, spring 35, damping 4); great for pitch-locked performances.</li>
+        <li><strong>Magnetic + Diatonic</strong> — looser magnetic feel (strength 0.7, spring 22, damping 2.5); pair with a Key/Scale for diatonic snap with vibrato headroom.</li>
+      </ul>
+      <p>
+        Click <strong>Save</strong> to capture the current settings as a
+        named user preset (stored locally in your browser). <strong>Del</strong>
+        removes the active user preset. Presets only override snap/magnetic
+        fields — they leave your Key/Scale pick untouched. Loading a preset is
+        <em>not</em> recorded in undo history (it's a workflow toggle, not a
+        composition edit).
+      </p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Snap guides</summary>
+    <div class="detail-body">
+      <p>
+        Snap guides are user-placed lines that act as additional snap targets,
+        on top of the regular grid / scale. Use the <strong>+ X</strong> and
+        <strong>+ Y</strong> buttons in the Snap section to drop a vertical
+        (beat) or horizontal (pitch) guide at the centre of the viewport.
+      </p>
+      <ul>
+        <li>Switch to the <strong>Select</strong> tool, then click on a guide
+            line to select it. The Object Properties panel then shows a label
+            field (which renders inline on the guide) plus a Delete button.
+            (Other tools like Draw fall through to their normal click action
+            so guides don't get in the way of authoring.)</li>
+        <li>Drag a selected guide to <strong>move</strong> it (snaps to grid /
+            scale, with other guides as additional targets).</li>
+        <li>Press <kbd>Delete</kbd> with a guide selected to remove it.</li>
+        <li>The <strong>Guides</strong> toggle hides all guides and disables
+            their snap pull at once. Hidden guides aren't deleted; flip the
+            toggle back on to bring them back.</li>
+        <li>The <strong>Lock</strong> toggle (next to Guides) prevents existing
+            guides from being selected, dragged, or deleted on the canvas.
+            Snap pull still works while locked. Use it to protect a guide
+            layout from accidental edits while you're authoring curves.</li>
+        <li>During Compose Performance / Record, the planchette pitch snaps to
+            Y-guides as additional targets (in addition to the regular grid /
+            scale / magnetic system). X-guides only affect placement-style
+            snapping (Draw / Select), not perform-time progression.</li>
+        <li>Guides are saved with the composition. Their visibility and lock
+            state, however, are per-browser preferences (so you can hide or
+            unlock temporarily without changing the file).</li>
+        <li>Harmonic Prism's projection echoes still take exclusive snap
+            ownership when active — guides defer so projection mode stays
+            predictable.</li>
+      </ul>
+    </div>
+  </details>
 
   <!-- Key & Scale -->
   <h2 id="scales">Key & Scale</h2>

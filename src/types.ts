@@ -61,6 +61,37 @@ export interface Track {
   volume: number;           // 0–1
 }
 
+// ── Snap settings ──────────────────────────────────────────────
+
+/**
+ * Per-composition snap configuration. Persisted in the composition file so a
+ * project's bespoke snap setup round-trips cleanly. AppState mirrors these
+ * fields for fast UI reads; the composition owns the canonical values.
+ */
+export interface SnapSettings {
+  enabled: boolean;
+  scaleRoot: number | null;     // 0..11, or null = no scale
+  scaleId: string | null;       // ScaleDefinition.id, or null
+  magneticEnabled: boolean;
+  magneticStrength: number;     // 0..1
+  magneticSpringK: number;      // 1..50
+  magneticDamping: number;      // 0.25..15
+}
+
+// ── Snap guides (Phase 8.7) ────────────────────────────────────
+
+/**
+ * User-placed snap guide. X-oriented guides snap the cursor X to a beat;
+ * Y-oriented guides snap the cursor Y to a pitch. Additive to other snap
+ * targets — they don't replace subdivisions/scale/echoes.
+ */
+export interface GuideDefinition {
+  id: string;
+  orientation: 'x' | 'y';
+  position: number;             // beats for 'x', float MIDI note for 'y'
+  label: string;                // user-editable, may be empty
+}
+
 // ── Composition ─────────────────────────────────────────────────
 
 export interface Composition {
@@ -73,6 +104,8 @@ export interface Composition {
   toneLibrary: ToneDefinition[];
   loopStartBeats: number;
   loopEndBeats: number;
+  snap: SnapSettings;                // v2: per-composition snap config (was global)
+  guides: GuideDefinition[];         // v2: user-placed snap guides (Phase 8.7)
 }
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -147,19 +180,31 @@ export interface AppState {
   performance: PerformanceState;
   viewport: ViewportState;
   playback: PlaybackInfo;
+  // Snap-section UI mirrors — canonical values live on Composition.snap (v2+).
+  // Setters write through to both the AppState mirror and the composition.
   snapEnabled: boolean;
   scaleRoot: number | null;    // 0-11, or null = no scale
   scaleId: string | null;      // ScaleDefinition.id, or null
+  magneticEnabled: boolean;
+  magneticStrength: number;
+  magneticSpringK: number;
+  magneticDamping: number;
+  /** Snap guides (Phase 8.7) — workspace toggle for visibility (and snap participation).
+   *  Persisted to localStorage; not in the composition file (it's a viewing pref). */
+  guidesVisible: boolean;
+  /** When true, existing guides can't be selected, dragged, or deleted via the
+   *  canvas / Delete key. Buttons in the Snap section still work (so the user can
+   *  unlock and add new guides). Persisted to localStorage. */
+  guidesLocked: boolean;
+  /** ID of the currently selected guide (for Object Properties / Delete). Mutually
+   *  exclusive with curve/point selection. */
+  selectedGuideId: string | null;
   drawPreviewMode: 'tone' | 'composition';   // Draw-tool spacebar preview scope
   bezierAutoSmooth: boolean;                  // Draw-tool: click-placed points get horizontal handles
   scrollCanvasEnabled: boolean;               // Compose Playback view preference (localStorage-backed)
   pitchHudVisible: boolean;                   // Pitch HUD user preference (localStorage-backed)
   metronomeEnabled: boolean;                  // Metronome user preference (localStorage-backed)
   metronomeVolume: number;                    // 0..1 — metronome master gain (localStorage-backed)
-  magneticEnabled: boolean;                   // Magnetic Snap physics on/off (localStorage-backed)
-  magneticStrength: number;                   // 0..1 — snap attractor strength for Magnetic mode (localStorage-backed)
-  magneticSpringK: number;                    // 0..50 — cursor-to-pitch spring stiffness for Magnetic mode (localStorage-backed)
-  magneticDamping: number;                    // 0..20 — velocity damping for Magnetic mode (low = long wobbles, high = quick settle) (localStorage-backed)
   autoSmoothXRatio: number;                   // 0..1 — fraction of neighbor segment length used for Draw auto-smooth + Smooth Curve action (localStorage-backed)
   harmonicPrism: HarmonicPrismState;          // Harmonic Prism feature (chordSpec + octaveRange localStorage-backed)
 }

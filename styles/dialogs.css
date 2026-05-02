@@ -202,6 +202,43 @@
   background: var(--accent-hover);
 }
 
+/* Inline error text for the preset save dialog. */
+.ps-warning {
+  color: #ff8a80;
+  font-size: 0.75rem;
+  margin: 4px 0 0 68px;
+}
+
+/* ── Snap preset row (Snap section) ────────────────────────── */
+.snap-preset-row select {
+  flex: 1;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  min-width: 0;
+}
+.snap-preset-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid #335;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.snap-preset-btn:hover:not(:disabled) {
+  background: #1a4a80;
+}
+.snap-preset-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ── Property Panel ──────────────────────────────────────────── */
 
 .prop-section {

@@ -6,6 +6,7 @@ import { renderTransformBox } from './canvas/transform-box-renderer';
 import { renderProjection, renderProjectionSourceHighlight, renderPrismDrawPreview } from './canvas/projection-renderer';
 import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
+import { renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, getAdaptiveSubdivisions } from './utils/snap';
 import { createInteraction, rebuildTransformBox, RULER_HEIGHT, buildSnapConfig } from './canvas/interaction';
@@ -24,6 +25,8 @@ import { renderPropertyPanel } from './ui/property-panel';
 import { renderToolPropertyPanel } from './ui/tool-property-panel';
 import { openToneBuilder } from './ui/tone-builder';
 import { openTonePicker } from './ui/tone-picker';
+import { openPresetSaveDialog } from './ui/preset-save-dialog';
+import { BUILTIN_SNAP_PRESETS, loadUserSnapPresets, saveUserSnapPresets, presetMatches, snapshotPreset, type SnapPreset } from './utils/snap-presets';
 import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile } from './export/json-export';
 import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
@@ -128,6 +131,12 @@ app.innerHTML = `
       <div id="tool-panel"></div>
       <div class="panel-header">Snap</div>
       <div id="snap-section">
+        <div class="transport-row snap-preset-row">
+          <label for="snap-preset-select">Preset</label>
+          <select id="snap-preset-select" title="Snap preset — load a saved combo of snap + magnetic settings"></select>
+          <button id="snap-preset-save" class="snap-preset-btn" title="Save current snap settings as a new preset">Save</button>
+          <button id="snap-preset-delete" class="snap-preset-btn" title="Delete the active user preset" disabled>Del</button>
+        </div>
         <div class="transport-row">
           <label class="toggle-switch" title="Toggle snap (S)">
             <span class="toggle-switch-track">
@@ -157,6 +166,24 @@ app.innerHTML = `
           <label for="input-magnetic-damping">Damping</label>
           <input type="range" id="input-magnetic-damping" class="magnetic-damping-slider" min="0.25" max="15" value="3" step="0.25" title="Velocity damping (low = long tremolo wobbles, high = quick settle)" />
           <span class="magnetic-damping-value">3</span>
+        </div>
+        <div class="transport-row guides-row">
+          <label class="toggle-switch" title="Show snap guides — when off, guides are hidden and don't snap">
+            <span class="toggle-switch-track">
+              <input type="checkbox" id="guides-visible-toggle" checked />
+              <span class="toggle-switch-thumb"></span>
+            </span>
+            <span class="toggle-switch-label">Guides</span>
+          </label>
+          <label class="toggle-switch" title="Lock guides — when locked, guides can't be selected, dragged, or deleted from the canvas (snap pull still works)">
+            <span class="toggle-switch-track">
+              <input type="checkbox" id="guides-locked-toggle" />
+              <span class="toggle-switch-thumb"></span>
+            </span>
+            <span class="toggle-switch-label">Lock</span>
+          </label>
+          <button id="add-guide-x-btn" class="snap-preset-btn" title="Add a vertical (beat) guide at the centre of the viewport">+ X</button>
+          <button id="add-guide-y-btn" class="snap-preset-btn" title="Add a horizontal (pitch) guide at the centre of the viewport">+ Y</button>
         </div>
       </div>
       <div class="panel-header" title="Harmonic Prism — press H on a selected curve to project harmonic echoes">Harmonic Prism</div>
@@ -725,6 +752,7 @@ const snapToggleInput = document.getElementById('snap-toggle') as HTMLInputEleme
 snapToggleInput.checked = store.getState().snapEnabled;
 snapToggleInput.addEventListener('change', () => {
   store.setSnap(snapToggleInput.checked);
+  syncSnapPresetUi();
   snapToggleInput.blur();
 });
 
@@ -736,8 +764,16 @@ const magneticSpringSlider = document.getElementById('input-magnetic-spring') as
 const magneticSpringValue = document.querySelector('.magnetic-spring-value') as HTMLSpanElement;
 const magneticDampingSlider = document.getElementById('input-magnetic-damping') as HTMLInputElement;
 const magneticDampingValue = document.querySelector('.magnetic-damping-value') as HTMLSpanElement;
-{
+
+function formatDamping(d: number): string {
+  return Number.isInteger(d) ? String(d) : d.toFixed(1);
+}
+
+/** Push the current snap-section AppState values back into the DOM controls.
+ *  Called on initial load and after a preset is applied. */
+function syncSnapSectionDom(): void {
   const st = store.getState();
+  snapToggleInput.checked = st.snapEnabled;
   magneticToggle.checked = st.magneticEnabled;
   magneticStrengthSlider.value = String(st.magneticStrength);
   magneticStrengthValue.textContent = st.magneticStrength.toFixed(2);
@@ -746,29 +782,215 @@ const magneticDampingValue = document.querySelector('.magnetic-damping-value') a
   magneticDampingSlider.value = String(st.magneticDamping);
   magneticDampingValue.textContent = formatDamping(st.magneticDamping);
 }
+syncSnapSectionDom();
 
-function formatDamping(d: number): string {
-  return Number.isInteger(d) ? String(d) : d.toFixed(1);
-}
 magneticToggle.addEventListener('change', () => {
   store.setMagneticEnabled(magneticToggle.checked);
+  syncSnapPresetUi();
   magneticToggle.blur();
 });
 magneticStrengthSlider.addEventListener('input', () => {
   const s = Number(magneticStrengthSlider.value);
   store.setMagneticStrength(s);
   magneticStrengthValue.textContent = s.toFixed(2);
+  syncSnapPresetUi();
 });
 magneticSpringSlider.addEventListener('input', () => {
   const k = Number(magneticSpringSlider.value);
   store.setMagneticSpringK(k);
   magneticSpringValue.textContent = String(Math.round(k));
+  syncSnapPresetUi();
 });
 magneticDampingSlider.addEventListener('input', () => {
   const d = Number(magneticDampingSlider.value);
   store.setMagneticDamping(d);
   magneticDampingValue.textContent = formatDamping(d);
+  syncSnapPresetUi();
 });
+
+// ── Snap presets (BACKLOG 8.6) ─────────────────────────────────
+const snapPresetSelect = document.getElementById('snap-preset-select') as HTMLSelectElement;
+const snapPresetSaveBtn = document.getElementById('snap-preset-save') as HTMLButtonElement;
+const snapPresetDeleteBtn = document.getElementById('snap-preset-delete') as HTMLButtonElement;
+
+const CUSTOM_PRESET_VALUE = '__custom__';
+let userSnapPresets: SnapPreset[] = loadUserSnapPresets();
+/** The preset the user explicitly picked (via dropdown change or Save). Cleared
+ *  when settings drift away from it. Lets the dropdown stick on the user's
+ *  intended preset even when a built-in also matches. */
+let activeSnapPresetId: string | null = null;
+
+function getAllPresets(): SnapPreset[] {
+  return [...BUILTIN_SNAP_PRESETS, ...userSnapPresets];
+}
+
+/** Repopulate the dropdown, then sync its selected value to the active preset
+ *  (if it still matches), else the first matching preset, else "Custom". Also
+ *  drives the Delete button enabled state. */
+function syncSnapPresetUi(): void {
+  const liveSnap = store.getComposition().snap;
+
+  // Repopulate (cheap; only ~4 builtins + a handful of user presets).
+  snapPresetSelect.innerHTML = '';
+  const customOpt = document.createElement('option');
+  customOpt.value = CUSTOM_PRESET_VALUE;
+  customOpt.textContent = 'Custom';
+  customOpt.disabled = true;
+  customOpt.hidden = true;   // only shown when actually selected (no preset matches)
+  snapPresetSelect.appendChild(customOpt);
+
+  const builtinGroup = document.createElement('optgroup');
+  builtinGroup.label = 'Built-in';
+  for (const p of BUILTIN_SNAP_PRESETS) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    builtinGroup.appendChild(opt);
+  }
+  snapPresetSelect.appendChild(builtinGroup);
+
+  if (userSnapPresets.length > 0) {
+    const userGroup = document.createElement('optgroup');
+    userGroup.label = 'User';
+    for (const p of userSnapPresets) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      userGroup.appendChild(opt);
+    }
+    snapPresetSelect.appendChild(userGroup);
+  }
+
+  // Resolve which preset to show as selected:
+  //   1. If the active preset still matches → keep it.
+  //   2. Else clear active and fall back to first matching preset.
+  //   3. Else show "Custom".
+  let active: SnapPreset | null = activeSnapPresetId
+    ? getAllPresets().find(p => p.id === activeSnapPresetId) ?? null
+    : null;
+  if (active && !presetMatches(active, liveSnap)) {
+    active = null;
+    activeSnapPresetId = null;
+  }
+  const match = active ?? getAllPresets().find(p => presetMatches(p, liveSnap)) ?? null;
+  if (match) {
+    snapPresetSelect.value = match.id;
+    customOpt.hidden = true;
+  } else {
+    customOpt.hidden = false;
+    snapPresetSelect.value = CUSTOM_PRESET_VALUE;
+  }
+
+  // Delete is only valid for an active USER preset.
+  snapPresetDeleteBtn.disabled = !match || !userSnapPresets.some(u => u.id === match.id);
+}
+syncSnapPresetUi();
+
+snapPresetSelect.addEventListener('change', () => {
+  const id = snapPresetSelect.value;
+  if (id === CUSTOM_PRESET_VALUE) return;
+  const preset = getAllPresets().find(p => p.id === id);
+  if (!preset) return;
+  // Apply each defined field via the corresponding setter (write-through to comp.snap).
+  // Note: no history.snapshot() — preset loading mirrors the magnetic-slider precedent.
+  const s = preset.settings;
+  if (s.enabled !== undefined) store.setSnap(s.enabled);
+  if (s.magneticEnabled !== undefined) store.setMagneticEnabled(s.magneticEnabled);
+  if (s.magneticStrength !== undefined) store.setMagneticStrength(s.magneticStrength);
+  if (s.magneticSpringK !== undefined) store.setMagneticSpringK(s.magneticSpringK);
+  if (s.magneticDamping !== undefined) store.setMagneticDamping(s.magneticDamping);
+  activeSnapPresetId = preset.id;
+  syncSnapSectionDom();
+  syncSnapPresetUi();
+  snapPresetSelect.blur();
+});
+
+snapPresetSaveBtn.addEventListener('click', async () => {
+  const existingNames = getAllPresets().map(p => p.name);
+  const name = await openPresetSaveDialog({
+    title: 'Save Snap Preset',
+    existingNames,
+  });
+  if (!name) return;
+  const preset = snapshotPreset(name, store.getComposition().snap);
+  userSnapPresets = [...userSnapPresets, preset];
+  saveUserSnapPresets(userSnapPresets);
+  activeSnapPresetId = preset.id;   // make the new preset the active one
+  syncSnapPresetUi();
+  showToast(`Saved snap preset "${name}".`);
+});
+
+snapPresetDeleteBtn.addEventListener('click', () => {
+  const id = snapPresetSelect.value;
+  const target = userSnapPresets.find(p => p.id === id);
+  if (!target) return;
+  if (!confirm(`Delete user preset "${target.name}"?`)) return;
+  userSnapPresets = userSnapPresets.filter(p => p.id !== id);
+  saveUserSnapPresets(userSnapPresets);
+  if (activeSnapPresetId === id) activeSnapPresetId = null;
+  syncSnapPresetUi();
+});
+
+// ── Snap guides (BACKLOG 8.7) ──────────────────────────────────
+const guidesVisibleToggle = document.getElementById('guides-visible-toggle') as HTMLInputElement;
+const guidesLockedToggle = document.getElementById('guides-locked-toggle') as HTMLInputElement;
+const addGuideXBtn = document.getElementById('add-guide-x-btn') as HTMLButtonElement;
+const addGuideYBtn = document.getElementById('add-guide-y-btn') as HTMLButtonElement;
+guidesVisibleToggle.checked = store.getState().guidesVisible;
+guidesLockedToggle.checked = store.getState().guidesLocked;
+
+/** Disable the + X / + Y buttons when guides are locked so the user can't add a
+ *  new guide and leave it stuck-selected (the lock prevents deselect-on-canvas). */
+function syncGuideAddButtonsEnabled(): void {
+  const locked = store.getState().guidesLocked;
+  addGuideXBtn.disabled = locked;
+  addGuideYBtn.disabled = locked;
+  const tip = locked
+    ? 'Unlock guides to add a new one'
+    : null;
+  addGuideXBtn.title = tip ?? 'Add a vertical (beat) guide at the centre of the viewport';
+  addGuideYBtn.title = tip ?? 'Add a horizontal (pitch) guide at the centre of the viewport';
+}
+syncGuideAddButtonsEnabled();
+
+guidesVisibleToggle.addEventListener('change', () => {
+  store.setGuidesVisible(guidesVisibleToggle.checked);
+  bgDirty = true;
+  guidesVisibleToggle.blur();
+});
+guidesLockedToggle.addEventListener('change', () => {
+  store.setGuidesLocked(guidesLockedToggle.checked);
+  syncGuideAddButtonsEnabled();
+  bgDirty = true;
+  guidesLockedToggle.blur();
+});
+
+/** Add a guide at the centre of the current viewport on the requested axis,
+ *  then auto-select it so the user can immediately drag or rename it. */
+function addGuideAtViewportCenter(orientation: 'x' | 'y'): void {
+  const r = canvasContainer.getBoundingClientRect();
+  const centre = viewport.screenToWorld(r.width / 2, r.height / 2);
+  const position = orientation === 'x'
+    ? Math.max(0, Math.round(centre.wx * 4) / 4)   // round to nearest 1/4 beat for tidiness
+    : Math.round(centre.wy);                        // nearest semitone
+  const guide = {
+    id: `guide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    orientation,
+    position,
+    label: '',
+  };
+  history.snapshot();
+  store.addGuide(guide);
+  store.setSelectedGuide(guide.id);
+  // Force the viewport to re-show the guides if they were hidden.
+  if (!store.getState().guidesVisible) {
+    store.setGuidesVisible(true);
+    guidesVisibleToggle.checked = true;
+  }
+  bgDirty = true;
+}
+addGuideXBtn.addEventListener('click', () => { addGuideAtViewportCenter('x'); addGuideXBtn.blur(); });
+addGuideYBtn.addEventListener('click', () => { addGuideAtViewportCenter('y'); addGuideYBtn.blur(); });
 
 // ── Metronome controls ─────────────────────────────────────────
 const metronomeToggle = document.getElementById('metronome-toggle') as HTMLInputElement;
@@ -1393,8 +1615,17 @@ window.addEventListener('keydown', (e) => {
     }
     case 'Delete':
     case 'Backspace': {
-      // Delete selected point (only when a single curve is selected with a point)
       const s = store.getState();
+      // Delete selected guide first — guides are mutually exclusive with curve
+      // selection, but check explicitly so a stale ID doesn't fall through.
+      // Locked guides can't be deleted; the user must unlock first.
+      if (s.selectedGuideId && !s.guidesLocked) {
+        history.snapshot();
+        store.removeGuide(s.selectedGuideId);
+        bgDirty = true;
+        break;
+      }
+      // Delete selected point (only when a single curve is selected with a point)
       const delCurveId = store.getSelectedCurveId();
       if (delCurveId && s.selectedPointIndex !== null) {
         const track = s.composition.tracks.find(t => t.id === s.selectedTrackId);
@@ -1631,11 +1862,22 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
   const { wy } = viewport.screenToWorld(0, sy);
   const st = store.getState();
   const scale = st.scaleId ? getScaleById(st.scaleId) ?? null : null;
+  // Pull Y guides into the snap candidates so Perform/Record planchette pitch
+  // honors user-placed pitch guides. X-guides are ignored here — time progression
+  // during perform is BPM-clamped, so X-snap doesn't apply.
+  let guideYTargets: readonly number[] | undefined;
+  if (st.guidesVisible && st.composition.guides.length > 0) {
+    const ys = st.composition.guides
+      .filter(g => g.orientation === 'y')
+      .map(g => g.position);
+    if (ys.length > 0) guideYTargets = ys;
+  }
   const snapConfig = {
     enabled: st.snapEnabled,
     subdivisionsPerBeat: getAdaptiveSubdivisions(viewport.state.zoomX),
     scaleRoot: st.scaleRoot,
     scale,
+    guideYTargets,
   };
   const snapped = snapToGrid(0, wy, snapConfig);
   const nowBeats = playback.getPositionBeats();
@@ -2460,6 +2702,12 @@ function render() {
   // Loop markers (behind the playhead so it stays on top)
   if (playback.isLoopEnabled()) {
     renderLoopMarkers(fgCtx, viewport, comp.loopStartBeats, comp.loopEndBeats, rect.height);
+  }
+
+  // Snap guides — between loop markers and the playhead so the playhead always
+  // wins Z-order. Skipped when guidesVisible is off (matches snap participation).
+  if (state.guidesVisible && comp.guides.length > 0) {
+    renderGuides(fgCtx, viewport, comp.guides, rect.width, rect.height, state.selectedGuideId);
   }
 
   // Playhead vs Rail.
