@@ -104,11 +104,17 @@ Dynamic chords at selectable harmonic frequencies. Three sub-phases shipped.
 Items that came up while building Phase 6 but are independent features. Each becomes its own planning pass when picked up.
 
 ### Bug fixes / small UX
-- [ ] **8.1 Hotkeys fire while editing the composition name** *(S, bug)*
+- [x] **8.1 Hotkeys fire while editing the composition name** *(S, PR #41)*
   When `#comp-name` is focused, suppress global hotkeys (D / V / X / C / S / H / Space / etc.). Enter should commit the edit and blur the input. Verify the existing `e.target instanceof HTMLInputElement` guard in [src/main.ts](src/main.ts) — bug may be specifically Enter behaviour or some hotkey path that bypasses the check.
 
 - [ ] **8.2 Move curve to a different track** *(M, feature)*
   Track-picker dropdown in Object Properties (when a single curve is selected) listing existing tracks plus "+ New track". Single `store.mutate()` with one history snapshot. Edge case: clear `groupId` on move so the moved curve doesn't accidentally couple with siblings on the new track.
+
+- [ ] **8.18 Live recording trail visualization** *(S–M, feature)*
+  A newly recorded curve currently doesn't appear until the user finishes recording — there's no visible feedback that anything is being captured. Add some kind of live trail behind the planchette during record. If rendering the raw pre-smoothed sample points is impractical, fall back to a temporary breadcrumb / fading trace that gets replaced by the simplified curve once it's committed on release. Render in the foreground layer alongside the planchette so it scrolls with the canvas in Scroll Canvas mode.
+
+- [ ] **8.20 Record AFK timer should respect loop / future content** *(S, bug)*
+  The perform-engine AFK timeout (`afkTimeoutMs` in [src/canvas/performance-engine.ts](src/canvas/performance-engine.ts)) currently fires whenever record is armed and there's no input activity, even when the session has a meaningful reason to keep waiting. Suppress the auto-stop when (a) Loop is enabled (the user is intentionally recording over loops), or (b) the playhead hasn't yet reached the rightmost control point in the composition (there's still future content to record over). Update `tickComposePerform`'s `onAfkTimeout` gate or thread the new conditions through `TickArgs`.
 
 ### Selection & editing
 - [ ] **8.3 Multi-select points: shift-click + drag-marquee** *(M, feature)*
@@ -119,29 +125,35 @@ Items that came up while building Phase 6 but are independent features. Each bec
   Volume currently lives as a per-control-point property; complex curves make volume editing unwieldy. Concept: a separate panel below the main canvas, sharing the X zoom and ruler, hosting secondary animatable curves per track or per source curve. First inhabitant is volume; future inhabitants could include per-tone-layer mixes, filter cutoff, etc. Needs a dedicated design session covering interaction, data model, and rendering.
 
 ### Snap
-- [ ] **8.5 Persist snap settings to the composition file** *(S, feature)*
+- [x] **8.5 Persist snap settings to the composition file** *(S, PR #42)*
   Currently snap config is global / localStorage; should be per-composition so projects with bespoke snap setups round-trip cleanly. Add to `Composition` schema with a version bump.
 
-- [ ] **8.6 Snap presets** *(S, feature)*
+- [x] **8.6 Snap presets** *(S, PR #42)*
   Built-in presets covering common combos of (subdivisions, magnetic strength, spring, damping). User can save current config as a named preset and load presets from a dropdown. Stored in localStorage (user presets) and in code (built-ins).
 
-- [ ] **8.7 User-definable snap guides** *(M, feature)*
-  New first-class entity — X-oriented and Y-oriented guides placed like loop markers (drag on the appropriate ruler). Guides are *additive* to other snap targets (don't replace them like projection echoes do). Selected guide gets a label field in Object Properties; label renders along the guide. A "Guides" toggle controls visibility for all guides. Persisted in the composition file.
+- [x] **8.7 User-definable snap guides** *(M, PR #42)*
+  New first-class entity — X-oriented and Y-oriented guides placed like loop markers (drag on the appropriate ruler). Guides are *additive* to other snap targets (don't replace them like projection echoes do). Selected guide gets a label field in Object Properties; label renders along the guide. A "Guides" toggle controls visibility for all guides. Persisted in the composition file. Also shipped: a Lock toggle that gates selection / drag / delete (PR #42 review feedback).
+
+- [ ] **8.19 Rename Key "None" to "Chromatic" + new "None" mode (no pitch lines)** *(S, feature + UX)*
+  Today the Key dropdown's default "None" actually means "all semitones shown" (chromatic display). Rename it to **Chromatic** so the label matches the behavior, and add a *new* **None** option that hides every pitch line on the staff. Useful for users who've set up custom pitch guides (8.7) and want a clean canvas without the default snap lines. Touch [src/ui/toolbar.ts](src/ui/toolbar.ts) for the dropdown wording, [src/canvas/staff-renderer.ts](src/canvas/staff-renderer.ts) for the no-lines render branch, and the snap path in [src/utils/snap.ts](src/utils/snap.ts) so Y-snap also disengages in true-None mode (cursor becomes free Y; guides still pull if placed).
 
 ### Tone generator
 - [ ] **8.8 FM synthesis with waveform visualizer** *(XL, own planning session)*
   Major upgrade beyond the current additive layer model: frequency modulation, waveform visualizer, multiple waveform options, noise options, keyframe-animatable mixes (with keyframes tied to curve or track — TBD). Needs its own design pass covering synth architecture, the keyframe model (overlaps with 8.4), and the UI for editing FM operator graphs.
 
 ### Viewport navigation
-- [ ] **8.9 Home key takes the view to the playhead** *(S, feature)*
+- [x] **8.9 Home key takes the view to the playhead** *(S, PR #41)*
   Centers the viewport on the current playhead beat (or rail beat in Scroll Canvas mode) regardless of where the user has panned. Useful when scrolled far away from the active position.
 
-- [ ] **8.10 PageUp on an empty canvas returns to X=0** *(XS, bug/polish)*
+- [x] **8.10 PageUp on an empty canvas returns to X=0** *(XS, PR #41)*
   When no control points exist, `PageUp` (currently "scroll to first control point") has nothing to target — fall back to scrolling the viewport back to beat 0 so the user has a reliable home position on a fresh canvas.
 
 ### MIDI
-- [ ] **8.11 MIDI input recording (no snap)** *(M, feature)*
+- [x] **8.11 MIDI input recording (no snap)** *(M, PR #43)*
   Phase 4.1 added live MIDI input as a perform source; extend it to record incoming MIDI directly to curves the same way LMB-held perform records. Don't snap the captured pitch — MIDI input is already discrete. May need per-track "MIDI input" arming separate from the LMB record-arm flow, plus clear visual feedback during MIDI recording.
+
+- [ ] **8.21 MIDI sustained note doesn't continue past loop wrap** *(S, bug)*
+  When a MIDI note is held across a loop wrap during recording, the wrap finalizes the note's curve (correct — `finalizeAllInFlightMidiVoices` in `tickComposePerform`'s `onLoopWrap` callback in [src/main.ts](src/main.ts)) but the synth and recording don't restart on the other side, so the held note goes silent and stops capturing. Should: keep the synth voice alive across the wrap, and start a fresh recording for that voice from the loop start beat so the held note becomes two contiguous curves (one ending at loop-out, one starting at loop-in). Match LMB-held perform behavior on loop wrap.
 
 ### Harmonic Prism nice-to-haves
 - [ ] **8.12 Chord-spec hotkeys / number-key favorites** *(M, feature)*
