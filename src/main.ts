@@ -711,6 +711,8 @@ midiInput.onNoteOn((note, velocity) => {
   const tone = state.composition.toneLibrary.find(t => t.id === track.toneId);
   if (!tone) return;
   ensureResumed();
+  // MIDI key press counts as activity for the perform-engine AFK gate, mirroring onLmbDown.
+  composeEngine.markActivity(performance.now());
   // Per-note voice ID lets simultaneously-held notes sound in parallel.
   preview.startDrawPreview(tone, note, `midi-${note}`);
   // velocity reserved for a future loudness-mapped preview; stable mid-volume for now.
@@ -737,6 +739,8 @@ midiInput.onNoteOn((note, velocity) => {
 });
 
 midiInput.onNoteOff((note) => {
+  // MIDI key release counts as activity for the perform-engine AFK gate.
+  composeEngine.markActivity(performance.now());
   preview.stopDrawPreview(`midi-${note}`);
   // If this voice was recording, finalize the curve into the MIDI-armed track.
   // Safe to call unconditionally — finalizeMidiVoice no-ops if no planchette.
@@ -1891,7 +1895,7 @@ fgCanvas.addEventListener('wheel', (e) => {
 const COMPOSE_COUNTDOWN_SECONDS = 3;
 const composeEngine = createPerformanceEngine({
   countdownSeconds: COMPOSE_COUNTDOWN_SECONDS,
-  afkTimeoutMs: 20_000,
+  afkTimeoutMs: 120_000,
   recordingBufferMax: 3600,
   loopWrapThresholdBeats: 0.5,
 });
@@ -2315,6 +2319,20 @@ function tickComposePerform() {
   // Treat MIDI-armed as record-armed for engine purposes (countdown, AFK gate)
   // so the player gets the same affordances when arming via MIDI alone.
   const anyArmed = g.recordArmed || st.midiArmedTrackId !== null;
+  const playbackBeat = playback.getPositionBeats();
+
+  // Keep the AFK timer fresh while there's a meaningful reason to keep waiting:
+  // (a) Loop is on (intentional record-over-loops), or (b) the playhead hasn't
+  // crossed the rightmost control point yet (still future content to record over).
+  // Refresh per tick so the user gets a full afkTimeoutMs window after the
+  // suppressing condition lifts, instead of an immediate auto-stop.
+  if (anyArmed && g.phase === 'playing' && playback.isPlaying()) {
+    const rightmost = getCompositionLength(st.composition);
+    if (playback.isLoopEnabled() || playbackBeat < rightmost) {
+      composeEngine.markActivity(performance.now());
+    }
+  }
+
   composeEngine.tick({
     now: performance.now(),
     audioNow: getAudioContext().currentTime,
@@ -2322,7 +2340,7 @@ function tickComposePerform() {
     phase: g.phase,
     recordArmed: anyArmed,
     countdownStartedAt: g.countdownStartedAt,
-    playbackBeat: playback.getPositionBeats(),
+    playbackBeat,
     onCountdownElapsed: startComposePerformPlayback,
     onLoopWrap: () => {
       if (g.recordArmed && composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
@@ -2906,11 +2924,16 @@ function render() {
 function syncCompositionDerived() {
   const comp = store.getComposition();
   const length = getCompositionLength(comp);
+  // Pan buffer past the last point: at least SCROLL_BUFFER beats, but bumped to
+  // 2 minutes' worth at the current BPM so the user can always scroll well past
+  // the end to add new content. clampOffset adds a width-aware floor on top.
+  const timeBuffer = Math.max(SCROLL_BUFFER, 2 * comp.bpm);
   const extent = Math.min(
     MAX_CANVAS_EXTENT,
-    Math.max(MIN_CANVAS_EXTENT, length) + SCROLL_BUFFER,
+    Math.max(MIN_CANVAS_EXTENT, length) + timeBuffer,
   );
   viewport.canvasExtent = extent;
+  viewport.compLengthBeats = length;
   lengthDisplay.textContent = formatLengthMMSS(length, comp.bpm);
 }
 

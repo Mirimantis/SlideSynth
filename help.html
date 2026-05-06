@@ -298,7 +298,7 @@
     <li><strong>R</strong> or the red <strong>Record</strong> button arms recording. From Idle it runs a 3-second countdown then starts Playback. If Playback is already running, it arms immediately with no countdown. Recording forces the Scroll switch to <strong>Canvas</strong>.</li>
     <li>While recording, each LMB press/release captures a curve onto the selected track. The curve is simplified and auto-smoothed on release, so the result is fully editable afterward.</li>
     <li><strong>Escape</strong> during the countdown or recording stops and returns to Idle.</li>
-    <li>Recording continues past the composition end so you can extend phrases or capture silence; an AFK timeout stops it after a minute of inactivity.</li>
+    <li>Recording continues past the composition end so you can extend phrases or capture silence; an AFK timeout stops it after about 2 minutes of inactivity. The timeout is suppressed while <strong>Loop</strong> is on, while the playhead hasn't yet reached the rightmost control point (there's still existing content to record over), and while MIDI keys are being played.</li>
     <li>Looping back (loop-wrap) during recording commits the current gesture as a curve and flashes the planchette — the next pass starts a fresh curve.</li>
   </ul>
 

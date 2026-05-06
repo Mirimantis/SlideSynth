@@ -11,6 +11,9 @@ export interface Viewport {
   state: ViewportState;
   /** Rightmost beat the viewport may pan to — derived from composition length + buffer. */
   canvasExtent: number;
+  /** Composition length in beats (rightmost control point). Used by clampOffset to keep
+   *  at least 3 visible widths of pan room past the last point at any zoom level. */
+  compLengthBeats: number;
   /** Lower bound for zoomY clamping. Updated on resize so the widest zoom fits the full note range. */
   minZoomY: number;
   /** Reserved top band (e.g. for rulers) so panning leaves notes visible below it. */
@@ -47,6 +50,7 @@ export function createViewport(): Viewport {
   const vp: Viewport = {
     state,
     canvasExtent: MIN_CANVAS_EXTENT + SCROLL_BUFFER,
+    compLengthBeats: 0,
     minZoomY: MIN_ZOOM_Y,
     topInset: 0,
 
@@ -93,12 +97,14 @@ export function createViewport(): Viewport {
     clampOffset(canvasWidth: number, canvasHeight: number, minOffsetX: number = 0) {
       // X: can't scroll before minOffsetX (default 0), can't scroll past the canvas extent.
       const visibleBeats = canvasWidth / state.zoomX;
-      // Scale pannable extent with zoom: always allow at least one full screen-width
-      // of pan room past the content extent so empty/sparse canvases stay
-      // navigable when zoomed wide. (canvasExtent alone — sized at MIN_CANVAS_EXTENT
-      // + SCROLL_BUFFER for an empty composition — falls inside one screen at
-      // low zoomX, leaving no pan room at all.)
-      const effectiveExtent = Math.max(vp.canvasExtent, visibleBeats * 2);
+      // Pan extent has two competing floors past the last control point:
+      //   - canvasExtent (set externally) bakes in a time-based buffer (~2 min @ BPM).
+      //   - At very wide zooms, that fixed-beats buffer collapses to a fraction of a
+      //     screen, so also guarantee 3 visible widths of pan room past the last point.
+      // Take the greater of the two, with a final visibleBeats * 2 floor so empty
+      // canvases stay navigable when canvasExtent itself is tiny.
+      const widthFloor = vp.compLengthBeats + visibleBeats * 3;
+      const effectiveExtent = Math.max(vp.canvasExtent, widthFloor, visibleBeats * 2);
       const maxOffsetX = Math.max(minOffsetX, effectiveExtent - visibleBeats);
       state.offsetX = clamp(state.offsetX, minOffsetX, maxOffsetX);
 
