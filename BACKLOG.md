@@ -113,7 +113,7 @@ Items that came up while building Phase 6 but are independent features. Each bec
 - [ ] **8.18 Live recording trail visualization** *(S–M, feature)*
   A newly recorded curve currently doesn't appear until the user finishes recording — there's no visible feedback that anything is being captured. Add some kind of live trail behind the planchette during record. If rendering the raw pre-smoothed sample points is impractical, fall back to a temporary breadcrumb / fading trace that gets replaced by the simplified curve once it's committed on release. Render in the foreground layer alongside the planchette so it scrolls with the canvas in Scroll Canvas mode.
 
-- [x] **8.20 Record AFK timer should respect loop / future content** *(S, bug)*
+- [x] **8.20 Record AFK timer should respect loop / future content** *(S, PR #45)*
   The perform-engine AFK timeout (`afkTimeoutMs` in [src/canvas/performance-engine.ts](src/canvas/performance-engine.ts)) currently fires whenever record is armed and there's no input activity, even when the session has a meaningful reason to keep waiting. Suppress the auto-stop when (a) Loop is enabled (the user is intentionally recording over loops), or (b) the playhead hasn't yet reached the rightmost control point in the composition (there's still future content to record over). Update `tickComposePerform`'s `onAfkTimeout` gate or thread the new conditions through `TickArgs`.
 
 ### Selection & editing
