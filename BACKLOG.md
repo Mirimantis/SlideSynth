@@ -113,7 +113,7 @@ Items that came up while building Phase 6 but are independent features. Each bec
 - [ ] **8.18 Live recording trail visualization** *(S–M, feature)*
   A newly recorded curve currently doesn't appear until the user finishes recording — there's no visible feedback that anything is being captured. Add some kind of live trail behind the planchette during record. If rendering the raw pre-smoothed sample points is impractical, fall back to a temporary breadcrumb / fading trace that gets replaced by the simplified curve once it's committed on release. Render in the foreground layer alongside the planchette so it scrolls with the canvas in Scroll Canvas mode.
 
-- [ ] **8.20 Record AFK timer should respect loop / future content** *(S, bug)*
+- [x] **8.20 Record AFK timer should respect loop / future content** *(S, PR #45)*
   The perform-engine AFK timeout (`afkTimeoutMs` in [src/canvas/performance-engine.ts](src/canvas/performance-engine.ts)) currently fires whenever record is armed and there's no input activity, even when the session has a meaningful reason to keep waiting. Suppress the auto-stop when (a) Loop is enabled (the user is intentionally recording over loops), or (b) the playhead hasn't yet reached the rightmost control point in the composition (there's still future content to record over). Update `tickComposePerform`'s `onAfkTimeout` gate or thread the new conditions through `TickArgs`.
 
 ### Selection & editing
@@ -154,6 +154,12 @@ Items that came up while building Phase 6 but are independent features. Each bec
 
 - [ ] **8.21 MIDI sustained note doesn't continue past loop wrap** *(S, bug)*
   When a MIDI note is held across a loop wrap during recording, the wrap finalizes the note's curve (correct — `finalizeAllInFlightMidiVoices` in `tickComposePerform`'s `onLoopWrap` callback in [src/main.ts](src/main.ts)) but the synth and recording don't restart on the other side, so the held note goes silent and stops capturing. Should: keep the synth voice alive across the wrap, and start a fresh recording for that voice from the loop start beat so the held note becomes two contiguous curves (one ending at loop-out, one starting at loop-in). Match LMB-held perform behavior on loop wrap.
+
+- [ ] **8.22 Verify 8.20 AFK gating with MIDI input (hardware required)** *(XS, test)*
+  8.20 added MIDI noteOn/noteOff activity marks and AFK suppression while the playhead is before the rightmost point or Loop is on. Non-MIDI cases were verified at ship time; MIDI cases require hardware. To test once a MIDI keyboard is available:
+  - **MIDI-only armed, playing keys** — MIDI-arm a track, no LMB, press MIDI keys every 30–60s for several minutes. Must NOT auto-stop.
+  - **MIDI-only armed, idle keys past rightmost** — MIDI-arm, playhead past rightmost, loop off, no MIDI input for > 2 min. SHOULD auto-stop.
+  - **Sustained MIDI note past rightmost** — MIDI-arm, playhead past rightmost, loop off, hold a single MIDI note for > 2 min. Must NOT auto-stop (relies on `captureSample` activity marks during MIDI recording).
 
 ### Harmonic Prism nice-to-haves
 - [ ] **8.12 Chord-spec hotkeys / number-key favorites** *(M, feature)*
