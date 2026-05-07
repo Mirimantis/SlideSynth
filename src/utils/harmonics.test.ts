@@ -302,6 +302,7 @@ describe('chordOffsets — type safety spot checks', () => {
             for (const n of voiceCounts) {
               const out = chordOffsets({
                 stacking: s, quality: q, numVoices: n, tuning: t, direction: d,
+                voiceOctaveOffsets: [],
               });
               expect(out).toHaveLength(n);
               expect(out.every(Number.isFinite)).toBe(true);
