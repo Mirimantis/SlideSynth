@@ -3,7 +3,7 @@
 // or freehand Group/Ungroup actions. Grouping couples placement/deletion/
 // transform; point-level edits do NOT cascade to siblings.
 
-import type { BezierCurve, Track } from '../types';
+import type { AppState, BezierCurve, Track } from '../types';
 import { generateId } from './tone';
 
 export function createGroupId(): string {
@@ -79,4 +79,41 @@ export function allShareGroup(curves: BezierCurve[]): boolean {
 /** True if any selected curve has a non-null group id. */
 export function anyGrouped(curves: BezierCurve[]): boolean {
   return curves.some(c => !!c.groupId);
+}
+
+/**
+ * Resolve the current selection to a single movable unit, for actions like
+ * "Move to track" (BACKLOG 8.2) where it only makes sense to act on one
+ * logical curve. Returns the selection iff it is exactly:
+ *   - one ungrouped curve, OR
+ *   - one complete group (all selected curves share the same non-null
+ *     groupId AND the set equals the group's full membership on the
+ *     source track — no orphan siblings, no extras).
+ * Returns null otherwise (zero, mixed, partial group, multi-unit).
+ */
+export function getMovableSelection(
+  state: AppState,
+): { curveIds: string[]; sourceTrack: Track } | null {
+  const ids = [...state.selectedCurveIds];
+  if (ids.length === 0) return null;
+  const sourceTrack = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  if (!sourceTrack) return null;
+
+  const curves = ids.map(id => sourceTrack.curves.find(c => c.id === id));
+  if (curves.some(c => !c)) return null;
+  const resolved = curves as BezierCurve[];
+
+  const groupId = resolved[0]!.groupId ?? null;
+  if (groupId === null) {
+    // Ungrouped: only a single curve qualifies.
+    return resolved.length === 1 && resolved.every(c => !c.groupId)
+      ? { curveIds: ids, sourceTrack }
+      : null;
+  }
+  // Grouped: every selected curve must share this group, AND the selection
+  // must cover the full group membership on the source track.
+  if (!resolved.every(c => c.groupId === groupId)) return null;
+  const fullGroup = getGroupMembers(sourceTrack, resolved[0]!.id);
+  if (fullGroup.length !== resolved.length) return null;
+  return { curveIds: ids, sourceTrack };
 }

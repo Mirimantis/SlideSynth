@@ -107,8 +107,7 @@ Items that came up while building Phase 6 but are independent features. Each bec
 - [x] **8.1 Hotkeys fire while editing the composition name** *(S, PR #41)*
   When `#comp-name` is focused, suppress global hotkeys (D / V / X / C / S / H / Space / etc.). Enter should commit the edit and blur the input. Verify the existing `e.target instanceof HTMLInputElement` guard in [src/main.ts](src/main.ts) — bug may be specifically Enter behaviour or some hotkey path that bypasses the check.
 
-- [ ] **8.2 Move curve to a different track** *(M, feature)*
-  Track-picker dropdown in Object Properties (when a single curve is selected) listing existing tracks plus "+ New track". Single `store.mutate()` with one history snapshot. Edge case: clear `groupId` on move so the moved curve doesn't accidentally couple with siblings on the new track.
+- [x] **8.2 Move curve to a different track** *(M, PR #47)*
 
 - [ ] **8.18 Live recording trail visualization** *(S–M, feature)*
   A newly recorded curve currently doesn't appear until the user finishes recording — there's no visible feedback that anything is being captured. Add some kind of live trail behind the planchette during record. If rendering the raw pre-smoothed sample points is impractical, fall back to a temporary breadcrumb / fading trace that gets replaced by the simplified curve once it's committed on release. Render in the foreground layer alongside the planchette so it scrolls with the canvas in Scroll Canvas mode.

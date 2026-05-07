@@ -1,5 +1,6 @@
-import type { AppState, Composition, GuideDefinition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode } from '../types';
+import type { AppState, BezierCurve, Composition, GuideDefinition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode } from '../types';
 import { createComposition } from '../model/composition';
+import { createTrack } from '../model/track';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_NOTE, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 
@@ -566,6 +567,49 @@ class Store {
   mutate(fn: (comp: Composition) => void) {
     fn(this.state.composition);
     this.notify();
+  }
+
+  /**
+   * Move a set of curves from their current track to an existing target track
+   * (BACKLOG 8.2). Preserves curve `id` and `groupId` — this is a relocation,
+   * not a copy. Caller is responsible for ensuring the curveIds form a single
+   * movable unit (see `getMovableSelection`); this method enforces nothing.
+   * Re-applies the curve selection on the target track so the user can keep
+   * editing. Caller takes the `history.snapshot()`.
+   */
+  moveCurvesToTrack(curveIds: string[], targetTrackId: string): void {
+    if (curveIds.length === 0) return;
+    const comp = this.state.composition;
+    const target = comp.tracks.find(t => t.id === targetTrackId);
+    const source = comp.tracks.find(t => t.curves.some(c => c.id === curveIds[0]));
+    if (!source || !target || source === target) return;
+    const moved: BezierCurve[] = [];
+    for (const id of curveIds) {
+      const idx = source.curves.findIndex(c => c.id === id);
+      if (idx >= 0) moved.push(source.curves.splice(idx, 1)[0]!);
+    }
+    target.curves.push(...moved);
+    // Follow the moved curves to the target track so the planchette + property
+    // panel re-bind there. setSelectedTrack clears curve selection, so re-apply.
+    this.setSelectedTrack(targetTrackId);
+    this.setSelectedCurves(curveIds);
+  }
+
+  /**
+   * Create a new track inheriting the tone of the source track (the one that
+   * currently contains the first curve), then move the curves into it (8.2).
+   * Returns the new track id, or null if the source can't be located.
+   * Caller takes the `history.snapshot()`.
+   */
+  moveCurvesToNewTrack(curveIds: string[], nameOverride?: string): string | null {
+    if (curveIds.length === 0) return null;
+    const comp = this.state.composition;
+    const source = comp.tracks.find(t => t.curves.some(c => c.id === curveIds[0]));
+    if (!source) return null;
+    const newTrack = createTrack(nameOverride ?? `Track ${comp.tracks.length + 1}`, source.toneId);
+    comp.tracks.push(newTrack);
+    this.moveCurvesToTrack(curveIds, newTrack.id);
+    return newTrack.id;
   }
 
   /** Replace entire composition (for load). Hydrates AppState mirrors of `comp.snap`
