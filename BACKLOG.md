@@ -167,7 +167,7 @@ Items that came up while building Phase 6 but are independent features. Each bec
 - [ ] **8.12 Chord-spec hotkeys / number-key favorites** *(M, feature)*
   Phase 6.3's state plumbing already retunes voices live whenever the chord spec changes — the missing piece is a non-LMB way to trigger the change so the user can shape-shift mid-perform. Concept: user-definable chord-shape favorites bound to number keys.
 
-- [x] **8.13 Inversion controls** *(S)*
+- [x] **8.13 Inversion controls** *(S, PR #49)*
   Per-voice octave offsets in the Harmonic Prism panel (new VOICING subsection). Each voice gets a ±2 octave stepper; offsets apply to projection echoes, future placements, and live perform retune. Inversions emerge as a special case (1st inversion = `[+1, 0, 0]`).
 
 - [ ] **8.14 Chord-label readout on selected groups** *(S, feature)*
