@@ -2744,6 +2744,7 @@ function render() {
       isActiveTrack ? state.selectedCurveIds : emptySet,
       isActiveTrack ? store.getSelectedCurveId() : null,
       isActiveTrack ? state.selectedPointIndex : null,
+      isActiveTrack,
     );
   }
 

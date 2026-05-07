@@ -119,6 +119,9 @@ Items that came up while building Phase 6 but are independent features. Each bec
 - [ ] **8.3 Multi-select points: shift-click + drag-marquee** *(M, feature)*
   Select tool currently supports shift+click on whole curves; extend to (a) shift+click on individual points and (b) drag-marquee on empty canvas. Likely needs a new `selectedPointIndices: Set<{curveId, idx}>` shape on `AppState`. Transform Box already handles multi-curve geometry — likely reusable for multi-point bounds.
 
+- [x] **8.23 Cross-track curve selection (Select tool)** *(S)*
+  Plain click on any visible non-muted curve switches the active track to that curve's track and selects it. Shift-click stays locked to the active track so multi-select can't be torpedoed by a stray cross-track click. Non-active-track curves render dimmed so the active track stays visually distinct.
+
 ### Volume editing
 - [ ] **8.4 Per-curve volume timeline lane** *(L, own planning session)*
   Volume currently lives as a per-control-point property; complex curves make volume editing unwieldy. Concept: a separate panel below the main canvas, sharing the X zoom and ruler, hosting secondary animatable curves per track or per source curve. First inhabitant is volume; future inhabitants could include per-tone-layer mixes, filter cutoff, etc. Needs a dedicated design session covering interaction, data model, and rendering.
