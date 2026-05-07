@@ -31,6 +31,9 @@ export interface ChordSpec {
   numVoices: NumVoices;
   tuning: TuningSystem;
   direction: Direction;
+  /** Per-voice ±octave offset (8.13). Index = voice index (0 = root). Missing
+   *  or extra entries are treated as 0, so legacy specs round-trip cleanly. */
+  voiceOctaveOffsets: number[];
 }
 
 export const DEFAULT_CHORD_SPEC: ChordSpec = {
@@ -39,6 +42,7 @@ export const DEFAULT_CHORD_SPEC: ChordSpec = {
   numVoices: 3,
   tuning: '12-TET',
   direction: 'up',
+  voiceOctaveOffsets: [],
 };
 
 // ── 12-TET interval patterns ─────────────────────────────────────
@@ -206,7 +210,12 @@ function applyDirection(offsets: number[], direction: Direction): number[] {
 export function chordOffsets(spec: ChordSpec): number[] {
   const base =
     spec.tuning === '12-TET' ? chordOffsets12TET(spec) : chordOffsetsJI(spec);
-  return applyDirection(base, spec.direction);
+  const directed = applyDirection(base, spec.direction);
+  // 8.13: per-voice octave offsets. Apply after direction so "voice N up an
+  // octave" reads consistently regardless of up/down/symmetric direction.
+  const oct = spec.voiceOctaveOffsets;
+  if (!oct || oct.length === 0) return directed;
+  return directed.map((s, i) => s + ((oct[i] ?? 0) * 12));
 }
 
 // ── UI helpers ────────────────────────────────────────────────────

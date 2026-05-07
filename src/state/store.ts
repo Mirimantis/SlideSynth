@@ -80,6 +80,10 @@ function loadChordSpecPref(defaultSpec: ChordSpec): ChordSpec {
       numVoices: parsed.numVoices ?? defaultSpec.numVoices,
       tuning: parsed.tuning ?? defaultSpec.tuning,
       direction: parsed.direction ?? defaultSpec.direction,
+      // 8.13: pre-8.13 entries lack this field — fall back to the default ([]).
+      voiceOctaveOffsets: Array.isArray(parsed.voiceOctaveOffsets)
+        ? parsed.voiceOctaveOffsets.filter((n: unknown): n is number => typeof n === 'number' && Number.isFinite(n))
+        : defaultSpec.voiceOctaveOffsets,
     };
   } catch {
     return { ...defaultSpec };
