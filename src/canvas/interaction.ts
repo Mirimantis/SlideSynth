@@ -1142,6 +1142,7 @@ export function buildSnapConfig(zoomX?: number, wxForProjection?: number): SnapC
     subdivisionsPerBeat: subdivisions,
     scaleRoot: state.scaleRoot,
     scale: state.scaleId ? getScaleById(state.scaleId) ?? null : null,
+    hidePitchLines: state.hidePitchLines,
     projectionTargets,
     guideXTargets,
     guideYTargets,

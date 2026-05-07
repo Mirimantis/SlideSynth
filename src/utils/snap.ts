@@ -12,6 +12,10 @@ export interface SnapConfig {
   subdivisionsPerBeat: number;
   scaleRoot: number | null;
   scale: ScaleDefinition | null;
+  /** 8.19 "None" Key mode. With no scale active, suppresses the chromatic-
+   *  semitone Y-snap fallback so the cursor floats freely in Y. Projection
+   *  echoes, scale snap, and user guides are unaffected. */
+  hidePitchLines?: boolean;
   /** Harmonic Prism projection echo pitches (MIDI float). Optional. */
   projectionTargets?: readonly number[];
   /** User-placed X-guide beat positions. Snap pulls within GUIDE_X_SNAP_RADIUS_BEATS. */
@@ -70,11 +74,17 @@ export function snapToGrid(
     snappedY = best;
   } else if (config.scaleRoot !== null && config.scale) {
     snappedY = nearestScaleNote(wy, config.scaleRoot, config.scale);
+  } else if (config.hidePitchLines) {
+    // 8.19 "None" Key mode: no chromatic auto-snap. Cursor Y floats free; only
+    // explicit targets (guides, projection echoes) below pull it.
+    snappedY = wy;
   } else {
     snappedY = Math.round(Math.max(MIN_NOTE, Math.min(MAX_NOTE, wy)));
   }
   // Guide Y: same precedence as X — beats scale/integer snap when closer (and
-  // when projection isn't owning the snap exclusively).
+  // when projection isn't owning the snap exclusively). In 8.19 None mode the
+  // chromatic fallback is gone, so a guide within radius always wins (it's the
+  // only target competing with the raw cursor).
   if (
     !(config.projectionTargets && config.projectionTargets.length > 0)
     && config.guideYTargets && config.guideYTargets.length > 0
@@ -83,7 +93,8 @@ export function snapToGrid(
     if (nearestGuide !== null) {
       const distToGuide = Math.abs(wy - nearestGuide);
       const distToOther = Math.abs(wy - snappedY);
-      if (distToGuide < distToOther) snappedY = nearestGuide;
+      const noBackground = config.hidePitchLines && (config.scaleRoot === null || !config.scale);
+      if (noBackground || distToGuide < distToOther) snappedY = nearestGuide;
     }
   }
 

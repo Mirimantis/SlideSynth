@@ -134,7 +134,7 @@ Items that came up while building Phase 6 but are independent features. Each bec
 - [x] **8.7 User-definable snap guides** *(M, PR #42)*
   New first-class entity — X-oriented and Y-oriented guides placed like loop markers (drag on the appropriate ruler). Guides are *additive* to other snap targets (don't replace them like projection echoes do). Selected guide gets a label field in Object Properties; label renders along the guide. A "Guides" toggle controls visibility for all guides. Persisted in the composition file. Also shipped: a Lock toggle that gates selection / drag / delete (PR #42 review feedback).
 
-- [ ] **8.19 Rename Key "None" to "Chromatic" + new "None" mode (no pitch lines)** *(S, feature + UX)*
+- [x] **8.19 Rename Key "None" to "Chromatic" + new "None" mode (no pitch lines)** *(S, PR #46)*
   Today the Key dropdown's default "None" actually means "all semitones shown" (chromatic display). Rename it to **Chromatic** so the label matches the behavior, and add a *new* **None** option that hides every pitch line on the staff. Useful for users who've set up custom pitch guides (8.7) and want a clean canvas without the default snap lines. Touch [src/ui/toolbar.ts](src/ui/toolbar.ts) for the dropdown wording, [src/canvas/staff-renderer.ts](src/canvas/staff-renderer.ts) for the no-lines render branch, and the snap path in [src/utils/snap.ts](src/utils/snap.ts) so Y-snap also disengages in true-None mode (cursor becomes free Y; guides still pull if placed).
 
 ### Tone generator

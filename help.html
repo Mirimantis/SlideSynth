@@ -681,7 +681,13 @@
         <li>30 scales across 5 groups: Western modes, pentatonic/blues, other Western, world scales, and microtonal.</li>
         <li>Microtonal scales (e.g. Maqam Rast, Gamelan Slendro) use fractional semitone intervals.</li>
         <li>In-scale accidentals (sharps/flats that are part of the current scale) are visually prominent on the staff.</li>
-        <li>Set Key to <strong>None</strong> to return to chromatic mode.</li>
+        <li><strong>Chromatic</strong> (default) — no key. All 12 semitones render as
+          background staff lines and Y-snap pulls to the nearest semitone.</li>
+        <li><strong>None</strong> — clean canvas. Hides every default semitone line and
+          turns off the chromatic Y-snap, leaving the cursor free in pitch. Other snap
+          targets still work: user-placed pitch guides, Harmonic Prism projection echoes,
+          and curve/point snapping all keep pulling. Useful when you've set up custom
+          pitch guides and want only those to be visible and active.</li>
       </ul>
     </div>
   </details>

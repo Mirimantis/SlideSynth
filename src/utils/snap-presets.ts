@@ -4,10 +4,10 @@ import type { SnapSettings } from '../types';
  * Snap presets — named bundles of snap-section settings that the user can load
  * with one click. Presets carry a *partial* of SnapSettings: only the fields
  * they intend to override get applied. Notably, presets never touch
- * `scaleRoot` / `scaleId` — picking a scale is an orthogonal user choice that
- * a "snap feel" preset shouldn't clobber.
+ * `scaleRoot` / `scaleId` / `hidePitchLines` — the Key dropdown is an orthogonal
+ * user choice that a "snap feel" preset shouldn't clobber.
  */
-export type SnapPresetSettings = Partial<Omit<SnapSettings, 'scaleRoot' | 'scaleId'>>;
+export type SnapPresetSettings = Partial<Omit<SnapSettings, 'scaleRoot' | 'scaleId' | 'hidePitchLines'>>;
 
 export interface SnapPreset {
   id: string;            // stable id (built-ins use 'builtin-*'; user presets use 'user-*<timestamp>')

@@ -158,6 +158,7 @@ function createInitialState(): AppState {
     snapEnabled: snap.enabled,
     scaleRoot: snap.scaleRoot,
     scaleId: snap.scaleId,
+    hidePitchLines: snap.hidePitchLines,
     magneticEnabled: snap.magneticEnabled,
     magneticStrength: snap.magneticStrength,
     magneticSpringK: snap.magneticSpringK,
@@ -448,9 +449,16 @@ class Store {
     this.notify();
   }
 
-  setScaleRoot(root: number | null) {
+  /** Sets the Key dropdown's three-mode state (8.19): a numeric root, Chromatic
+   *  (root=null, hidePitchLines=false), or None (root=null, hidePitchLines=true).
+   *  hidePitchLines is meaningful only when root is null; selecting a scale tone
+   *  forces it to false so the staff lines come back. */
+  setScaleRoot(root: number | null, hidePitchLines: boolean = false) {
+    const effectiveHide = root === null ? hidePitchLines : false;
     this.state.scaleRoot = root;
     this.state.composition.snap.scaleRoot = root;
+    this.state.hidePitchLines = effectiveHide;
+    this.state.composition.snap.hidePitchLines = effectiveHide;
     if (root === null) {
       this.state.scaleId = null;
       this.state.composition.snap.scaleId = null;
@@ -573,6 +581,7 @@ class Store {
     this.state.snapEnabled = snap.enabled;
     this.state.scaleRoot = snap.scaleRoot;
     this.state.scaleId = snap.scaleId;
+    this.state.hidePitchLines = snap.hidePitchLines;
     this.state.magneticEnabled = snap.magneticEnabled;
     this.state.magneticStrength = snap.magneticStrength;
     this.state.magneticSpringK = snap.magneticSpringK;

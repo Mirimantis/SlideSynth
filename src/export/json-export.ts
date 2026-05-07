@@ -40,6 +40,9 @@ export function deserializeComposition(json: string): Composition {
   // global defaults rather than whatever the user had set in their session.
   if (!data.snap || typeof data.snap !== 'object') {
     data.snap = createDefaultSnapSettings();
+  } else if (typeof (data.snap as Partial<typeof data.snap>).hidePitchLines !== 'boolean') {
+    // 8.19: v2 files saved before hidePitchLines existed open as Chromatic.
+    data.snap.hidePitchLines = false;
   }
   if (!Array.isArray(data.guides)) {
     data.guides = [];

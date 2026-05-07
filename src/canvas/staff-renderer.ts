@@ -21,6 +21,7 @@ export function renderStaff(
   measureLen: number = DEFAULT_BEATS_PER_MEASURE,
   scaleRoot: number | null = null,
   scale: ScaleDefinition | null = null,
+  hidePitchLines: boolean = false,
 ): void {
   ctx.clearRect(0, 0, width, height);
 
@@ -37,65 +38,70 @@ export function renderStaff(
   const microtonalScale = hasScale && isMicrotonal(scale!);
   // For microtonal scales, don't dim/highlight integer lines — keep default styling
   const highlightIntegers = hasScale && !microtonalScale;
+  // 8.19 "None" Key mode: skip default chromatic pitch lines + labels entirely.
+  // Microtonal scale guides only fire under hasScale, so they're naturally excluded.
+  const drawPitchLines = !hidePitchLines || hasScale;
 
   // ── Horizontal note lines ──────────────────────────────────
-  for (let n = Math.max(minNote, MIN_NOTE); n <= Math.min(maxNote, MAX_NOTE); n++) {
-    const { sy } = vp.worldToScreen(0, n);
+  if (drawPitchLines) {
+    for (let n = Math.max(minNote, MIN_NOTE); n <= Math.min(maxNote, MAX_NOTE); n++) {
+      const { sy } = vp.worldToScreen(0, n);
 
-    if (highlightIntegers) {
-      const inScale = isNoteInScale(n, scaleRoot!, scale!);
-      if (inScale) {
-        if (isCNote(n)) {
-          ctx.strokeStyle = '#5577aa';
-          ctx.lineWidth = 2.0;
-        } else if (isNaturalNote(n)) {
-          ctx.strokeStyle = '#445566';
-          ctx.lineWidth = 1.0;
-        } else {
-          ctx.strokeStyle = '#4a6080';
-          ctx.lineWidth = 1.0;
-        }
-      } else {
-        ctx.strokeStyle = '#1a1a28';
-        ctx.lineWidth = 0.3;
-      }
-    } else {
-      if (isCNote(n)) {
-        ctx.strokeStyle = '#445';
-        ctx.lineWidth = 1.5;
-      } else if (isNaturalNote(n)) {
-        ctx.strokeStyle = '#334';
-        ctx.lineWidth = 0.8;
-      } else {
-        ctx.strokeStyle = '#262636';
-        ctx.lineWidth = 0.5;
-      }
-    }
-
-    ctx.beginPath();
-    ctx.moveTo(0, sy);
-    ctx.lineTo(width, sy);
-    ctx.stroke();
-
-    // Note labels on the left edge
-    // When a scale is active, show labels for all in-scale notes at moderate zoom
-    const inScaleForLabel = highlightIntegers && isNoteInScale(n, scaleRoot!, scale!);
-    const showLabel = isCNote(n)
-      || (vp.state.zoomY >= 10 && (isNaturalNote(n) || inScaleForLabel))
-      || vp.state.zoomY >= 18;
-    if (showLabel) {
       if (highlightIntegers) {
-        if (inScaleForLabel) {
-          ctx.fillStyle = isCNote(n) ? '#99bbdd' : '#667788';
+        const inScale = isNoteInScale(n, scaleRoot!, scale!);
+        if (inScale) {
+          if (isCNote(n)) {
+            ctx.strokeStyle = '#5577aa';
+            ctx.lineWidth = 2.0;
+          } else if (isNaturalNote(n)) {
+            ctx.strokeStyle = '#445566';
+            ctx.lineWidth = 1.0;
+          } else {
+            ctx.strokeStyle = '#4a6080';
+            ctx.lineWidth = 1.0;
+          }
         } else {
-          ctx.fillStyle = '#333';
+          ctx.strokeStyle = '#1a1a28';
+          ctx.lineWidth = 0.3;
         }
       } else {
-        ctx.fillStyle = isCNote(n) ? '#8899aa' : '#556';
+        if (isCNote(n)) {
+          ctx.strokeStyle = '#445';
+          ctx.lineWidth = 1.5;
+        } else if (isNaturalNote(n)) {
+          ctx.strokeStyle = '#334';
+          ctx.lineWidth = 0.8;
+        } else {
+          ctx.strokeStyle = '#262636';
+          ctx.lineWidth = 0.5;
+        }
       }
-      ctx.font = isCNote(n) ? 'bold 11px monospace' : '10px monospace';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(noteNumberToName(n), 4, sy);
+
+      ctx.beginPath();
+      ctx.moveTo(0, sy);
+      ctx.lineTo(width, sy);
+      ctx.stroke();
+
+      // Note labels on the left edge
+      // When a scale is active, show labels for all in-scale notes at moderate zoom
+      const inScaleForLabel = highlightIntegers && isNoteInScale(n, scaleRoot!, scale!);
+      const showLabel = isCNote(n)
+        || (vp.state.zoomY >= 10 && (isNaturalNote(n) || inScaleForLabel))
+        || vp.state.zoomY >= 18;
+      if (showLabel) {
+        if (highlightIntegers) {
+          if (inScaleForLabel) {
+            ctx.fillStyle = isCNote(n) ? '#99bbdd' : '#667788';
+          } else {
+            ctx.fillStyle = '#333';
+          }
+        } else {
+          ctx.fillStyle = isCNote(n) ? '#8899aa' : '#556';
+        }
+        ctx.font = isCNote(n) ? 'bold 11px monospace' : '10px monospace';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(noteNumberToName(n), 4, sy);
+      }
     }
   }
 
