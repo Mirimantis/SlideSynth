@@ -2,6 +2,7 @@ import { store } from '../state/store';
 import { history } from '../state/history';
 import { noteNumberToName } from '../constants';
 import { setPointVolume } from '../model/curve';
+import { getMovableSelection } from '../model/curve-groups';
 import { openTonePicker } from './tone-picker';
 
 /**
@@ -76,9 +77,34 @@ export function renderPropertyPanel(container: HTMLElement): void {
   const singleCurveId = store.getSelectedCurveId();
   const curve = singleCurveId ? track.curves.find(c => c.id === singleCurveId) : null;
   if (!curve || state.selectedPointIndex === null) {
-    // Show track info
+    // Show track info — and a CURVE subsection with a "Move to track" picker
+    // when the selection forms a single movable unit (8.2).
     const tone = comp.toneLibrary.find(t => t.id === track.toneId);
+    const movable = getMovableSelection(state);
+    const NEW_TRACK_VALUE = '__new__';
+    const otherTracks = movable ? comp.tracks.filter(t => t.id !== track.id) : [];
+    const moveOptionsHtml = movable
+      ? [
+          `<option value="" disabled selected>-- Select --</option>`,
+          ...otherTracks.map(t => `<option value="${escapeAttr(t.id)}">${escapeAttr(t.name)}</option>`),
+          ...(otherTracks.length > 0 ? ['<option disabled>──────────</option>'] : []),
+          `<option value="${NEW_TRACK_VALUE}">+ New track</option>`,
+        ].join('')
+      : '';
+    const curveSectionHtml = movable
+      ? `
+      <div class="panel-header">Curve</div>
+      <div class="prop-section">
+        <div class="prop-label">${movable.curveIds.length > 1 ? `Group (${movable.curveIds.length} curves)` : 'Curve'}</div>
+      </div>
+      <div class="prop-section">
+        <div class="prop-label">Move to track</div>
+        <select id="prop-move-track" style="width: 100%; box-sizing: border-box;">${moveOptionsHtml}</select>
+      </div>
+      <div class="panel-header" style="margin-top:8px">Track</div>`
+      : '';
     container.innerHTML = `
+      ${curveSectionHtml}
       <div class="prop-section">
         <div class="prop-label">Track</div>
         <div class="prop-value">${track.name}</div>
@@ -98,6 +124,22 @@ export function renderPropertyPanel(container: HTMLElement): void {
       </div>
       <p class="placeholder-text" style="margin-top:12px">Select a point to edit its properties</p>
     `;
+
+    if (movable) {
+      const moveSelect = container.querySelector('#prop-move-track') as HTMLSelectElement;
+      moveSelect.addEventListener('change', () => {
+        const target = moveSelect.value;
+        if (!target) return;
+        const ids = movable.curveIds;
+        history.snapshot();
+        if (target === NEW_TRACK_VALUE) {
+          store.moveCurvesToNewTrack(ids);
+        } else {
+          store.moveCurvesToTrack(ids, target);
+        }
+        // Re-render will replace this panel; no need to reset the dropdown.
+      });
+    }
 
     container.querySelector('#prop-track-vol')?.addEventListener('mousedown', () => {
       history.snapshot();
