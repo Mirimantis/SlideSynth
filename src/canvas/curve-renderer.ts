@@ -6,8 +6,14 @@ const POINT_RADIUS = 5;
 const POINT_RADIUS_UNSELECTED = 3;
 const HANDLE_RADIUS = 3;
 
+/** Alpha applied to curves on non-active tracks (BACKLOG 8.23). Pushes them
+ *  visually back so the active track stays distinct, while remaining clickable. */
+const INACTIVE_TRACK_ALPHA = 0.45;
+
 /**
- * Render all curves for a track.
+ * Render all curves for a track. When `isActiveTrack` is false, the entire
+ * track is dimmed via globalAlpha so non-active tracks read as background while
+ * still being identifiable by tone color.
  */
 export function renderCurves(
   ctx: CanvasRenderingContext2D,
@@ -17,12 +23,16 @@ export function renderCurves(
   selectedCurveIds: ReadonlySet<string>,
   selectedPointCurveId: string | null,
   selectedPointIndex: number | null,
+  isActiveTrack: boolean = true,
 ): void {
+  const prevAlpha = ctx.globalAlpha;
+  if (!isActiveTrack) ctx.globalAlpha = prevAlpha * INACTIVE_TRACK_ALPHA;
   for (const curve of curves) {
     const isSelected = selectedCurveIds.has(curve.id);
     const showHandles = isSelected && curve.id === selectedPointCurveId;
     renderCurve(ctx, vp, curve, tone, isSelected, showHandles, selectedPointIndex);
   }
+  if (!isActiveTrack) ctx.globalAlpha = prevAlpha;
 }
 
 function renderCurve(

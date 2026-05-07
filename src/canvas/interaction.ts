@@ -628,44 +628,58 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
 }
 
 function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport, shiftKey: boolean): void {
-  const track = getSelectedTrack();
-  if (!track) return;
+  const activeTrack = getSelectedTrack();
+  if (!activeTrack) return;
 
   const hitRadiusX = 4 / vp.state.zoomX;
   const hitRadiusY = 4 / vp.state.zoomY;
   const hitRadius = Math.max(hitRadiusX, hitRadiusY);
 
-  // Hit-test anchor points on all curves first — anchors override handles
-  // when overlapping, so the user can always grab the point even if a bezier
-  // handle happens to land within the hit radius.
-  for (const curve of track.curves) {
-    for (let i = 0; i < curve.points.length; i++) {
-      const pt = curve.points[i]!;
-      if (distToPoint(worldPt, pt.position) < hitRadius) {
-        if (shiftKey) {
-          // Shift+click on a point: toggle the curve in selection
-          store.toggleSelectedCurve(curve.id);
-          rebuildTransformBox(istate, track);
-        } else {
-          // Click on a point: select that curve, select the point, start drag
-          history.snapshot();
-          istate.dragging = 'point';
-          istate.dragCurveId = curve.id;
-          istate.dragPointIndex = i;
-          istate.dragStartWorld = { ...pt.position };
-          store.setSelectedCurve(curve.id);
-          store.setSelectedPoint(i);
-          istate.transformBox = null;
+  // Plain click (no shift): scan every visible (non-muted) track so the user
+  // can grab any curve they see, with the active track auto-following the hit
+  // (BACKLOG 8.23). Shift-click stays locked to the active track so an
+  // accidental click on a non-active curve can't torpedo a multi-select in
+  // progress. Iterate in `comp.tracks` order so click priority matches the
+  // render z-order (later tracks draw on top, last hit wins for overlaps).
+  const comp = store.getComposition();
+  const candidateTracks: Track[] = shiftKey
+    ? [activeTrack]
+    : comp.tracks.filter(t => !t.muted);
+
+  // Phase 1: anchor points. Anchors override handles when overlapping.
+  for (const t of candidateTracks) {
+    for (const curve of t.curves) {
+      for (let i = 0; i < curve.points.length; i++) {
+        const pt = curve.points[i]!;
+        if (distToPoint(worldPt, pt.position) < hitRadius) {
+          if (shiftKey) {
+            // Shift+click on a point: toggle the curve in selection (active track only).
+            store.toggleSelectedCurve(curve.id);
+            rebuildTransformBox(istate, activeTrack);
+          } else {
+            // Click on a point: switch to its track (if needed), select curve+point, start drag.
+            if (t.id !== activeTrack.id) store.setSelectedTrack(t.id);
+            history.snapshot();
+            istate.dragging = 'point';
+            istate.dragCurveId = curve.id;
+            istate.dragPointIndex = i;
+            istate.dragStartWorld = { ...pt.position };
+            store.setSelectedCurve(curve.id);
+            store.setSelectedPoint(i);
+            istate.transformBox = null;
+          }
+          return;
         }
-        return;
       }
     }
   }
 
-  // Handle hits only available in single-curve mode, without Shift
+  // Phase 2: handle hits. Only available in single-curve mode without Shift,
+  // and handles only render for the active track's selected curve, so this
+  // stays single-track regardless of cross-track scope.
   const singleCurveId = store.getSelectedCurveId();
   if (singleCurveId && !shiftKey) {
-    const curve = track.curves.find(c => c.id === singleCurveId);
+    const curve = activeTrack.curves.find(c => c.id === singleCurveId);
     if (curve) {
       for (let i = 0; i < curve.points.length; i++) {
         const pt = curve.points[i]!;
@@ -697,27 +711,31 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
     }
   }
 
-  // Hit-test curve segments (click on the line between points)
-  for (const curve of track.curves) {
-    if (curve.points.length < 2) continue;
-    for (let i = 0; i < curve.points.length - 1; i++) {
-      const seg = getSegmentControlPoints(curve, i);
-      if (!seg) continue;
-      const nearest = nearestPointOnCubic(seg.p0, seg.p1, seg.p2, seg.p3, worldPt);
-      if (nearest.dist < hitRadius) {
-        if (shiftKey) {
-          store.toggleSelectedCurve(curve.id);
-        } else {
-          store.setSelectedCurve(curve.id);
+  // Phase 3: curve segments (click on the line between points).
+  for (const t of candidateTracks) {
+    for (const curve of t.curves) {
+      if (curve.points.length < 2) continue;
+      for (let i = 0; i < curve.points.length - 1; i++) {
+        const seg = getSegmentControlPoints(curve, i);
+        if (!seg) continue;
+        const nearest = nearestPointOnCubic(seg.p0, seg.p1, seg.p2, seg.p3, worldPt);
+        if (nearest.dist < hitRadius) {
+          if (shiftKey) {
+            store.toggleSelectedCurve(curve.id);
+            rebuildTransformBox(istate, activeTrack);
+          } else {
+            if (t.id !== activeTrack.id) store.setSelectedTrack(t.id);
+            store.setSelectedCurve(curve.id);
+            store.setSelectedPoint(null);
+            rebuildTransformBox(istate, t);
+          }
+          return;
         }
-        store.setSelectedPoint(null);
-        rebuildTransformBox(istate, track);
-        return;
       }
     }
   }
 
-  // Click on empty space → deselect (unless Shift held)
+  // Click on empty space → deselect (unless Shift held).
   if (!shiftKey) {
     store.setSelectedCurve(null);
     store.setSelectedPoint(null);
