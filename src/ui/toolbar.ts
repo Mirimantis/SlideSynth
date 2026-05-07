@@ -1,7 +1,9 @@
 import { SCALE_CATALOG, getScaleGroups } from '../utils/scales';
 
 export interface ToolbarCallbacks {
-  onScaleRootChange(root: number | null): void;
+  /** 8.19: Key dropdown is tri-state. Chromatic = (null, false), None = (null, true),
+   *  scale tone = (0..11, false). hidePitchLines is only meaningful when root===null. */
+  onScaleRootChange(root: number | null, hidePitchLines: boolean): void;
   onScaleIdChange(scaleId: string | null): void;
 }
 
@@ -9,7 +11,7 @@ export function createToolbar(
   container: HTMLElement,
   callbacks: ToolbarCallbacks,
 ): {
-  updateScaleRoot(root: number | null): void;
+  updateScaleRoot(root: number | null, hidePitchLines: boolean): void;
   updateScaleId(scaleId: string | null): void;
 } {
   // Build scale type <optgroup> options
@@ -28,6 +30,7 @@ export function createToolbar(
       <div class="toolbar-group scale">
         <label>Key</label>
         <select id="scale-root">
+          <option value="chromatic">Chromatic</option>
           <option value="none">None</option>
           <option value="0">C</option>
           <option value="1">C#</option>
@@ -55,12 +58,15 @@ export function createToolbar(
 
   scaleRootSelect.addEventListener('change', () => {
     const val = scaleRootSelect.value;
-    if (val === 'none') {
+    if (val === 'chromatic') {
       scaleTypeSelect.disabled = true;
-      callbacks.onScaleRootChange(null);
+      callbacks.onScaleRootChange(null, false);
+    } else if (val === 'none') {
+      scaleTypeSelect.disabled = true;
+      callbacks.onScaleRootChange(null, true);
     } else {
       scaleTypeSelect.disabled = false;
-      callbacks.onScaleRootChange(Number(val));
+      callbacks.onScaleRootChange(Number(val), false);
       callbacks.onScaleIdChange(scaleTypeSelect.value);
     }
     scaleRootSelect.blur();
@@ -72,8 +78,10 @@ export function createToolbar(
   });
 
   return {
-    updateScaleRoot(root: number | null) {
-      scaleRootSelect.value = root === null ? 'none' : String(root);
+    updateScaleRoot(root: number | null, hidePitchLines: boolean) {
+      scaleRootSelect.value = root === null
+        ? (hidePitchLines ? 'none' : 'chromatic')
+        : String(root);
       scaleTypeSelect.disabled = root === null;
     },
     updateScaleId(scaleId: string | null) {

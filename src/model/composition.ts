@@ -13,6 +13,7 @@ export function createDefaultSnapSettings(): SnapSettings {
     enabled: DEFAULT_SNAP_ENABLED,
     scaleRoot: null,
     scaleId: null,
+    hidePitchLines: false,
     magneticEnabled: DEFAULT_MAGNETIC_ENABLED,
     magneticStrength: DEFAULT_MAGNETIC_STRENGTH,
     magneticSpringK: DEFAULT_MAGNETIC_SPRING_K,

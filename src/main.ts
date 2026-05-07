@@ -472,15 +472,35 @@ playback.setSchedulerHook((fromBeat, toBeat, comp, beatToAudioTime) => {
 // ── Toolbar ─────────────────────────────────────────────────────
 const toolbarContainer = document.getElementById('toolbar')!;
 
-createToolbar(toolbarContainer, {
-  onScaleRootChange(root: number | null) {
-    store.setScaleRoot(root);
+const toolbar = createToolbar(toolbarContainer, {
+  onScaleRootChange(root: number | null, hidePitchLines: boolean) {
+    store.setScaleRoot(root, hidePitchLines);
     bgDirty = true;
   },
   onScaleIdChange(scaleId: string | null) {
     store.setScaleId(scaleId);
     bgDirty = true;
   },
+});
+
+// Sync toolbar dropdowns to AppState — so load-composition / undo / redo restore
+// the visible Key + Scale Type selection. Tracks last-rendered values to avoid
+// thrashing the <select> on every store notify.
+let lastToolbarScaleRoot: number | null | undefined = undefined;
+let lastToolbarHidePitchLines: boolean | undefined = undefined;
+let lastToolbarScaleId: string | null | undefined = undefined;
+store.subscribe(() => {
+  const s = store.getState();
+  if (s.scaleRoot !== lastToolbarScaleRoot || s.hidePitchLines !== lastToolbarHidePitchLines) {
+    toolbar.updateScaleRoot(s.scaleRoot, s.hidePitchLines);
+    lastToolbarScaleRoot = s.scaleRoot;
+    lastToolbarHidePitchLines = s.hidePitchLines;
+    bgDirty = true;
+  }
+  if (s.scaleId !== lastToolbarScaleId) {
+    toolbar.updateScaleId(s.scaleId);
+    lastToolbarScaleId = s.scaleId;
+  }
 });
 
 // ── Tool panel (left sidebar, between Transport and Tracks) ────
@@ -2651,7 +2671,7 @@ function render() {
     const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
     const measureLen = measureLengthInBeats(comp);
     bgCtx.clearRect(0, 0, rect.width, rect.height);
-    renderStaff(bgCtx, viewport, rect.width, rect.height, measureLen, scaleRoot, scale);
+    renderStaff(bgCtx, viewport, rect.width, rect.height, measureLen, scaleRoot, scale, state.hidePitchLines);
     renderRuler(bgCtx, viewport, rect.width, measureLen, comp.bpm);
     bgDirty = false;
   }

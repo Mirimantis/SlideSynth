@@ -72,6 +72,11 @@ export interface SnapSettings {
   enabled: boolean;
   scaleRoot: number | null;     // 0..11, or null = no scale
   scaleId: string | null;       // ScaleDefinition.id, or null
+  /** When true: hide the default chromatic pitch lines and disable the
+   *  integer-semitone Y-snap fallback. Scale snap, projection echoes, and
+   *  user guides still work. Toolbar's "None" Key option (8.19) sets this
+   *  alongside scaleRoot=null; "Chromatic" leaves it false. */
+  hidePitchLines: boolean;
   magneticEnabled: boolean;
   magneticStrength: number;     // 0..1
   magneticSpringK: number;      // 1..50
@@ -185,6 +190,7 @@ export interface AppState {
   snapEnabled: boolean;
   scaleRoot: number | null;    // 0-11, or null = no scale
   scaleId: string | null;      // ScaleDefinition.id, or null
+  hidePitchLines: boolean;     // true = "None" Key mode (no default semitone lines, no chromatic Y-snap)
   magneticEnabled: boolean;
   magneticStrength: number;
   magneticSpringK: number;
