@@ -115,7 +115,7 @@ Items that came up while building Phase 6 but are independent features. Each bec
   The perform-engine AFK timeout (`afkTimeoutMs` in [src/canvas/performance-engine.ts](src/canvas/performance-engine.ts)) currently fires whenever record is armed and there's no input activity, even when the session has a meaningful reason to keep waiting. Suppress the auto-stop when (a) Loop is enabled (the user is intentionally recording over loops), or (b) the playhead hasn't yet reached the rightmost control point in the composition (there's still future content to record over). Update `tickComposePerform`'s `onAfkTimeout` gate or thread the new conditions through `TickArgs`.
 
 ### Selection & editing
-- [x] **8.3 Multi-select points: shift-click + drag-marquee** *(M, PR TBD)*
+- [x] **8.3 Multi-select points: shift-click + drag-marquee** *(M, PR #51)*
   Shift+click on anchor toggles individual point in `selectedPointKeys: Set<string>` (`<curveId>:<idx>` keys); shift+click on segment still toggles whole curve. Drag-marquee on empty canvas selects anchor points inside rect (active track only). Group-drag translates all selected points together via the existing Transform Box (with `pointIndicesPerCurve` filter). Delete removes selected points (drops curves below 2 points). Transform Box scale + octave shift act on the subset. Alt-drag duplicate, copy/paste, scissors/join on subsets deferred to follow-up.
 
 - [x] **8.23 Cross-track curve selection (Select tool)** *(S, PR #48)*
