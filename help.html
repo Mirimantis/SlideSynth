@@ -347,7 +347,11 @@
       <ul>
         <li>Click a point to select it — drag to move it.</li>
         <li>Click a curve segment to select the whole curve.</li>
-        <li><kbd>Shift</kbd>+click to add/remove curves from a multi-selection.</li>
+        <li><kbd>Shift</kbd>+click on a <em>point</em> to add/remove that point from a multi-point selection.</li>
+        <li><kbd>Shift</kbd>+click on a <em>curve segment</em> to add/remove the whole curve from a multi-curve selection.</li>
+        <li>Drag a rectangle on empty canvas to <strong>marquee-select</strong> every anchor point inside the rect (active track only). Hold <kbd>Shift</kbd> to add to the existing selection.</li>
+        <li>With multiple points selected, drag any one of them to translate the whole group together. Press <kbd>Delete</kbd> to remove every selected point (curves that drop below 2 points are removed).</li>
+        <li>The Transform Box wraps just the selected points when you have a multi-point selection — its scale handles and octave arrows act on those points only.</li>
         <li>When a single curve is selected, drag its handles (handleIn / handleOut) to adjust curvature.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to the horizontal or vertical axis.</li>
         <li>Right-click anywhere on the canvas to open an action menu with
