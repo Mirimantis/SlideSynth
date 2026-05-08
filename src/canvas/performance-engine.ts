@@ -42,6 +42,9 @@ export interface PerformanceEngine {
    */
   finalizeCurve(voiceId: VoiceId, onFirstCommit: () => void): BezierCurve | null;
   clearBuffer(voiceId: VoiceId): void;
+  /** Read-only view of the per-voice in-flight sample buffers. Used by the
+   *  renderer to draw a live trail behind the planchette during recording. */
+  getRecordingBuffers(): ReadonlyMap<VoiceId, readonly RecordedSample[]>;
 
   tick(args: TickArgs): void;
 
@@ -123,6 +126,10 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
     clearBuffer(voiceId) {
       const buf = recordingBuffers.get(voiceId);
       if (buf) buf.length = 0;
+    },
+
+    getRecordingBuffers() {
+      return recordingBuffers;
     },
 
     tick(args) {

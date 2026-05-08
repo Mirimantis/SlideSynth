@@ -20,7 +20,7 @@ import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
 import { createMidiInput } from './audio/midi-input';
 import { createMagneticState, updateMagnetic, resetMagnetic } from './utils/snap-magnetic';
-import { renderPlanchettes, renderFreePlanchette, renderRail, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
+import { renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
 import { renderToolPropertyPanel } from './ui/tool-property-panel';
 import { openToneBuilder } from './ui/tone-builder';
@@ -2851,6 +2851,18 @@ function render() {
   if (state.guidesVisible && comp.guides.length > 0) {
     renderGuides(fgCtx, viewport, comp.guides, rect.width, rect.height, state.selectedGuideId);
   }
+
+  // Live recording trail: polyline of in-flight samples per voice. Drawn above
+  // committed curves but below the rail/planchette glyph so the planchette
+  // visually leads the trail. Buffers are cleared on finalize, so the trail
+  // disappears the same frame the simplified curve commits.
+  renderRecordingTrails(
+    fgCtx,
+    viewport,
+    composeEngine.getRecordingBuffers(),
+    rect.height,
+    state.harmonicPrism.drawMode,
+  );
 
   // Playhead vs Rail.
   // Scroll Canvas ON (or Record forcing it on): the playhead becomes a stationary rail
