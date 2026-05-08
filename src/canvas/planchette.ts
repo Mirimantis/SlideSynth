@@ -1,4 +1,5 @@
 import type { PlanchetteState } from '../types';
+import type { RecordedSample } from '../model/curve';
 import type { Viewport } from './viewport';
 import { RULER_HEIGHT } from './interaction';
 import { PRISM_RAINBOW_STOPS } from './projection-renderer';
@@ -237,6 +238,71 @@ export function renderMetronomeFlash(
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   ctx.stroke();
+  ctx.restore();
+}
+
+/** Resolve a solid stroke color for an in-flight recording trail by voiceId.
+ *  Mirrors `prismPlanchetteStroke` but always returns a string (gradients are
+ *  anchored to the planchette circle and don't tile cleanly along a polyline).
+ *  In Prism mode the primary voice borrows the middle rainbow stop so it reads
+ *  as the "prism" voice without the gradient. */
+export function recordingTrailColor(voiceId: string, prismMode: boolean): string {
+  if (prismMode) {
+    if (voiceId === 'primary') {
+      return PRISM_RAINBOW_STOPS[Math.floor(PRISM_RAINBOW_STOPS.length / 2)] ?? PRIMARY_COLOR;
+    }
+    if (voiceId.startsWith('harmony-')) {
+      const idx = Number(voiceId.slice('harmony-'.length));
+      if (Number.isInteger(idx) && idx >= 0 && idx < PRISM_RAINBOW_STOPS.length) {
+        return PRISM_RAINBOW_STOPS[idx]!;
+      }
+    }
+  }
+  return PRIMARY_COLOR;
+}
+
+/**
+ * Render a live polyline behind each in-flight recording voice. Reads the raw
+ * per-voice sample buffer from the performance engine and strokes one polyline
+ * per voice in world coordinates, so Scroll Canvas mode pans the trail with
+ * the canvas. Buffers are cleared by `finalizeCurve` / `stopSession`, so the
+ * trail vanishes the same frame the simplified curve commits.
+ */
+export function renderRecordingTrails(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  buffers: ReadonlyMap<string, readonly RecordedSample[]>,
+  canvasHeight: number,
+  prismMode: boolean,
+): void {
+  const topY = RULER_HEIGHT;
+  ctx.save();
+  ctx.globalAlpha = 0.7;
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const [voiceId, samples] of buffers) {
+    if (samples.length < 2) continue;
+    ctx.strokeStyle = recordingTrailColor(voiceId, prismMode);
+    ctx.beginPath();
+    let started = false;
+    for (const s of samples) {
+      const scr = vp.worldToScreen(s.beat, s.note);
+      // Skip points outside the canvas body but keep the polyline continuous
+      // by re-entering with moveTo when we come back in range.
+      if (scr.sy < topY || scr.sy > canvasHeight) {
+        started = false;
+        continue;
+      }
+      if (!started) {
+        ctx.moveTo(scr.sx, scr.sy);
+        started = true;
+      } else {
+        ctx.lineTo(scr.sx, scr.sy);
+      }
+    }
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
