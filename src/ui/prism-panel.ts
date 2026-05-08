@@ -89,9 +89,26 @@ export function createPrismPanel(container: HTMLElement): { refresh(): void } {
         <label for="prism-octaves">Octaves ±</label>
         <input type="number" id="prism-octaves" min="0" max="3" step="1" value="${s.projectionOctaveRange}" title="How many octaves above and below the source to echo" />
       </div>
+      <div class="panel-header" style="margin-top:8px">Voicing</div>
+      ${voicingRowsHtml(spec.numVoices, spec.voiceOctaveOffsets)}
     `;
 
     wireInputs();
+  }
+
+  function voicingRowsHtml(numVoices: number, offsets: number[]): string {
+    const rows: string[] = [];
+    for (let i = 0; i < numVoices; i++) {
+      const value = offsets[i] ?? 0;
+      const label = i === 0 ? 'Voice 1 (root)' : `Voice ${i + 1}`;
+      rows.push(`
+        <div class="prism-row">
+          <label for="prism-voice-oct-${i}">${label}</label>
+          <input type="number" id="prism-voice-oct-${i}" data-voice-index="${i}" class="prism-voice-oct" min="-2" max="2" step="1" value="${value}" title="Octave offset for this voice (±2). Lets you spread voicings or build inversions — e.g. 1st inversion = +1 on voice 1." />
+        </div>
+      `);
+    }
+    return rows.join('');
   }
 
   function wireInputs() {
@@ -142,6 +159,25 @@ export function createPrismPanel(container: HTMLElement): { refresh(): void } {
     });
     container.querySelector('#prism-octaves')?.addEventListener('input', (e) => {
       store.setPrismOctaveRange(Number((e.target as HTMLInputElement).value));
+    });
+
+    // 8.13: per-voice octave offsets. Each row reads the live spec, splices in
+    // its own value at its voice index, and pushes the array back. Empty
+    // trailing zeros are preserved so JSON round-trip stays deterministic.
+    const voiceInputs = container.querySelectorAll<HTMLInputElement>('.prism-voice-oct');
+    voiceInputs.forEach((input) => {
+      input.addEventListener('input', () => {
+        const idx = Number(input.dataset.voiceIndex);
+        const raw = Number(input.value);
+        if (!Number.isFinite(raw)) return;
+        const clamped = Math.max(-2, Math.min(2, Math.round(raw)));
+        const current = store.getState().harmonicPrism.chordSpec.voiceOctaveOffsets;
+        // Pad with zeros up to idx so splice lands at the right index.
+        const next = current.slice();
+        while (next.length <= idx) next.push(0);
+        next[idx] = clamped;
+        store.setPrismChordSpec({ voiceOctaveOffsets: next });
+      });
     });
   }
 
