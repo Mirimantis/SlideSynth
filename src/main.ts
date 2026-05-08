@@ -3,6 +3,7 @@ import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZO
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
+import { renderMarquee } from './canvas/marquee-renderer';
 import { renderProjection, renderProjectionSourceHighlight, renderPrismDrawPreview } from './canvas/projection-renderer';
 import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
@@ -373,6 +374,10 @@ let scrubWasPlaying = false;
 // True while a ruler-drag is driving the scrub preview, so we can stop it cleanly on release
 // without interfering with a spacebar-driven preview.
 let rulerScrubPreviewActive = false;
+// Dev-only debug accessor: lets the verification harness probe interaction
+// + store state. Stripped by the bundler in production via tree-shaking on
+// import.meta.env.DEV (Vite). Safe to leave in place — it only attaches under
+// the dev server.
 const interaction = createInteraction(fgCanvas, viewport, {
   onPlayheadScrub(beats, phase) {
     if (phase === 'start') {
@@ -1674,6 +1679,46 @@ window.addEventListener('keydown', (e) => {
         bgDirty = true;
         break;
       }
+      // Multi-point delete (BACKLOG 8.3): when there are 2+ selected points
+      // (or a single multi-point selection that doesn't match selectedPointIndex
+      // single-point semantics), remove every selected point. Curves that drop
+      // below 2 points are removed entirely (a 0/1-point curve is degenerate
+      // and won't render any segment).
+      if (s.selectedPointKeys.size >= 1 && (s.selectedPointKeys.size > 1 || s.selectedPointIndex === null)) {
+        history.snapshot();
+        const byCurve = new Map<string, number[]>();
+        for (const key of s.selectedPointKeys) {
+          const sep = key.lastIndexOf(':');
+          if (sep < 0) continue;
+          const cid = key.slice(0, sep);
+          const idx = Number(key.slice(sep + 1));
+          if (!Number.isFinite(idx)) continue;
+          let arr = byCurve.get(cid);
+          if (!arr) { arr = []; byCurve.set(cid, arr); }
+          arr.push(idx);
+        }
+        store.mutate(comp => {
+          for (const track of comp.tracks) {
+            for (let ci = track.curves.length - 1; ci >= 0; ci--) {
+              const curve = track.curves[ci]!;
+              const indices = byCurve.get(curve.id);
+              if (!indices) continue;
+              // Sort descending so splice doesn't shift later indices we still need.
+              indices.sort((a, b) => b - a);
+              for (const idx of indices) {
+                if (idx >= 0 && idx < curve.points.length) curve.points.splice(idx, 1);
+              }
+              if (curve.points.length < 2) {
+                track.curves.splice(ci, 1);
+              }
+            }
+          }
+        });
+        store.clearPointSelection();
+        store.setSelectedCurve(null);
+        bgDirty = true;
+        break;
+      }
       // Delete selected point (only when a single curve is selected with a point)
       const delCurveId = store.getSelectedCurveId();
       if (delCurveId && s.selectedPointIndex !== null) {
@@ -2745,6 +2790,7 @@ function render() {
       isActiveTrack ? store.getSelectedCurveId() : null,
       isActiveTrack ? state.selectedPointIndex : null,
       isActiveTrack,
+      isActiveTrack ? state.selectedPointKeys : null,
     );
   }
 
@@ -2929,6 +2975,12 @@ function render() {
     renderMetronomeFlash(fgCtx, flashX, flashY, flashAge, lastMetronomeClickTier);
   }
 
+  // Drag-marquee rubber-band (BACKLOG 8.3) — drawn on top of everything else
+  // so it's always visible during the drag.
+  if (interaction.marquee) {
+    renderMarquee(fgCtx, viewport, interaction.marquee.startWorld, interaction.marquee.currentWorld);
+  }
+
   // Free planchette: Idle + Space-hold draw preview + cursor over canvas.
   // Rendered at cursor X so the user sees exactly where they'd place / are hearing.
   if (freePlanchetteVisible && interaction.cursorWorld) {
@@ -2968,6 +3020,11 @@ function syncCompositionDerived() {
   viewport.canvasExtent = extent;
   viewport.compLengthBeats = length;
   lengthDisplay.textContent = formatLengthMMSS(length, comp.bpm);
+}
+
+if (import.meta.env.DEV) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__debug = { store, interaction, viewport };
 }
 
 // ── Store subscription ──────────────────────────────────────────

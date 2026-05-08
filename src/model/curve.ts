@@ -389,6 +389,37 @@ export function computeMultiCurveBBox(curves: BezierCurve[]): BoundingBox {
   };
 }
 
+/** Bounding box from a subset of points within curves (BACKLOG 8.3 — multi-point
+ *  Transform Box). Falls back to `computeMultiCurveBBox` if `pointIndicesPerCurve`
+ *  is empty or maps to no valid points. */
+export function computePointSubsetBBox(
+  curves: BezierCurve[],
+  pointIndicesPerCurve: Map<string, Set<number>>,
+): BoundingBox {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let any = false;
+  for (const curve of curves) {
+    const indices = pointIndicesPerCurve.get(curve.id);
+    if (!indices) continue;
+    for (const idx of indices) {
+      const pt = curve.points[idx];
+      if (!pt) continue;
+      any = true;
+      if (pt.position.x < minX) minX = pt.position.x;
+      if (pt.position.y < minY) minY = pt.position.y;
+      if (pt.position.x > maxX) maxX = pt.position.x;
+      if (pt.position.y > maxY) maxY = pt.position.y;
+    }
+  }
+  if (!any) return computeMultiCurveBBox(curves);
+  return {
+    minX: minX - BBOX_PAD_X,
+    minY: minY - BBOX_PAD_Y,
+    maxX: maxX + BBOX_PAD_X,
+    maxY: maxY + BBOX_PAD_Y,
+  };
+}
+
 /** Sample captured during a glissandograph recording. */
 export interface RecordedSample {
   beat: number;
@@ -486,6 +517,11 @@ export function deepCopyPoints(points: ControlPoint[]): ControlPoint[] {
 /**
  * Apply a transform to all curve points based on the original snapshot.
  * Mutates curve.points in place.
+ *
+ * If `pointIndices` is provided, only points whose index is in the set are
+ * transformed; the rest stay at their snapshot positions (BACKLOG 8.3).
+ * Without `pointIndices`, every point of the curve is transformed (legacy
+ * whole-curve behavior).
  */
 export function applyTransformToCurve(
   curve: BezierCurve,
@@ -494,14 +530,22 @@ export function applyTransformToCurve(
   handle: TransformHandle,
   dragStart: Vec2,
   dragCurrent: Vec2,
+  pointIndices?: Set<number> | null,
 ): void {
   const dx = dragCurrent.x - dragStart.x;
   const dy = dragCurrent.y - dragStart.y;
+  const filtered = pointIndices && pointIndices.size > 0;
 
   if (handle === 'translate') {
     for (let i = 0; i < curve.points.length; i++) {
       const orig = originalPoints[i]!;
       const pt = curve.points[i]!;
+      if (filtered && !pointIndices!.has(i)) {
+        // Untouched point: snap back to its snapshot (in case a previous frame moved it).
+        pt.position.x = orig.position.x;
+        pt.position.y = orig.position.y;
+        continue;
+      }
       pt.position.x = orig.position.x + dx;
       pt.position.y = orig.position.y + dy;
       // Handles are relative — unchanged during translation
@@ -538,6 +582,14 @@ export function applyTransformToCurve(
   for (let i = 0; i < curve.points.length; i++) {
     const orig = originalPoints[i]!;
     const pt = curve.points[i]!;
+    if (filtered && !pointIndices!.has(i)) {
+      // Untouched point: snap back to its snapshot.
+      pt.position.x = orig.position.x;
+      pt.position.y = orig.position.y;
+      pt.handleIn = orig.handleIn ? { ...orig.handleIn } : null;
+      pt.handleOut = orig.handleOut ? { ...orig.handleOut } : null;
+      continue;
+    }
     pt.position.x = anchorX + (orig.position.x - anchorX) * scaleX;
     pt.position.y = anchorY + (orig.position.y - anchorY) * scaleY;
     if (orig.handleIn) {

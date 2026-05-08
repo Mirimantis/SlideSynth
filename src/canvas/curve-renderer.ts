@@ -24,13 +24,14 @@ export function renderCurves(
   selectedPointCurveId: string | null,
   selectedPointIndex: number | null,
   isActiveTrack: boolean = true,
+  selectedPointKeys: ReadonlySet<string> | null = null,
 ): void {
   const prevAlpha = ctx.globalAlpha;
   if (!isActiveTrack) ctx.globalAlpha = prevAlpha * INACTIVE_TRACK_ALPHA;
   for (const curve of curves) {
     const isSelected = selectedCurveIds.has(curve.id);
     const showHandles = isSelected && curve.id === selectedPointCurveId;
-    renderCurve(ctx, vp, curve, tone, isSelected, showHandles, selectedPointIndex);
+    renderCurve(ctx, vp, curve, tone, isSelected, showHandles, selectedPointIndex, selectedPointKeys);
   }
   if (!isActiveTrack) ctx.globalAlpha = prevAlpha;
 }
@@ -43,6 +44,7 @@ function renderCurve(
   isSelected: boolean,
   showHandles: boolean,
   selectedPointIndex: number | null,
+  selectedPointKeys: ReadonlySet<string> | null,
 ): void {
   if (curve.points.length === 0) return;
 
@@ -76,7 +78,13 @@ function renderCurve(
   for (let i = 0; i < curve.points.length; i++) {
     const pt = curve.points[i]!;
     const screen = vp.worldToScreen(pt.position.x, pt.position.y);
-    const isPointSelected = showHandles && selectedPointIndex === i;
+    const inMultiPointSelection = !!selectedPointKeys && selectedPointKeys.has(`${curve.id}:${i}`);
+    // White-fill highlight when this point is the primary (showHandles +
+    // selectedPointIndex match) OR when it's part of the multi-point set
+    // (BACKLOG 8.3). The volume bar still requires showHandles since it's
+    // an editing affordance and only one point is "primary".
+    const isPointHighlighted = (showHandles && selectedPointIndex === i) || inMultiPointSelection;
+    const isPrimary = showHandles && selectedPointIndex === i;
 
     if (showHandles) {
       // Draw handles when curve is selected and in single-select/point mode
@@ -90,14 +98,14 @@ function renderCurve(
       // Full-size anchor point
       ctx.beginPath();
       ctx.arc(screen.sx, screen.sy, POINT_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = isPointSelected ? '#fff' : tone.color;
+      ctx.fillStyle = isPointHighlighted ? '#fff' : tone.color;
       ctx.fill();
-      ctx.strokeStyle = isPointSelected ? '#fff' : '#000';
+      ctx.strokeStyle = isPointHighlighted ? '#fff' : '#000';
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // Volume indicator: small bar below point
-      if (isPointSelected) {
+      // Volume indicator: small bar below point (primary point only)
+      if (isPrimary) {
         const barWidth = 20;
         const barHeight = 3;
         const barX = screen.sx - barWidth / 2;
@@ -111,12 +119,14 @@ function renderCurve(
         ctx.fillRect(barX, barY, barWidth * pt.volume, barHeight);
       }
     } else if (isSelected) {
-      // Selected but no handles (multi-select): full-size anchor, no handles
+      // Selected but no handles (multi-curve or multi-point mode): full-size
+      // anchor; white-fill any point that's part of the multi-point selection
+      // so users see exactly which points the next op will hit.
       ctx.beginPath();
       ctx.arc(screen.sx, screen.sy, POINT_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = tone.color;
+      ctx.fillStyle = inMultiPointSelection ? '#fff' : tone.color;
       ctx.fill();
-      ctx.strokeStyle = '#000';
+      ctx.strokeStyle = inMultiPointSelection ? '#fff' : '#000';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     } else {

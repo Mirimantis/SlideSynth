@@ -140,6 +140,7 @@ function createInitialState(): AppState {
     selectedTrackId: null,
     selectedCurveIds: new Set(),
     selectedPointIndex: null,
+    selectedPointKeys: new Set(),
     activeTool: 'draw',
     performance: {
       phase: 'idle',
@@ -228,6 +229,7 @@ class Store {
     this.state.selectedTrackId = trackId;
     this.state.selectedCurveIds = new Set();
     this.state.selectedPointIndex = null;
+    this.state.selectedPointKeys = new Set();
     this.state.selectedGuideId = null;
     // Keep the primary planchette pointing at the selected track for recording/sounding.
     const primary = this.state.performance.planchettes.find(p => p.voiceId === 'primary');
@@ -239,6 +241,7 @@ class Store {
   setSelectedCurve(curveId: string | null) {
     this.state.selectedCurveIds = curveId ? new Set([curveId]) : new Set();
     this.state.selectedPointIndex = null;
+    this.state.selectedPointKeys = new Set();
     if (curveId !== null) this.state.selectedGuideId = null;
     this.notify();
   }
@@ -247,6 +250,7 @@ class Store {
   setSelectedCurves(curveIds: string[]) {
     this.state.selectedCurveIds = new Set(curveIds);
     this.state.selectedPointIndex = null;
+    this.state.selectedPointKeys = new Set();
     if (curveIds.length > 0) this.state.selectedGuideId = null;
     this.notify();
   }
@@ -266,6 +270,9 @@ class Store {
       this.state.selectedCurveIds.add(curveId);
     }
     this.state.selectedPointIndex = null;
+    // Curve-level toggle clears point selection: the multi-point set is a
+    // separate selection mode and shouldn't survive a curve-toggle keystroke.
+    this.state.selectedPointKeys = new Set();
     this.notify();
   }
 
@@ -279,6 +286,98 @@ class Store {
 
   setSelectedPoint(index: number | null) {
     this.state.selectedPointIndex = index;
+    this.notify();
+  }
+
+  // ── Multi-point selection (BACKLOG 8.3) ────────────────────────
+
+  /** Replace the multi-point selection. Pass `null` (or empty set) to clear.
+   *  Caller is responsible for keeping `selectedCurveIds` in sync (typically
+   *  set to the union of parent-curve IDs). */
+  setSelectedPointKeys(keys: ReadonlySet<string> | null) {
+    this.state.selectedPointKeys = keys ? new Set(keys) : new Set();
+    // If exactly one point is selected on the (single) selected curve, sync
+    // the primary-point pointer so handles render. Otherwise clear it —
+    // multi-point mode doesn't draw handles.
+    if (this.state.selectedPointKeys.size === 1) {
+      const onlyKey = [...this.state.selectedPointKeys][0]!;
+      const sep = onlyKey.lastIndexOf(':');
+      const curveId = sep >= 0 ? onlyKey.slice(0, sep) : null;
+      const idx = sep >= 0 ? Number(onlyKey.slice(sep + 1)) : NaN;
+      const single = this.getSelectedCurveId();
+      this.state.selectedPointIndex = (single && curveId === single && Number.isFinite(idx)) ? idx : null;
+    } else {
+      this.state.selectedPointIndex = null;
+    }
+    this.notify();
+  }
+
+  /** Toggle a single point in/out of the multi-selection. */
+  togglePointKey(curveId: string, idx: number) {
+    const key = `${curveId}:${idx}`;
+    if (this.state.selectedPointKeys.has(key)) {
+      this.state.selectedPointKeys.delete(key);
+    } else {
+      this.state.selectedPointKeys.add(key);
+    }
+    if (this.state.selectedPointKeys.size === 1) {
+      const onlyKey = [...this.state.selectedPointKeys][0]!;
+      const sep = onlyKey.lastIndexOf(':');
+      const oc = sep >= 0 ? onlyKey.slice(0, sep) : null;
+      const oi = sep >= 0 ? Number(onlyKey.slice(sep + 1)) : NaN;
+      const single = this.getSelectedCurveId();
+      this.state.selectedPointIndex = (single && oc === single && Number.isFinite(oi)) ? oi : null;
+    } else {
+      this.state.selectedPointIndex = null;
+    }
+    this.notify();
+  }
+
+  /** Add a batch of point keys (used by additive marquee drag). */
+  addPointKeys(keys: Iterable<string>) {
+    for (const k of keys) this.state.selectedPointKeys.add(k);
+    if (this.state.selectedPointKeys.size === 1) {
+      const onlyKey = [...this.state.selectedPointKeys][0]!;
+      const sep = onlyKey.lastIndexOf(':');
+      const oc = sep >= 0 ? onlyKey.slice(0, sep) : null;
+      const oi = sep >= 0 ? Number(onlyKey.slice(sep + 1)) : NaN;
+      const single = this.getSelectedCurveId();
+      this.state.selectedPointIndex = (single && oc === single && Number.isFinite(oi)) ? oi : null;
+    } else {
+      this.state.selectedPointIndex = null;
+    }
+    this.notify();
+  }
+
+  /** Drop every point-selection key. Doesn't touch curve selection. */
+  clearPointSelection() {
+    if (this.state.selectedPointKeys.size === 0) return;
+    this.state.selectedPointKeys = new Set();
+    this.notify();
+  }
+
+  /** Sync `selectedCurveIds` to the union of curves referenced by
+   *  `selectedPointKeys`, and re-derive `selectedPointIndex` (set to the
+   *  primary index iff exactly one point is selected on the resulting single
+   *  selected curve). Used after every point-selection toggle so the
+   *  curve-level selection (which drives curve highlight + transform-box
+   *  membership) stays consistent. Does NOT clear the point set. */
+  syncSelectedCurvesFromPoints() {
+    const parents = new Set<string>();
+    for (const key of this.state.selectedPointKeys) {
+      const sep = key.lastIndexOf(':');
+      if (sep > 0) parents.add(key.slice(0, sep));
+    }
+    this.state.selectedCurveIds = parents;
+    if (parents.size > 0) this.state.selectedGuideId = null;
+    if (this.state.selectedPointKeys.size === 1 && parents.size === 1) {
+      const onlyKey = [...this.state.selectedPointKeys][0]!;
+      const sep = onlyKey.lastIndexOf(':');
+      const idx = sep >= 0 ? Number(onlyKey.slice(sep + 1)) : NaN;
+      this.state.selectedPointIndex = Number.isFinite(idx) ? idx : null;
+    } else {
+      this.state.selectedPointIndex = null;
+    }
     this.notify();
   }
 

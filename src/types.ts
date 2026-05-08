@@ -181,6 +181,14 @@ export interface AppState {
   selectedTrackId: string | null;
   selectedCurveIds: Set<string>;
   selectedPointIndex: number | null;
+  /** Multi-point selection (BACKLOG 8.3). Keys are `<curveId>:<idx>`.
+   *  - When size === 1 and that key matches the single selected curve, this
+   *    is in sync with `selectedPointIndex` (the "primary" point that draws
+   *    handles). When size > 1, no point is "primary": handles are not drawn.
+   *  - Cleared when the composition is mutated in a way that could invalidate
+   *    indices, by mutators that clear curve selection (track switch, curve
+   *    selection replace), and on selection-cancel paths. */
+  selectedPointKeys: Set<string>;
   activeTool: ToolMode;
   performance: PerformanceState;
   viewport: ViewportState;
@@ -241,6 +249,9 @@ export interface TransformBoxState {
   bbox: BoundingBox;
   activeHandle: TransformHandle | null;
   dragStart: Vec2 | null;
+  /** When set, transforms only apply to these point indices per curve
+   *  (point-subset mode, BACKLOG 8.3). Null means whole-curve transforms. */
+  pointIndicesPerCurve: Map<string, Set<number>> | null;
 }
 
 // ── Audio Samples ───────────────────────────────────────────────
