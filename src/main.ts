@@ -27,6 +27,7 @@ import { renderToolPropertyPanel } from './ui/tool-property-panel';
 import { openToneBuilder } from './ui/tone-builder';
 import { openTonePicker } from './ui/tone-picker';
 import { openPresetSaveDialog } from './ui/preset-save-dialog';
+import { openMidiArmDialog } from './ui/midi-arm-dialog';
 import { BUILTIN_SNAP_PRESETS, loadUserSnapPresets, saveUserSnapPresets, presetMatches, snapshotPreset, type SnapPreset } from './utils/snap-presets';
 import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile } from './export/json-export';
 import { midiToComposition } from './export/midi-import';
@@ -714,6 +715,11 @@ timeSigSelect.addEventListener('change', () => {
 const midiInput = createMidiInput();
 const midiDeviceSelect = document.getElementById('input-midi-device') as HTMLSelectElement;
 
+// One-shot guard for the "you have MIDI but no track is armed" toast. Reset
+// when the user changes device or disarms a track, so the hint can fire again
+// the next time the user falls into the same state.
+let midiArmHintShown = false;
+
 function refreshMidiDeviceList() {
   const active = midiInput.getActiveDeviceId();
   const devices = midiInput.getDevices();
@@ -742,6 +748,14 @@ midiInput.onNoteOn((note, velocity) => {
   preview.startDrawPreview(tone, note, `midi-${note}`);
   // velocity reserved for a future loudness-mapped preview; stable mid-volume for now.
   void velocity;
+
+  // Safety-net hint: if MIDI is sounding but no track is armed, the user's
+  // notes are not being recorded. Surface a once-per-episode toast pointing
+  // at the "I" arm button. Reset paths: device change, disarm event.
+  if (state.midiArmedTrackId === null && !midiArmHintShown) {
+    showToast('MIDI received — arm a track (I) to record', 3500);
+    midiArmHintShown = true;
+  }
 
   // Recording (Phase 8.11): if the armed track AND playback are active, start
   // capturing this voice. A planchette in performance state both visualises the
@@ -786,6 +800,50 @@ midiDeviceSelect.addEventListener('change', async () => {
   }
   midiInput.setActiveDevice(id);
   midiDeviceSelect.blur();
+
+  // Just enabled a device with no armed track — prompt the user before they
+  // hit the silent-no-curves trap. The toast in noteOn is the safety net for
+  // the case where they cancel here and play anyway.
+  if (id && store.getState().midiArmedTrackId === null) {
+    midiArmHintShown = false;
+    await promptForMidiArm();
+  }
+});
+
+async function promptForMidiArm() {
+  const st = store.getState();
+  const result = await openMidiArmDialog({
+    tracks: st.composition.tracks,
+    toneLibrary: st.composition.toneLibrary,
+  });
+  if (!result) return;
+  if (result.kind === 'arm-existing') {
+    store.setMidiArmedTrackId(result.trackId);
+    return;
+  }
+  // 'arm-new' — same flow as the "+ Add Track" button, then arm.
+  const comp = store.getComposition();
+  const btn = document.getElementById('add-track-btn')!;
+  const picked = await openTonePicker(comp.toneLibrary, null, btn);
+  if (!picked) return;
+  history.snapshot();
+  const track = createTrack(`Track ${comp.tracks.length + 1}`, picked.id);
+  store.mutate(c => { c.tracks.push(track); });
+  store.setSelectedTrack(track.id);
+  store.setMidiArmedTrackId(track.id);
+}
+
+// Reset the noteOn-toast gate on arm/disarm transitions only — not on every
+// store notify, or unrelated state changes would clobber the once-per-episode
+// behavior. While armed: suppress (hint is irrelevant). On disarm: re-enable
+// so the next time the user falls into the no-armed-track trap, the hint
+// fires again.
+let lastMidiArmedState = store.getState().midiArmedTrackId !== null;
+store.subscribe(() => {
+  const armedNow = store.getState().midiArmedTrackId !== null;
+  if (armedNow === lastMidiArmedState) return;
+  midiArmHintShown = armedNow;
+  lastMidiArmedState = armedNow;
 });
 
 // Populate the list lazily on first focus — requesting MIDI access earlier
