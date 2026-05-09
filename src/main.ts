@@ -213,8 +213,8 @@ app.innerHTML = `
         <div class="afk-warning-hints">
           play something to continue recording.<br/>
           Space or Esc to stop recording.<br/>
-          PgUp or PgDown returns to last curve.<br/>
-          Home returns to beginning.
+          PgUp / PgDown to first / last curve.<br/>
+          Home to recenter on playhead.
         </div>
       </div>
     </div>
