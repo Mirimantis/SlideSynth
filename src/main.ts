@@ -2035,7 +2035,7 @@ fgCanvas.addEventListener('wheel', (e) => {
 const COMPOSE_COUNTDOWN_SECONDS = 3;
 const composeEngine = createPerformanceEngine({
   countdownSeconds: COMPOSE_COUNTDOWN_SECONDS,
-  afkTimeoutMs: 120_000,
+  afkTimeoutMs: 60_000,
   recordingBufferMax: 3600,
   loopWrapThresholdBeats: 0.5,
 });
