@@ -50,6 +50,13 @@ export interface PerformanceEngine {
 
   getLastLoopWrapAt(): number;
   getCountdownLabel(audioNow: number, phase: PerformancePhase, countdownStartedAt: number): string;
+  /** Milliseconds since the last activity mark. Drives the AFK warning popup
+   *  countdown so it can race the same `afkTimeoutMs` constant the engine uses
+   *  to fire `onAfkTimeout`. Returns 0 if no activity has been recorded yet. */
+  getIdleMs(now: number): number;
+  /** The configured AFK timeout (ms). Exposed so the popup can compute the
+   *  remaining-time countdown without duplicating the constant. */
+  getAfkTimeoutMs(): number;
 }
 
 export function createPerformanceEngine(config: PerformanceEngineConfig): PerformanceEngine {
@@ -166,6 +173,14 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
       if (remaining <= 1) return '1';
       if (remaining <= 2) return '2';
       return String(config.countdownSeconds);
+    },
+
+    getIdleMs(now) {
+      return lastActivityAt === 0 ? 0 : Math.max(0, now - lastActivityAt);
+    },
+
+    getAfkTimeoutMs() {
+      return config.afkTimeoutMs;
     },
   };
 }

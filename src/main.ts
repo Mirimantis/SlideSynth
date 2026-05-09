@@ -207,6 +207,16 @@ app.innerHTML = `
       </div>
       <div id="pitch-hud" hidden></div>
       <div id="countdown-overlay" hidden></div>
+      <div id="afk-warning" hidden>
+        <div class="afk-warning-title">Idle. Recording will pause in</div>
+        <div class="afk-warning-countdown" id="afk-warning-countdown">0</div>
+        <div class="afk-warning-hints">
+          play something to continue recording.<br/>
+          Space or Esc to stop recording.<br/>
+          PgUp or PgDown returns to last curve.<br/>
+          Home returns to beginning.
+        </div>
+      </div>
     </div>
     <div id="property-panel">
       <div class="panel-header">Tool Properties</div>
@@ -559,6 +569,13 @@ pitchHudToggle.addEventListener('change', () => {
   pitchHudToggle.blur();
 });
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement;
+const afkWarning = document.getElementById('afk-warning') as HTMLDivElement;
+const afkWarningCountdown = document.getElementById('afk-warning-countdown') as HTMLDivElement;
+/** Show the AFK warning popup once `afkTimeoutMs - 30s` of remaining time is left
+ *  — i.e. after 30 seconds of inactivity. The popup races the engine's auto-stop
+ *  using the same constant, so the countdown reaches 0 at the moment recording
+ *  pauses. */
+const AFK_WARNING_LEAD_MS = 30_000;
 
 /** Scroll Canvas effective value — forced on while recording (Perform with capture). */
 function effectiveScrollCanvas(): boolean {
@@ -2717,6 +2734,34 @@ function updateCountdownOverlayDom(state: AppState) {
   countdownOverlay.removeAttribute('hidden');
 }
 
+/** AFK warning popup: appears once the user has been idle past
+ *  `afkTimeoutMs - AFK_WARNING_LEAD_MS`, counts down the seconds remaining,
+ *  and disappears as soon as activity resumes (engine resets idle to 0) or
+ *  recording stops. Suppression (loop on / playhead before rightmost) is
+ *  inherited automatically — `tickComposePerform` calls `markActivity` every
+ *  frame in those cases, so `getIdleMs` stays near zero. */
+function updateAfkWarningDom(state: AppState) {
+  const g = state.performance;
+  const armed = g.recordArmed || state.midiArmedTrackId !== null;
+  const shouldShow = armed && g.phase === 'playing' && playback.isPlaying();
+  if (!shouldShow) {
+    if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
+    return;
+  }
+  const idleMs = composeEngine.getIdleMs(performance.now());
+  const timeoutMs = composeEngine.getAfkTimeoutMs();
+  const remainingMs = timeoutMs - idleMs;
+  if (remainingMs > AFK_WARNING_LEAD_MS) {
+    if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
+    return;
+  }
+  // Round up so the user never sees "0" while the engine is still ticking down.
+  const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+  const label = `${remainingSec}s`;
+  if (afkWarningCountdown.textContent !== label) afkWarningCountdown.textContent = label;
+  if (afkWarning.hasAttribute('hidden')) afkWarning.removeAttribute('hidden');
+}
+
 // ── Render loop ─────────────────────────────────────────────────
 function render() {
   // Reconcile harmony planchettes against current state. Cheap no-op when
@@ -2762,6 +2807,7 @@ function render() {
   toolPanel.setDisabled(isComposePerformActive());
   updatePitchHudDom(state);
   updateCountdownOverlayDom(state);
+  updateAfkWarningDom(state);
 
   // Compose perform: record-sample capture each frame while armed + sounding + playing.
   captureComposeRecordingSample();
