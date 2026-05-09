@@ -209,6 +209,54 @@
   margin: 4px 0 0 68px;
 }
 
+/* ── MIDI Arm Dialog ─────────────────────────────────────────── */
+.midi-arm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.midi-arm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.12s;
+}
+.midi-arm-row:hover {
+  background: rgba(79, 195, 247, 0.08);
+}
+.midi-arm-row input[type="radio"] {
+  accent-color: var(--accent);
+  margin: 0;
+}
+.midi-arm-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.midi-arm-name {
+  flex: 1;
+  color: var(--text);
+}
+.midi-arm-tone {
+  font-size: 0.75rem;
+}
+.midi-arm-empty {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin: 0 0 12px 0;
+}
+.midi-arm-newrow {
+  margin-bottom: 8px;
+}
+
 /* ── Snap preset row (Snap section) ────────────────────────── */
 .snap-preset-row select {
   flex: 1;

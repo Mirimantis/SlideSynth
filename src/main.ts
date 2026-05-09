@@ -27,6 +27,7 @@ import { renderToolPropertyPanel } from './ui/tool-property-panel';
 import { openToneBuilder } from './ui/tone-builder';
 import { openTonePicker } from './ui/tone-picker';
 import { openPresetSaveDialog } from './ui/preset-save-dialog';
+import { openMidiArmDialog } from './ui/midi-arm-dialog';
 import { BUILTIN_SNAP_PRESETS, loadUserSnapPresets, saveUserSnapPresets, presetMatches, snapshotPreset, type SnapPreset } from './utils/snap-presets';
 import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile } from './export/json-export';
 import { midiToComposition } from './export/midi-import';
@@ -206,6 +207,16 @@ app.innerHTML = `
       </div>
       <div id="pitch-hud" hidden></div>
       <div id="countdown-overlay" hidden></div>
+      <div id="afk-warning" hidden>
+        <div class="afk-warning-title">Idle. Recording will pause in</div>
+        <div class="afk-warning-countdown" id="afk-warning-countdown">0</div>
+        <div class="afk-warning-hints">
+          play something to continue recording.<br/>
+          Space or Esc to stop recording.<br/>
+          PgUp / PgDown to first / last curve.<br/>
+          Home to recenter on playhead.
+        </div>
+      </div>
     </div>
     <div id="property-panel">
       <div class="panel-header">Tool Properties</div>
@@ -558,6 +569,13 @@ pitchHudToggle.addEventListener('change', () => {
   pitchHudToggle.blur();
 });
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement;
+const afkWarning = document.getElementById('afk-warning') as HTMLDivElement;
+const afkWarningCountdown = document.getElementById('afk-warning-countdown') as HTMLDivElement;
+/** Show the AFK warning popup once `afkTimeoutMs - 30s` of remaining time is left
+ *  — i.e. after 30 seconds of inactivity. The popup races the engine's auto-stop
+ *  using the same constant, so the countdown reaches 0 at the moment recording
+ *  pauses. */
+const AFK_WARNING_LEAD_MS = 30_000;
 
 /** Scroll Canvas effective value — forced on while recording (Perform with capture). */
 function effectiveScrollCanvas(): boolean {
@@ -714,6 +732,11 @@ timeSigSelect.addEventListener('change', () => {
 const midiInput = createMidiInput();
 const midiDeviceSelect = document.getElementById('input-midi-device') as HTMLSelectElement;
 
+// One-shot guard for the "you have MIDI but no track is armed" toast. Reset
+// when the user changes device or disarms a track, so the hint can fire again
+// the next time the user falls into the same state.
+let midiArmHintShown = false;
+
 function refreshMidiDeviceList() {
   const active = midiInput.getActiveDeviceId();
   const devices = midiInput.getDevices();
@@ -742,6 +765,14 @@ midiInput.onNoteOn((note, velocity) => {
   preview.startDrawPreview(tone, note, `midi-${note}`);
   // velocity reserved for a future loudness-mapped preview; stable mid-volume for now.
   void velocity;
+
+  // Safety-net hint: if MIDI is sounding but no track is armed, the user's
+  // notes are not being recorded. Surface a once-per-episode toast pointing
+  // at the "I" arm button. Reset paths: device change, disarm event.
+  if (state.midiArmedTrackId === null && !midiArmHintShown) {
+    showToast('MIDI received — arm a track (I) to record', 3500);
+    midiArmHintShown = true;
+  }
 
   // Recording (Phase 8.11): if the armed track AND playback are active, start
   // capturing this voice. A planchette in performance state both visualises the
@@ -786,6 +817,50 @@ midiDeviceSelect.addEventListener('change', async () => {
   }
   midiInput.setActiveDevice(id);
   midiDeviceSelect.blur();
+
+  // Just enabled a device with no armed track — prompt the user before they
+  // hit the silent-no-curves trap. The toast in noteOn is the safety net for
+  // the case where they cancel here and play anyway.
+  if (id && store.getState().midiArmedTrackId === null) {
+    midiArmHintShown = false;
+    await promptForMidiArm();
+  }
+});
+
+async function promptForMidiArm() {
+  const st = store.getState();
+  const result = await openMidiArmDialog({
+    tracks: st.composition.tracks,
+    toneLibrary: st.composition.toneLibrary,
+  });
+  if (!result) return;
+  if (result.kind === 'arm-existing') {
+    store.setMidiArmedTrackId(result.trackId);
+    return;
+  }
+  // 'arm-new' — same flow as the "+ Add Track" button, then arm.
+  const comp = store.getComposition();
+  const btn = document.getElementById('add-track-btn')!;
+  const picked = await openTonePicker(comp.toneLibrary, null, btn);
+  if (!picked) return;
+  history.snapshot();
+  const track = createTrack(`Track ${comp.tracks.length + 1}`, picked.id);
+  store.mutate(c => { c.tracks.push(track); });
+  store.setSelectedTrack(track.id);
+  store.setMidiArmedTrackId(track.id);
+}
+
+// Reset the noteOn-toast gate on arm/disarm transitions only — not on every
+// store notify, or unrelated state changes would clobber the once-per-episode
+// behavior. While armed: suppress (hint is irrelevant). On disarm: re-enable
+// so the next time the user falls into the no-armed-track trap, the hint
+// fires again.
+let lastMidiArmedState = store.getState().midiArmedTrackId !== null;
+store.subscribe(() => {
+  const armedNow = store.getState().midiArmedTrackId !== null;
+  if (armedNow === lastMidiArmedState) return;
+  midiArmHintShown = armedNow;
+  lastMidiArmedState = armedNow;
 });
 
 // Populate the list lazily on first focus — requesting MIDI access earlier
@@ -1960,7 +2035,7 @@ fgCanvas.addEventListener('wheel', (e) => {
 const COMPOSE_COUNTDOWN_SECONDS = 3;
 const composeEngine = createPerformanceEngine({
   countdownSeconds: COMPOSE_COUNTDOWN_SECONDS,
-  afkTimeoutMs: 120_000,
+  afkTimeoutMs: 60_000,
   recordingBufferMax: 3600,
   loopWrapThresholdBeats: 0.5,
 });
@@ -2659,6 +2734,34 @@ function updateCountdownOverlayDom(state: AppState) {
   countdownOverlay.removeAttribute('hidden');
 }
 
+/** AFK warning popup: appears once the user has been idle past
+ *  `afkTimeoutMs - AFK_WARNING_LEAD_MS`, counts down the seconds remaining,
+ *  and disappears as soon as activity resumes (engine resets idle to 0) or
+ *  recording stops. Suppression (loop on / playhead before rightmost) is
+ *  inherited automatically — `tickComposePerform` calls `markActivity` every
+ *  frame in those cases, so `getIdleMs` stays near zero. */
+function updateAfkWarningDom(state: AppState) {
+  const g = state.performance;
+  const armed = g.recordArmed || state.midiArmedTrackId !== null;
+  const shouldShow = armed && g.phase === 'playing' && playback.isPlaying();
+  if (!shouldShow) {
+    if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
+    return;
+  }
+  const idleMs = composeEngine.getIdleMs(performance.now());
+  const timeoutMs = composeEngine.getAfkTimeoutMs();
+  const remainingMs = timeoutMs - idleMs;
+  if (remainingMs > AFK_WARNING_LEAD_MS) {
+    if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
+    return;
+  }
+  // Round up so the user never sees "0" while the engine is still ticking down.
+  const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+  const label = `${remainingSec}s`;
+  if (afkWarningCountdown.textContent !== label) afkWarningCountdown.textContent = label;
+  if (afkWarning.hasAttribute('hidden')) afkWarning.removeAttribute('hidden');
+}
+
 // ── Render loop ─────────────────────────────────────────────────
 function render() {
   // Reconcile harmony planchettes against current state. Cheap no-op when
@@ -2704,6 +2807,7 @@ function render() {
   toolPanel.setDisabled(isComposePerformActive());
   updatePitchHudDom(state);
   updateCountdownOverlayDom(state);
+  updateAfkWarningDom(state);
 
   // Compose perform: record-sample capture each frame while armed + sounding + playing.
   captureComposeRecordingSample();

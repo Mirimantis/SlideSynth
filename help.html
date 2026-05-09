@@ -298,7 +298,7 @@
     <li><strong>R</strong> or the red <strong>Record</strong> button arms recording. From Idle it runs a 3-second countdown then starts Playback. If Playback is already running, it arms immediately with no countdown. Recording forces the Scroll switch to <strong>Canvas</strong>.</li>
     <li>While recording, each LMB press/release captures a curve onto the selected track. The curve is simplified and auto-smoothed on release, so the result is fully editable afterward. A live trail follows the planchette as you record, showing the path being captured; on release it's replaced by the simplified curve.</li>
     <li><strong>Escape</strong> during the countdown or recording stops and returns to Idle.</li>
-    <li>Recording continues past the composition end so you can extend phrases or capture silence; an AFK timeout stops it after about 2 minutes of inactivity. The timeout is suppressed while <strong>Loop</strong> is on, while the playhead hasn't yet reached the rightmost control point (there's still existing content to record over), and while MIDI keys are being played.</li>
+    <li>Recording continues past the composition end so you can extend phrases or capture silence; an AFK timeout stops it after 1 minute of inactivity (a warning popup appears at 30s with a countdown to the stop). The timeout is suppressed while <strong>Loop</strong> is on, while the playhead hasn't yet reached the rightmost control point (there's still existing content to record over), and while MIDI keys are being played.</li>
     <li>Looping back (loop-wrap) during recording commits the current gesture as a curve and flashes the planchette — the next pass starts a fresh curve.</li>
   </ul>
 
@@ -513,7 +513,9 @@
     <div class="detail-body">
       <ul>
         <li>Pick a device from the <strong>MIDI Input</strong> dropdown in the
-            Transport panel. On first selection the browser prompts for MIDI access.</li>
+            Transport panel. On first selection the browser prompts for MIDI access.
+            If no track is currently armed, a small dialog asks which track to record into
+            (or offers to create a new one) so the arming step is never silently skipped.</li>
         <li><kbd>Note On</kbd> sounds a track's tone at the note's pitch;
             <kbd>Note Off</kbd> stops it. Held notes play in parallel (polyphonic),
             so you can sound chords.</li>
@@ -555,6 +557,10 @@
         <li>Recording requires playback to be running. Arming a track and pressing
             <strong>Play</strong> from idle gives you the same countdown affordance
             as the LMB record-arm flow.</li>
+        <li>If you press a MIDI key while no track is armed, you'll hear the tone
+            but nothing records. A toast reminds you to arm a track — click any
+            track's <strong>I</strong> button (or re-pick the device from the
+            dropdown to re-open the arm dialog).</li>
         <li>Stop boundaries (Stop / Pause / Escape / loop wrap / disarming the
             track) finalize any in-flight notes cleanly so you don't lose mid-note
             captures.</li>
