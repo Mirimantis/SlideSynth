@@ -22,6 +22,7 @@ function createInitialPrimaryPlanchette(trackId: string | null): PlanchetteState
 
 const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollCanvas';
 const PITCH_HUD_STORAGE_KEY = 'slidesynth.pitchHud';
+const PERF_HUD_STORAGE_KEY = 'slidesynth.perfHud';
 const METRONOME_ENABLED_STORAGE_KEY = 'slidesynth.metronomeEnabled';
 const METRONOME_VOLUME_STORAGE_KEY = 'slidesynth.metronomeVolume';
 const AUTO_SMOOTH_X_RATIO_STORAGE_KEY = 'slidesynth.autoSmoothXRatio';
@@ -179,6 +180,7 @@ function createInitialState(): AppState {
     bezierAutoSmooth: false,
     scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, true),
     pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
+    perfHudVisible: loadBoolPref(PERF_HUD_STORAGE_KEY, false),
     metronomeEnabled: loadBoolPref(METRONOME_ENABLED_STORAGE_KEY, false),
     metronomeVolume: loadNumberPref(METRONOME_VOLUME_STORAGE_KEY, 0.6),
     autoSmoothXRatio: Math.max(0, Math.min(1, loadNumberPref(AUTO_SMOOTH_X_RATIO_STORAGE_KEY, AUTO_SMOOTH_X_RATIO))),
@@ -482,6 +484,13 @@ class Store {
     if (this.state.pitchHudVisible === visible) return;
     this.state.pitchHudVisible = visible;
     saveBoolPref(PITCH_HUD_STORAGE_KEY, visible);
+    this.notify();
+  }
+
+  setPerfHudVisible(visible: boolean) {
+    if (this.state.perfHudVisible === visible) return;
+    this.state.perfHudVisible = visible;
+    saveBoolPref(PERF_HUD_STORAGE_KEY, visible);
     this.notify();
   }
 

@@ -28,6 +28,8 @@ import { openToneBuilder } from './ui/tone-builder';
 import { openTonePicker } from './ui/tone-picker';
 import { openPresetSaveDialog } from './ui/preset-save-dialog';
 import { openMidiArmDialog } from './ui/midi-arm-dialog';
+import { createPerfHud } from './ui/perf-hud';
+import { getActiveSynthCount, getActiveOscillatorCount } from './audio/tone-synth';
 import { BUILTIN_SNAP_PRESETS, loadUserSnapPresets, saveUserSnapPresets, presetMatches, snapshotPreset, type SnapPreset } from './utils/snap-presets';
 import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile } from './export/json-export';
 import { midiToComposition } from './export/midi-import';
@@ -93,6 +95,15 @@ app.innerHTML = `
               <span class="toggle-switch-thumb"></span>
             </span>
             <span class="toggle-switch-label">Pitch HUD</span>
+          </label>
+        </div>
+        <div class="transport-row">
+          <label id="perf-hud-label" class="toggle-switch" title="Show frame ms, synth/oscillator/voice counts, and audio latency (!)">
+            <span class="toggle-switch-track">
+              <input type="checkbox" id="perf-hud-toggle" />
+              <span class="toggle-switch-thumb"></span>
+            </span>
+            <span class="toggle-switch-label">Perf HUD</span>
           </label>
         </div>
         <div class="transport-row">
@@ -206,6 +217,7 @@ app.innerHTML = `
         <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="1" title="Zoom Y (pitch)" />
       </div>
       <div id="pitch-hud" hidden></div>
+      <div id="perf-hud" hidden></div>
       <div id="countdown-overlay" hidden></div>
       <div id="afk-warning" hidden>
         <div class="afk-warning-title">Idle. Recording will pause in</div>
@@ -568,6 +580,48 @@ pitchHudToggle.addEventListener('change', () => {
   store.setPitchHudVisible(pitchHudToggle.checked);
   pitchHudToggle.blur();
 });
+const perfHudToggle = document.getElementById('perf-hud-toggle') as HTMLInputElement;
+perfHudToggle.checked = store.getState().perfHudVisible;
+perfHudToggle.addEventListener('change', () => {
+  store.setPerfHudVisible(perfHudToggle.checked);
+  perfHudToggle.blur();
+});
+const perfHud = createPerfHud(document.getElementById('perf-hud') as HTMLDivElement);
+perfHud.setVisible(store.getState().perfHudVisible);
+// Mirror external state changes (hotkey, undo, etc.) back into the checkbox so
+// the two stay in sync. Cheap — only runs on store.notify, only branches on
+// actual changes.
+let lastPerfHudVisible = store.getState().perfHudVisible;
+store.subscribe(() => {
+  const v = store.getState().perfHudVisible;
+  if (v === lastPerfHudVisible) return;
+  lastPerfHudVisible = v;
+  perfHudToggle.checked = v;
+  perfHud.setVisible(v);
+});
+
+// Rolling frame-time buffer (~2 s at 60 fps). Push every render frame; sort a
+// copy when the HUD refreshes. Push is O(1); sort is O(n log n) over 125
+// entries — only paid when the HUD is visible.
+const FRAME_BUFFER_SIZE = 125;
+const frameTimes = new Float32Array(FRAME_BUFFER_SIZE);
+let frameTimesFilled = 0;
+let frameTimesIndex = 0;
+let lastFrameNow = 0;
+function pushFrameTime(now: number) {
+  if (lastFrameNow !== 0) {
+    frameTimes[frameTimesIndex] = now - lastFrameNow;
+    frameTimesIndex = (frameTimesIndex + 1) % FRAME_BUFFER_SIZE;
+    if (frameTimesFilled < FRAME_BUFFER_SIZE) frameTimesFilled++;
+  }
+  lastFrameNow = now;
+}
+function frameTimePercentile(p: number): number {
+  if (frameTimesFilled === 0) return 0;
+  const sorted = Array.from(frameTimes.subarray(0, frameTimesFilled)).sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.floor(p * sorted.length));
+  return sorted[idx]!;
+}
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement;
 const afkWarning = document.getElementById('afk-warning') as HTMLDivElement;
 const afkWarningCountdown = document.getElementById('afk-warning-countdown') as HTMLDivElement;
@@ -1698,6 +1752,11 @@ window.addEventListener('keydown', (e) => {
     case '?':
       window.open('/help.html', '_blank');
       break;
+    case '!':
+      // Toggle the Perf HUD. The store.subscribe binding above mirrors the
+      // change back into the Transport-panel checkbox.
+      store.setPerfHudVisible(!store.getState().perfHudVisible);
+      break;
     case 'PageUp':
     case 'PageDown': {
       // Jump the viewport to the first (PageUp) or last (PageDown) control point
@@ -2762,8 +2821,25 @@ function updateAfkWarningDom(state: AppState) {
   if (afkWarning.hasAttribute('hidden')) afkWarning.removeAttribute('hidden');
 }
 
+function updatePerfHudDom(state: AppState) {
+  if (!state.perfHudVisible) return;
+  perfHud.refresh({
+    frameMsP50: frameTimePercentile(0.5),
+    frameMsP99: frameTimePercentile(0.99),
+    synthCount: getActiveSynthCount(),
+    oscillatorCount: getActiveOscillatorCount(),
+    voiceCount: state.performance.planchettes.length,
+    audioBaseLatencyMs: getAudioContext().baseLatency * 1000,
+  });
+}
+
 // ── Render loop ─────────────────────────────────────────────────
 function render() {
+  // Frame-time sample for the Perf HUD's rolling window. Always pushed (the
+  // sort cost happens only inside updatePerfHudDom when the HUD is visible)
+  // so toggling the HUD on instantly has 2 s of accurate p50/p99.
+  pushFrameTime(performance.now());
+
   // Reconcile harmony planchettes against current state. Cheap no-op when
   // state hasn't changed; covers playback start/stop, drawMode toggle, and
   // mid-playback chord-spec voice-count changes.
@@ -2808,6 +2884,7 @@ function render() {
   updatePitchHudDom(state);
   updateCountdownOverlayDom(state);
   updateAfkWarningDom(state);
+  updatePerfHudDom(state);
 
   // Compose perform: record-sample capture each frame while armed + sounding + playing.
   captureComposeRecordingSample();

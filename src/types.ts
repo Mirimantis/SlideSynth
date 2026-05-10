@@ -222,6 +222,7 @@ export interface AppState {
   bezierAutoSmooth: boolean;                  // Draw-tool: click-placed points get horizontal handles
   scrollCanvasEnabled: boolean;               // Compose Playback view preference (localStorage-backed)
   pitchHudVisible: boolean;                   // Pitch HUD user preference (localStorage-backed)
+  perfHudVisible: boolean;                    // Perf HUD user preference (localStorage-backed)
   metronomeEnabled: boolean;                  // Metronome user preference (localStorage-backed)
   metronomeVolume: number;                    // 0..1 — metronome master gain (localStorage-backed)
   autoSmoothXRatio: number;                   // 0..1 — fraction of neighbor segment length used for Draw auto-smooth + Smooth Curve action (localStorage-backed)

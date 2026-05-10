@@ -523,6 +523,45 @@ body {
 .hud-cents  { min-width: 4ch; }
 .hud-sep    { min-width: 1ch; opacity: 0.7; text-align: center; }
 
+/* ── Perf HUD ─────────────────────────────────────────────────── */
+#perf-hud {
+  position: absolute;
+  top: 48px; /* below the ruler, same as pitch HUD */
+  left: 12px;
+  color: var(--text);
+  background: rgba(20, 20, 28, 0.78);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  letter-spacing: 0.03em;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.7);
+  z-index: 12;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+}
+#perf-hud[hidden] { display: none; }
+.perf-hud-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.perf-hud-label {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.perf-hud-val {
+  color: var(--accent);
+  min-width: 3ch;
+  text-align: right;
+}
+
 /* Tool buttons disabled (Scroll-Canvas Playback hijacks LMB for Perform) */
 .tool-btn:disabled,
 .tool-btn[disabled] {

@@ -14,6 +14,17 @@ export interface ToneSynth {
   stop(time?: number): void;
 }
 
+// Live counts for the Perf HUD. Incremented in createToneSynth, decremented
+// on the first stop() call (subsequent stops are no-ops, so the counts can't
+// drift negative). The "oscillator" count is a sum of layer counts — it's a
+// rough proxy for audio-graph weight, not a guarantee that every osc is
+// currently producing sound.
+let activeSynths = 0;
+let activeOscillators = 0;
+
+export function getActiveSynthCount(): number { return activeSynths; }
+export function getActiveOscillatorCount(): number { return activeOscillators; }
+
 function makeDistortionCurve(amount: number): Float32Array<ArrayBuffer> {
   const samples = 44100;
   const curve = new Float32Array(samples) as Float32Array<ArrayBuffer>;
@@ -79,6 +90,10 @@ export function createToneSynth(tone: ToneDefinition): ToneSynth {
     layerGains.push(gain);
   }
 
+  activeSynths += 1;
+  activeOscillators += oscillators.length;
+  let stopped = false;
+
   return {
     setFrequency(hz: number, time?: number) {
       const t = time ?? ctx.currentTime;
@@ -107,6 +122,11 @@ export function createToneSynth(tone: ToneDefinition): ToneSynth {
       const t = time ?? ctx.currentTime;
       for (const osc of oscillators) {
         osc.stop(t);
+      }
+      if (!stopped) {
+        stopped = true;
+        activeSynths -= 1;
+        activeOscillators -= oscillators.length;
       }
     },
   };
