@@ -3,9 +3,10 @@
  * src/export/midi-import.ts which imports MIDI *files*; this module reads
  * real-time noteOn / noteOff events from a connected MIDI device.
  *
- * Scope for the first pass: note events only. Pitch-bend, CC, and channel
- * routing are deliberately ignored — a future phase can add them once the
- * performance-engine side has a design for MIDI-driven recording.
+ * Scope: note events + pitch bend (BACKLOG 8.25). CC and channel routing are
+ * still deliberately ignored — a SlideSynth user typically plays one device on
+ * one channel, so bend is forwarded as a single signed value (-8192..+8191)
+ * with no per-channel bookkeeping.
  */
 
 export interface MidiDeviceInfo {
@@ -26,6 +27,8 @@ export interface MidiInput {
   onDevicesChanged(cb: () => void): void;
   onNoteOn(cb: (note: number, velocity: number) => void): void;
   onNoteOff(cb: (note: number) => void): void;
+  /** Pitch bend wheel. value is signed 14-bit (-8192..+8191); 0 = centred. */
+  onPitchBend(cb: (value: number) => void): void;
   /** True once the user has granted MIDI access and the API is ready. */
   hasAccess(): boolean;
   /** True when `requestMIDIAccess` is available on this browser. */
@@ -49,6 +52,7 @@ export function createMidiInput(): MidiInput {
   let activeInput: MIDIInputLike | null = null;
   let noteOnCb: ((note: number, velocity: number) => void) | null = null;
   let noteOffCb: ((note: number) => void) | null = null;
+  let pitchBendCb: ((value: number) => void) | null = null;
   let devicesChangedCb: (() => void) | null = null;
 
   function handleMessage(e: { data: Uint8Array }) {
@@ -60,6 +64,12 @@ export function createMidiInput(): MidiInput {
       if (data1 !== undefined && noteOnCb) noteOnCb(data1, (data2 ?? 0) / 127);
     } else if (command === 0x80 || (command === 0x90 && (data2 ?? 0) === 0)) {
       if (data1 !== undefined && noteOffCb) noteOffCb(data1);
+    } else if (command === 0xe0) {
+      // Pitch bend: 14-bit value, LSB first. Centred at 0x2000 → output is
+      // signed -8192..+8191.
+      if (data1 !== undefined && data2 !== undefined && pitchBendCb) {
+        pitchBendCb(((data2 << 7) | data1) - 0x2000);
+      }
     }
   }
 
@@ -125,6 +135,9 @@ export function createMidiInput(): MidiInput {
     },
     onNoteOff(cb) {
       noteOffCb = cb;
+    },
+    onPitchBend(cb) {
+      pitchBendCb = cb;
     },
     hasAccess() {
       return access !== null;
