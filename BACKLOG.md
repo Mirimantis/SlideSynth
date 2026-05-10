@@ -153,7 +153,7 @@ Items that came up while building Phase 6 but are independent features. Each bec
 - [x] **8.11 MIDI input recording (no snap)** *(M, PR #43)*
   Phase 4.1 added live MIDI input as a perform source; extend it to record incoming MIDI directly to curves the same way LMB-held perform records. Don't snap the captured pitch — MIDI input is already discrete. May need per-track "MIDI input" arming separate from the LMB record-arm flow, plus clear visual feedback during MIDI recording.
 
-- [ ] **8.21 MIDI sustained note doesn't continue past loop wrap** *(S, bug)*
+- [x] **8.21 MIDI sustained note doesn't continue past loop wrap** *(S, PR #54)*
   When a MIDI note is held across a loop wrap during recording, the wrap finalizes the note's curve (correct — `finalizeAllInFlightMidiVoices` in `tickComposePerform`'s `onLoopWrap` callback in [src/main.ts](src/main.ts)) but the synth and recording don't restart on the other side, so the held note goes silent and stops capturing. Should: keep the synth voice alive across the wrap, and start a fresh recording for that voice from the loop start beat so the held note becomes two contiguous curves (one ending at loop-out, one starting at loop-in). Match LMB-held perform behavior on loop wrap.
 
 - [x] **8.22 Verify 8.20 AFK gating with MIDI input (hardware required)** *(XS, PR #52)*

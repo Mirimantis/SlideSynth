@@ -2437,8 +2437,14 @@ function captureComposeRecordingSample() {
 }
 
 /** Finalize one MIDI voice's recording into the MIDI-armed track. Called on
- *  noteOff and on stop boundaries (composePerformStop, loop wrap, disarm). */
-function finalizeMidiVoice(midiNote: number) {
+ *  noteOff and on stop boundaries (composePerformStop, loop wrap, disarm).
+ *  `keepPlanchette: true` is used by the loop-wrap path so the held key keeps
+ *  capturing on the loop-in side under the same voiceId — matches LMB-held
+ *  perform behaviour (see finalizeComposeRecordedCurves below). BACKLOG 8.21. */
+function finalizeMidiVoice(
+  midiNote: number,
+  opts: { keepPlanchette?: boolean } = {},
+) {
   const voiceId = `midi-${midiNote}`;
   const st = store.getState();
   const planchettePresent = st.performance.planchettes.some(p => p.voiceId === voiceId);
@@ -2451,20 +2457,22 @@ function finalizeMidiVoice(midiNote: number) {
   } else if (!track) {
     composeEngine.clearBuffer(voiceId);
   }
-  store.removePerformPlanchette(voiceId);
+  if (!opts.keepPlanchette) {
+    store.removePerformPlanchette(voiceId);
+  }
   bgDirty = true;
 }
 
 /** Finalize every in-flight MIDI voice. Used on stop boundaries (Stop button,
  *  ESC, AFK, loop wrap) and when un-arming MIDI mid-recording. */
-function finalizeAllInFlightMidiVoices() {
+function finalizeAllInFlightMidiVoices(opts: { keepPlanchette?: boolean } = {}) {
   const notes: number[] = [];
   for (const p of store.getState().performance.planchettes) {
     if (!p.voiceId.startsWith('midi-')) continue;
     const n = Number(p.voiceId.slice('midi-'.length));
     if (Number.isFinite(n)) notes.push(n);
   }
-  for (const n of notes) finalizeMidiVoice(n);
+  for (const n of notes) finalizeMidiVoice(n, opts);
 }
 
 function finalizeComposeRecordedCurves() {
@@ -2544,8 +2552,12 @@ function tickComposePerform() {
     onLoopWrap: () => {
       if (g.recordArmed && composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
       // Loop wrap during sustained MIDI notes splits the curves at the wrap so
-      // recordings don't cross the loop boundary as a single curve.
-      finalizeAllInFlightMidiVoices();
+      // recordings don't cross the loop boundary as a single curve. Keep the
+      // planchettes around so capture continues for still-held keys on the
+      // loop-in side under the same voiceId — matches LMB-held perform
+      // behaviour, which the surrounding finalizeComposeRecordedCurves call
+      // already does. (BACKLOG 8.21)
+      finalizeAllInFlightMidiVoices({ keepPlanchette: true });
     },
     onAfkTimeout: composePerformStop,
   });
