@@ -178,7 +178,7 @@ Items that came up while building Phase 6 but are independent features. Each bec
 - [ ] **8.16 Secondal stacking** *(S, feature)*
   Cluster chords. Listed as low priority in the original Harmonic Prism design doc.
 
-- [ ] **8.17 CPU monitoring under heavy loads** *(S, ops)*
+- [x] **8.17 CPU monitoring under heavy loads** *(M, PR #53)*
   Verify multi-voice perform + multi-layer tones + playback CPU on target hardware. Measure before optimising.
 
 ---
