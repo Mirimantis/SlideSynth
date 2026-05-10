@@ -453,6 +453,27 @@ class Store {
     }
   }
 
+  /** Apply a pitch-bend offset (in semitones) to every MIDI-input planchette's
+   *  cursor + snapped Y. Called when the live MIDI pitch-bend wheel moves so
+   *  both the visual planchette and the recording sample track the bent pitch
+   *  (BACKLOG 8.25). MIDI ingress isn't snap-affected — discrete pitch comes
+   *  from the controller, bend is just a continuous offset on top. */
+  setMidiPitchBendOffset(offsetSemitones: number) {
+    let dirty = false;
+    for (const p of this.state.performance.planchettes) {
+      if (!p.voiceId.startsWith('midi-')) continue;
+      const baseNote = Number(p.voiceId.slice('midi-'.length));
+      if (!Number.isFinite(baseNote)) continue;
+      const bent = baseNote + offsetSemitones;
+      if (p.cursorWorldY !== bent || p.snappedWorldY !== bent) {
+        p.cursorWorldY = bent;
+        p.snappedWorldY = bent;
+        dirty = true;
+      }
+    }
+    if (dirty) this.notify();
+  }
+
   /** Strip every Harmonic-Prism harmony planchette (chord-cluster cleanup on
    *  LMB-up). Leaves the primary planchette and any MIDI input planchettes
    *  (voice id 'midi-*') alone — those have independent lifecycles. */

@@ -801,6 +801,31 @@ function refreshMidiDeviceList() {
 
 midiInput.onDevicesChanged(refreshMidiDeviceList);
 
+// Live MIDI pitch-bend state (BACKLOG 8.25). Range hardcoded to ±2 semitones
+// (GM standard); RPN sniffing on the wire isn't worth doing — almost no
+// controllers send it. The offset persists across loop wraps and across
+// noteOn/noteOff because it's just module state, so the held-key planchette
+// continues at the bent pitch through a wrap (mirrors 8.21).
+const LIVE_BEND_RANGE_SEMITONES = 2;
+let liveBendSemitones = 0;
+// Track currently-held MIDI keys so the bend handler can re-tune every active
+// preview synth without scanning the audio engine. Voice id is `midi-${note}`.
+const heldMidiNotes = new Set<number>();
+
+midiInput.onPitchBend((value) => {
+  liveBendSemitones = (value / 8192) * LIVE_BEND_RANGE_SEMITONES;
+  // Bending counts as activity for the perform-engine AFK gate, mirroring
+  // noteOn/noteOff. A user holding a note and working the wheel is performing.
+  composeEngine.markActivity(performance.now());
+  // Audio: re-tune every active MIDI preview synth so what's heard tracks the
+  // wheel. Visual + recording: planchette mutation drives both.
+  for (const note of heldMidiNotes) {
+    preview.updateDrawPitch(note + liveBendSemitones, `midi-${note}`);
+  }
+  store.setMidiPitchBendOffset(liveBendSemitones);
+  bgDirty = true;
+});
+
 midiInput.onNoteOn((note, velocity) => {
   const state = store.getState();
   // When a track is MIDI-armed it owns the audio path so what you hear is
@@ -816,7 +841,10 @@ midiInput.onNoteOn((note, velocity) => {
   // MIDI key press counts as activity for the perform-engine AFK gate, mirroring onLmbDown.
   composeEngine.markActivity(performance.now());
   // Per-note voice ID lets simultaneously-held notes sound in parallel.
-  preview.startDrawPreview(tone, note, `midi-${note}`);
+  // Initial pitch reflects current bend so a key struck with the wheel held
+  // off-centre starts at the bent pitch, no audible jump on the first frame.
+  heldMidiNotes.add(note);
+  preview.startDrawPreview(tone, note + liveBendSemitones, `midi-${note}`);
   // velocity reserved for a future loudness-mapped preview; stable mid-volume for now.
   void velocity;
 
@@ -837,11 +865,14 @@ midiInput.onNoteOn((note, velocity) => {
     const voiceId = `midi-${note}`;
     const existing = state.performance.planchettes.find(p => p.voiceId === voiceId);
     if (existing) finalizeMidiVoice(note);
+    // Apply current bend offset on creation so the planchette spawns at the
+    // bent pitch if the wheel was already off-centre when the key was struck.
+    const initialY = note + liveBendSemitones;
     store.addPerformPlanchette({
       voiceId,
       trackId: state.midiArmedTrackId,
-      cursorWorldY: note,
-      snappedWorldY: note,
+      cursorWorldY: initialY,
+      snappedWorldY: initialY,
       lastCrossedAt: performance.now(),
     });
     bgDirty = true;
@@ -851,6 +882,7 @@ midiInput.onNoteOn((note, velocity) => {
 midiInput.onNoteOff((note) => {
   // MIDI key release counts as activity for the perform-engine AFK gate.
   composeEngine.markActivity(performance.now());
+  heldMidiNotes.delete(note);
   preview.stopDrawPreview(`midi-${note}`);
   // If this voice was recording, finalize the curve into the MIDI-armed track.
   // Safe to call unconditionally — finalizeMidiVoice no-ops if no planchette.
