@@ -185,6 +185,7 @@ export function midiToComposition(buffer: ArrayBuffer): Composition {
     loopEndBeats: 2 * DEFAULT_BEATS_PER_MEASURE,
     snap: createDefaultSnapSettings(),
     guides: [],
+    tuningOffsetCents: 0,
   };
 }
 
