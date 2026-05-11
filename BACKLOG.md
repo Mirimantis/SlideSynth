@@ -162,6 +162,15 @@ Items that came up while building Phase 6 but are independent features. Each bec
 - [x] **8.25 Live MIDI record: pitch bend wheel** *(M, feature)*
   Decode 0xE0 in [src/audio/midi-input.ts](src/audio/midi-input.ts); track current bend in [src/main.ts](src/main.ts) MIDI wiring (single global value — typical user plays one device on one channel). On every bend event: re-tune all active MIDI preview synths and update every `midi-*` planchette's cursor + snapped Y via `store.setMidiPitchBendOffset`. The recording capture loop already reads `snappedWorldY`, so bent samples flow through to `curveFromRecording` automatically. Hardcoded ±2 semitone range. Bend state persists across loop wraps (extends 8.21) and across noteOn/noteOff because it lives outside the planchette + recording buffer. See [.claude/plans/8.24-pitch-bend-input.md](.claude/plans/8.24-pitch-bend-input.md).
 
+- [x] **8.26 Add 24-TET to Microtonal scale options** *(XS, feature)*
+  Quarter-tone scale with 24 equal divisions of the octave (intervals at 0.5-semitone spacing). Single entry added to `SCALE_CATALOG` in [src/utils/scales.ts](src/utils/scales.ts) — fractional intervals were already supported by `getScaleNotes` and the snap path.
+
+- [x] **8.27 Tune A4 — global staff tuning** *(M, feature)*
+  Per-composition reference frequency for A4 (default 440 Hz). New "Tune A4" spinbutton in Transport accepts 380–500 Hz; stored as a cents offset (`tuningOffsetCents`) on the Composition so projects round-trip cleanly. A small label beside the input shows the cents offset (e.g. "-31.8¢" for A=432). Audio path retunes via a module-level `currentReferenceAHz` in [src/constants.ts](src/constants.ts) read by `noteToFrequency` — every synth voice, curve sampler, and preview path picks up new tuning automatically. Existing v1/v2 saves load with default A=440 (migration backfill in [src/export/json-export.ts](src/export/json-export.ts)).
+
+- [x] **8.28 Hz readout on Pitch HUD** *(XS, feature)*
+  New `hud-hz` slot beside the cents readout shows the snapped pitch as a frequency (2 decimals below 100 Hz, 1 decimal above). Uses the live `noteToFrequency`, so it reflects the 8.27 Tune A4 setting in lockstep. Builds on the fixed-width slot pattern from 7.3.
+
 - [x] **8.22 Verify 8.20 AFK gating with MIDI input (hardware required)** *(XS, PR #52)*
   8.20 added MIDI noteOn/noteOff activity marks and AFK suppression while the playhead is before the rightmost point or Loop is on. Non-MIDI cases were verified at ship time; MIDI cases require hardware. To test once a MIDI keyboard is available:
   - **MIDI-only armed, playing keys** — MIDI-arm a track, no LMB, press MIDI keys every 30–60s for several minutes. Must NOT auto-stop.

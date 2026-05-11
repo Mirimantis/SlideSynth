@@ -27,13 +27,40 @@ export function isCNote(n: number): boolean {
 }
 
 // ── Frequency conversion ────────────────────────────────────────
-// A4 = MIDI 69 = 440 Hz
+// A4 = MIDI 69 = reference frequency (default 440 Hz). The reference is a
+// module-level mutable so the whole audio path retunes consistently when the
+// composition's tuningOffsetCents changes — synth voices, curve sampling, and
+// preview all flow through noteToFrequency. Composition load + the Tune
+// control in Transport push new values via setReferenceAHz().
+export const STANDARD_A4_HZ = 440;
+let currentReferenceAHz = STANDARD_A4_HZ;
+
+/** Set the global reference A4 frequency. Clamped to a musically reasonable range. */
+export function setReferenceAHz(hz: number): void {
+  currentReferenceAHz = Math.max(380, Math.min(500, hz));
+}
+
+/** Read the current reference A4 frequency. */
+export function getReferenceAHz(): number {
+  return currentReferenceAHz;
+}
+
+/** Convert a cents offset (relative to A=440) to a reference A frequency in Hz. */
+export function centsToReferenceAHz(cents: number): number {
+  return STANDARD_A4_HZ * Math.pow(2, cents / 1200);
+}
+
+/** Convert a reference A frequency to a cents offset relative to A=440. */
+export function referenceAHzToCents(hz: number): number {
+  return 1200 * Math.log2(hz / STANDARD_A4_HZ);
+}
+
 export function noteToFrequency(note: number): number {
-  return 440 * Math.pow(2, (note - 69) / 12);
+  return currentReferenceAHz * Math.pow(2, (note - 69) / 12);
 }
 
 export function frequencyToNote(hz: number): number {
-  return 12 * Math.log2(hz / 440) + 69;
+  return 12 * Math.log2(hz / currentReferenceAHz) + 69;
 }
 
 // ── Default values ──────────────────────────────────────────────

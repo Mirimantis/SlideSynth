@@ -111,6 +111,7 @@ export interface Composition {
   loopEndBeats: number;
   snap: SnapSettings;                // v2: per-composition snap config (was global)
   guides: GuideDefinition[];         // v2: user-placed snap guides (Phase 8.7)
+  tuningOffsetCents: number;         // v2-additive: A4 reference offset in cents (0 = A=440); BACKLOG 8.27
 }
 
 // ── Viewport ────────────────────────────────────────────────────

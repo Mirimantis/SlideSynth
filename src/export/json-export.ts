@@ -47,6 +47,11 @@ export function deserializeComposition(json: string): Composition {
   if (!Array.isArray(data.guides)) {
     data.guides = [];
   }
+  // 8.27: tuningOffsetCents added as a v2-additive field. Older saves default
+  // to 0 (A=440), preserving existing pitch behaviour on load.
+  if (typeof data.tuningOffsetCents !== 'number') {
+    data.tuningOffsetCents = 0;
+  }
 
   return data;
 }

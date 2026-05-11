@@ -626,6 +626,14 @@ class Store {
     this.notify();
   }
 
+  /** Set the composition's A4 reference offset in cents (0 = A=440). The audio
+   *  module's reference frequency is updated separately via setReferenceAHz()
+   *  in main.ts so the runtime synth/curve sampler retunes immediately. */
+  setTuningOffsetCents(cents: number) {
+    this.state.composition.tuningOffsetCents = cents;
+    this.notify();
+  }
+
   setLoopStart(beats: number) {
     const comp = this.state.composition;
     // Keep markers at least 0.5 beats apart and loopStart >= 0.

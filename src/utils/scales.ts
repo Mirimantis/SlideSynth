@@ -44,6 +44,7 @@ export const SCALE_CATALOG: ScaleDefinition[] = [
   { id: 'slendro',        name: 'Gamelan Slendro',      group: 'Microtonal',          intervals: [0,2.4,4.8,7.2,9.6],            period: 12 },
   { id: 'pelog',           name: 'Gamelan Pelog',        group: 'Microtonal',          intervals: [0,1.6,3.2,5.2,7.2,8.4,10.8],   period: 12 },
   { id: 'thai-7tet',      name: 'Thai 7-TET',           group: 'Microtonal',          intervals: [0, 12/7, 24/7, 36/7, 48/7, 60/7, 72/7], period: 12 },
+  { id: '24tet',          name: '24-TET',               group: 'Microtonal',          intervals: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5], period: 12 },
 ];
 
 /** Look up a scale by ID. */

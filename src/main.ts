@@ -1,5 +1,5 @@
 import { createViewport } from './canvas/viewport';
-import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_NOTE, MAX_NOTE, Y_PAN_MARGIN, noteNumberToName } from './constants';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_NOTE, MAX_NOTE, Y_PAN_MARGIN, noteNumberToName, noteToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
@@ -109,6 +109,11 @@ app.innerHTML = `
         <div class="transport-row">
           <label>BPM</label>
           <input type="number" id="input-bpm" value="120" min="20" max="300" step="1" />
+        </div>
+        <div class="transport-row">
+          <label title="Reference frequency for A4. 440 = standard, 432 = 'Verdi tuning', 415 = Baroque pitch, etc.">Tune A4</label>
+          <input type="number" id="input-tuning" value="440" min="380" max="500" step="0.1" title="Reference frequency for A4 in Hz (default 440)" />
+          <span class="transport-hint" id="tuning-cents-display" title="Cents offset from A=440">0¢</span>
         </div>
         <div class="transport-row">
           <label>Time</label>
@@ -256,12 +261,14 @@ const pitchHud = document.getElementById('pitch-hud') as HTMLDivElement;
 pitchHud.innerHTML = `
   <span class="hud-slot hud-note" id="hud-snap-name"></span>
   <span class="hud-slot hud-cents" id="hud-snap-cents"></span>
+  <span class="hud-slot hud-hz" id="hud-snap-hz"></span>
   <span class="hud-slot hud-sep" id="hud-sep"></span>
   <span class="hud-slot hud-note" id="hud-raw-name"></span>
   <span class="hud-slot hud-cents" id="hud-raw-cents"></span>
 `;
 const hudSnapName = document.getElementById('hud-snap-name') as HTMLSpanElement;
 const hudSnapCents = document.getElementById('hud-snap-cents') as HTMLSpanElement;
+const hudSnapHz = document.getElementById('hud-snap-hz') as HTMLSpanElement;
 const hudSep = document.getElementById('hud-sep') as HTMLSpanElement;
 const hudRawName = document.getElementById('hud-raw-name') as HTMLSpanElement;
 const hudRawCents = document.getElementById('hud-raw-cents') as HTMLSpanElement;
@@ -271,11 +278,19 @@ function formatCents(cents: number): string {
   return `${cents > 0 ? '+' : ''}${cents}¢`;
 }
 
+/** Format Hz for the Pitch HUD: 2 decimals below 100Hz (more precision where
+ *  semitones span only a couple Hz), 1 decimal otherwise. */
+function formatHz(hz: number): string {
+  if (hz < 100) return `${hz.toFixed(2)} Hz`;
+  return `${hz.toFixed(1)} Hz`;
+}
+
 /** Fill each HUD slot in place — no innerHTML, no text concatenation. */
 function writePitchHud(snappedY: number | null, rawY: number | null): void {
   if (snappedY == null) {
     hudSnapName.textContent = '';
     hudSnapCents.textContent = '';
+    hudSnapHz.textContent = '';
     hudSep.textContent = '';
     hudRawName.textContent = '';
     hudRawCents.textContent = '';
@@ -285,6 +300,9 @@ function writePitchHud(snappedY: number | null, rawY: number | null): void {
   const cents = Math.round((snappedY - nearest) * 100);
   hudSnapName.textContent = noteNumberToName(nearest);
   hudSnapCents.textContent = formatCents(cents);
+  // Hz reflects the current global tuning offset since noteToFrequency reads
+  // the module-level reference A4. A=432 etc. shifts every readout in lockstep.
+  hudSnapHz.textContent = formatHz(noteToFrequency(snappedY));
 
   const hasRaw = rawY != null
     && Math.abs(rawY - snappedY) >= 0.02
@@ -764,6 +782,61 @@ bpmInput.addEventListener('change', () => {
   history.snapshot();
   store.setBpm(bpm);
 });
+
+// ── Tune A4 (BACKLOG 8.27) ──────────────────────────────────────
+// Pitch-shifts the entire staff by changing the reference frequency for A4.
+// Persisted as cents-offset relative to A=440 in the composition; the audio
+// module's `currentReferenceAHz` is the runtime source of truth that
+// noteToFrequency reads (sync via syncTuningToAudio below).
+const tuningInput = document.getElementById('input-tuning') as HTMLInputElement;
+const tuningCentsDisplay = document.getElementById('tuning-cents-display') as HTMLSpanElement;
+
+function formatTuningCentsLabel(cents: number): string {
+  if (Math.abs(cents) < 0.05) return '0¢';
+  const sign = cents > 0 ? '+' : '';
+  return `${sign}${cents.toFixed(1)}¢`;
+}
+
+/** Push the composition's tuningOffsetCents into the audio module + UI inputs.
+ *  Called on app startup, composition load (Load JSON / Import MIDI), and
+ *  history undo/redo via the store subscription below. */
+function syncTuningToAudio() {
+  const cents = store.getComposition().tuningOffsetCents;
+  const hz = centsToReferenceAHz(cents);
+  setReferenceAHz(hz);
+  // Reflect in the input + cents readout, but only if the user isn't currently
+  // editing the input (would steal focus / clobber half-typed values).
+  if (document.activeElement !== tuningInput) {
+    tuningInput.value = String(Number(getReferenceAHz().toFixed(2)));
+  }
+  tuningCentsDisplay.textContent = formatTuningCentsLabel(cents);
+  // Pitch HUD reads frequency on render — mark dirty so any open HUD reflects
+  // the new tuning on the next frame.
+  bgDirty = true;
+}
+
+tuningInput.addEventListener('change', () => {
+  const hz = Math.max(380, Math.min(500, Number(tuningInput.value) || STANDARD_A4_HZ));
+  const cents = referenceAHzToCents(hz);
+  history.snapshot();
+  store.setTuningOffsetCents(cents);
+  // syncTuningToAudio runs via the subscription, but call it directly so the
+  // input value gets normalized (e.g. user types "430.123" → display "430.12").
+  syncTuningToAudio();
+  tuningInput.blur();
+});
+
+// Apply the composition's tuning whenever it changes (load, undo/redo, setter).
+// The check skips redundant work when nothing tuning-related changed.
+let lastAppliedTuningCents: number | null = null;
+store.subscribe(() => {
+  const cents = store.getComposition().tuningOffsetCents;
+  if (cents === lastAppliedTuningCents) return;
+  lastAppliedTuningCents = cents;
+  syncTuningToAudio();
+});
+// Initial sync on app boot.
+syncTuningToAudio();
 
 // ── Time signature dropdown ────────────────────────────────────
 const timeSigSelect = document.getElementById('input-time-sig') as HTMLSelectElement;
