@@ -156,19 +156,19 @@ Items that came up while building Phase 6 but are independent features. Each bec
 - [x] **8.21 MIDI sustained note doesn't continue past loop wrap** *(S, PR #54)*
   When a MIDI note is held across a loop wrap during recording, the wrap finalizes the note's curve (correct — `finalizeAllInFlightMidiVoices` in `tickComposePerform`'s `onLoopWrap` callback in [src/main.ts](src/main.ts)) but the synth and recording don't restart on the other side, so the held note goes silent and stops capturing. Should: keep the synth voice alive across the wrap, and start a fresh recording for that voice from the loop start beat so the held note becomes two contiguous curves (one ending at loop-out, one starting at loop-in). Match LMB-held perform behavior on loop wrap.
 
-- [x] **8.24 MIDI file import: read pitch bend** *(M, feature)*
+- [x] **8.24 MIDI file import: read pitch bend** *(M, PR #55)*
   Parse 0xE0 (pitchBend) events from imported `.mid` files and fold them into the resulting BezierCurves as additional control points (Y = `noteNumber + bend * range / 8192`). Build a per-channel bend timeline across **all** tracks (Type-1 SMFs put bend on a different track than the notes). Sniff RPN 0/0 (Pitch Bend Sensitivity) for non-standard ranges (e.g. ±12 for guitar files); default ±2. Reuse `curveFromRecording` for RDP simplification + auto-smooth handles. Cap at 256 points per curve to keep dense vibrato from blowing up the audio scheduler. Live-record pitch bend (8.25) is the follow-up. See [.claude/plans/8.24-pitch-bend-input.md](.claude/plans/8.24-pitch-bend-input.md).
 
-- [x] **8.25 Live MIDI record: pitch bend wheel** *(M, feature)*
+- [x] **8.25 Live MIDI record: pitch bend wheel** *(M, PR #55)*
   Decode 0xE0 in [src/audio/midi-input.ts](src/audio/midi-input.ts); track current bend in [src/main.ts](src/main.ts) MIDI wiring (single global value — typical user plays one device on one channel). On every bend event: re-tune all active MIDI preview synths and update every `midi-*` planchette's cursor + snapped Y via `store.setMidiPitchBendOffset`. The recording capture loop already reads `snappedWorldY`, so bent samples flow through to `curveFromRecording` automatically. Hardcoded ±2 semitone range. Bend state persists across loop wraps (extends 8.21) and across noteOn/noteOff because it lives outside the planchette + recording buffer. See [.claude/plans/8.24-pitch-bend-input.md](.claude/plans/8.24-pitch-bend-input.md).
 
-- [x] **8.26 Add 24-TET to Microtonal scale options** *(XS, feature)*
+- [x] **8.26 Add 24-TET to Microtonal scale options** *(XS, PR #56)*
   Quarter-tone scale with 24 equal divisions of the octave (intervals at 0.5-semitone spacing). Single entry added to `SCALE_CATALOG` in [src/utils/scales.ts](src/utils/scales.ts) — fractional intervals were already supported by `getScaleNotes` and the snap path.
 
-- [x] **8.27 Tune A4 — global staff tuning** *(M, feature)*
+- [x] **8.27 Tune A4 — global staff tuning** *(M, PR #56)*
   Per-composition reference frequency for A4 (default 440 Hz). New "Tune A4" spinbutton in Transport accepts 380–500 Hz; stored as a cents offset (`tuningOffsetCents`) on the Composition so projects round-trip cleanly. A small label beside the input shows the cents offset (e.g. "-31.8¢" for A=432). Audio path retunes via a module-level `currentReferenceAHz` in [src/constants.ts](src/constants.ts) read by `noteToFrequency` — every synth voice, curve sampler, and preview path picks up new tuning automatically. Existing v1/v2 saves load with default A=440 (migration backfill in [src/export/json-export.ts](src/export/json-export.ts)).
 
-- [x] **8.28 Hz readout on Pitch HUD** *(XS, feature)*
+- [x] **8.28 Hz readout on Pitch HUD** *(XS, PR #56)*
   New `hud-hz` slot beside the cents readout shows the snapped pitch as a frequency (2 decimals below 100 Hz, 1 decimal above). Uses the live `noteToFrequency`, so it reflects the 8.27 Tune A4 setting in lockstep. Builds on the fixed-width slot pattern from 7.3.
 
 - [x] **8.22 Verify 8.20 AFK gating with MIDI input (hardware required)** *(XS, PR #52)*
