@@ -9,7 +9,8 @@ import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
-import { snapToGrid, getAdaptiveSubdivisions } from './utils/snap';
+import { snapToGrid, getAdaptiveSubdivisions, findAdaptiveSnap } from './utils/snap';
+import type { SnapConfig } from './utils/snap';
 import { createInteraction, rebuildTransformBox, RULER_HEIGHT, buildSnapConfig } from './canvas/interaction';
 import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
@@ -182,7 +183,7 @@ app.innerHTML = `
         </div>
         <div class="transport-row">
           <label for="input-magnetic-damping">Damping</label>
-          <input type="range" id="input-magnetic-damping" class="magnetic-damping-slider" min="0.25" max="15" value="3" step="0.25" title="Velocity damping (low = long tremolo wobbles, high = quick settle)" />
+          <input type="range" id="input-magnetic-damping" class="magnetic-damping-slider" min="0.25" max="15" value="3" step="0.25" title="Velocity damping (low = long vibrato wobbles, high = quick settle)" />
           <span class="magnetic-damping-value">3</span>
         </div>
         <div class="transport-row guides-row">
@@ -1451,6 +1452,25 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !fileDropdown.hidden) closeFileMenu();
 });
 
+// After any form control commits a value (range release, checkbox toggle,
+// select pick), drop focus so canvas hotkeys work without an extra click-off.
+// `change` is the right event here: range inputs fire it on mouseup (after
+// their continuous `input` stream), selects fire it after the native popup
+// closes, and checkboxes/radios fire on toggle. Text-like inputs and
+// textareas are intentionally skipped — they should keep focus while the
+// user is typing.
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (!(t instanceof HTMLElement)) return;
+  if (t instanceof HTMLInputElement) {
+    const textTypes = new Set(['text', 'number', 'search', 'email', 'password', 'url', 'tel']);
+    if (textTypes.has(t.type)) return;
+  }
+  if (t instanceof HTMLTextAreaElement) return;
+  if (t.isContentEditable) return;
+  t.blur();
+});
+
 function addFileMenuItem(label: string, handler: () => void) {
   const item = document.createElement('button');
   item.className = 'file-menu-item';
@@ -2210,7 +2230,7 @@ const magneticState = createMagneticState();
  *  tick can keep advancing the planchette pitch even when the mouse isn't moving. */
 let lastComposeSy: number | null = null;
 
-function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number; snapTarget: number } {
+function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number; snapTarget: number | null } {
   const { wy } = viewport.screenToWorld(0, sy);
   const st = store.getState();
   const scale = st.scaleId ? getScaleById(st.scaleId) ?? null : null;
@@ -2224,30 +2244,49 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
       .map(g => g.position);
     if (ys.length > 0) guideYTargets = ys;
   }
-  const snapConfig = {
+  const snapConfig: SnapConfig = {
     enabled: st.snapEnabled,
     subdivisionsPerBeat: getAdaptiveSubdivisions(viewport.state.zoomX),
     scaleRoot: st.scaleRoot,
     scale,
+    hidePitchLines: st.hidePitchLines,
     guideYTargets,
   };
-  const snapped = snapToGrid(0, wy, snapConfig);
-  const nowBeats = playback.getPositionBeats();
-  // Magnetic only applies while the user is actively sounding a tone (LMB-held
-  // performance). Hovering in Select/Draw/etc should track the cursor instantly.
-  const performing = composeEngine.isLmbDown();
 
-  // Magnetic mode: spring-mass physics with nearest-snap attractor. Uses only
-  // the nearest snap line — two overlapping wells with linear falloff cancel
-  // each other exactly in the inter-snap region, producing zero net pull.
+  // Adaptive snap: nearest target plus a well radius scaled to neighbor
+  // spacing. Pentatonic scales and sparse guides get wider wells than
+  // chromatic — magnetic pull reaches the cursor wherever the grid is sparse.
+  const adaptive = st.snapEnabled
+    ? findAdaptiveSnap(wy, snapConfig)
+    : { target: null, radius: 0, captured: false };
+
+  // None Key mode is the only mode where snap can fail to engage (cursor
+  // outside the captured well between sparse guides). In scale or chromatic
+  // mode there's always a nearest target, so the cursor always snaps.
+  const inNoneMode = st.hidePitchLines && st.scaleRoot === null;
+  const snapEngaged = adaptive.target !== null && (!inNoneMode || adaptive.captured);
+  const snappedWy = snapEngaged ? adaptive.target! : wy;
+  const snapTarget = snapEngaged ? adaptive.target : null;
+
+  const performing = composeEngine.isLmbDown();
+  const nowBeats = playback.getPositionBeats();
+
+  // Magnetic mode: spring-mass physics. The attractor only acts when the
+  // cursor is inside its well; outside, the particle falls back to
+  // spring-tracks-cursor (smooth, no snap force). State stays continuous
+  // across well boundaries, so wells hand off without a kick.
   if (st.snapEnabled && performing && st.magneticEnabled) {
-    const magneticPitch = updateMagnetic(magneticState, wy, nowBeats, st.magneticStrength, st.magneticSpringK, st.magneticDamping, [snapped.wy]);
-    return { cursorWorldY: wy, snappedWorldY: magneticPitch, snapTarget: snapped.wy };
+    const attractor = adaptive.target !== null && adaptive.captured
+      ? { target: adaptive.target, radius: adaptive.radius }
+      : null;
+    const magneticPitch = updateMagnetic(magneticState, wy, nowBeats, st.magneticStrength, st.magneticSpringK, st.magneticDamping, attractor);
+    return { cursorWorldY: wy, snappedWorldY: magneticPitch, snapTarget };
   }
 
-  // Default path: instant snap (or raw cursor Y when snap is off).
+  // Non-magnetic path: instant snap (or raw cursor Y when snap is off, or no
+  // attractor in None mode between guides).
   resetMagnetic(magneticState);
-  return { cursorWorldY: wy, snappedWorldY: snapped.wy, snapTarget: snapped.wy };
+  return { cursorWorldY: wy, snappedWorldY: snappedWy, snapTarget };
 }
 
 /** Previous snap target. Used to trigger the snap-line-cross pulse on target
@@ -2265,9 +2304,10 @@ function composeUpdatePlanchette(sy: number) {
   }
   const { cursorWorldY, snappedWorldY, snapTarget } = computeComposeCursorPitch(sy);
   store.setPlanchetteY('primary', cursorWorldY, snappedWorldY);
-  // Snap-line-cross pulse — fire on target change, not on every frame of
-  // magnetic physics interpolation.
-  if (prevSnapTarget != null && prevSnapTarget !== snapTarget) {
+  // Snap-line-cross pulse — fire only when crossing between two real targets.
+  // Skip when either side is null (no attractor in None-mode between-guides
+  // zones) so the flash doesn't fire on every frame.
+  if (prevSnapTarget != null && snapTarget != null && prevSnapTarget !== snapTarget) {
     store.markPlanchetteCrossed('primary', Date.now());
   }
   prevSnapTarget = snapTarget;
@@ -3289,6 +3329,7 @@ function render() {
       subdivisionsPerBeat: getAdaptiveSubdivisions(viewport.state.zoomX),
       scaleRoot: state.scaleRoot,
       scale: state.scaleId ? getScaleById(state.scaleId) ?? null : null,
+      hidePitchLines: state.hidePitchLines,
     };
     const snapped = snapToGrid(0, cursorWorld.y, snapConfig);
     renderFreePlanchette(

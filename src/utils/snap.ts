@@ -1,6 +1,6 @@
 import { SUBDIVISIONS_PER_BEAT, MIN_NOTE, MAX_NOTE } from '../constants';
 import type { ScaleDefinition } from './scales';
-import { nearestScaleNote } from './scales';
+import { nearestScaleNote, getScaleNotes } from './scales';
 
 /** Within this many beats of a guide, the guide wins X-snap over the subdivision grid. */
 const GUIDE_X_SNAP_RADIUS_BEATS = 0.25;
@@ -99,6 +99,91 @@ export function snapToGrid(
   }
 
   return { wx: Math.max(0, snappedX), wy: snappedY };
+}
+
+/** Hard cap on adaptive snap radius. Wider attractor wells get gentler peak
+ *  forces (see SNAPK_REFERENCE_RADIUS in snap-magnetic), but reach is still
+ *  bounded so a lone guide doesn't dominate notes that are nowhere near it.
+ *  ~3 ST covers typical sparse-guide setups (gaps up to 6 ST contiguous);
+ *  past this the cursor floats free between wells. */
+const MAX_ADAPTIVE_RADIUS = 3;
+
+export interface AdaptiveSnapResult {
+  /** Nearest snap target to the cursor (scale note, chromatic semitone, or
+   *  Y-guide). Null only in None Key mode with no guides anywhere nearby. */
+  target: number | null;
+  /** Half the distance to the next target on the cursor's side, capped at
+   *  MAX_ADAPTIVE_RADIUS. Defines the attractor well's reach. */
+  radius: number;
+  /** True when |cursor - target| <= radius. Used to gate "snap engaged"
+   *  behaviors: draw-snap in None mode, magnetic-attractor activation. */
+  captured: boolean;
+}
+
+/** Build the union of snap targets active near `wy`. Mirrors snapToGrid's
+ *  priority (projection exclusive, scale OR chromatic, guides additive) but
+ *  returns the full local target list so the caller can pick neighbors. */
+function collectSnapTargets(wy: number, config: SnapConfig, range: number): number[] {
+  const targets: number[] = [];
+
+  if (config.projectionTargets && config.projectionTargets.length > 0) {
+    for (const t of config.projectionTargets) {
+      if (Math.abs(t - wy) <= range) targets.push(t);
+    }
+    targets.sort((a, b) => a - b);
+    return targets;
+  }
+
+  if (config.scaleRoot !== null && config.scale) {
+    const scaleNotes = getScaleNotes(config.scaleRoot, config.scale);
+    for (const n of scaleNotes) {
+      if (Math.abs(n - wy) <= range) targets.push(n);
+    }
+  } else if (!config.hidePitchLines) {
+    const lo = Math.max(MIN_NOTE, Math.floor(wy - range));
+    const hi = Math.min(MAX_NOTE, Math.ceil(wy + range));
+    for (let n = lo; n <= hi; n++) targets.push(n);
+  }
+
+  if (config.guideYTargets) {
+    for (const g of config.guideYTargets) {
+      if (Math.abs(g - wy) > range) continue;
+      // Dedupe against scale/chromatic targets at the same pitch.
+      if (!targets.some(t => Math.abs(t - g) < 1e-6)) targets.push(g);
+    }
+  }
+
+  targets.sort((a, b) => a - b);
+  return targets;
+}
+
+/** Find the nearest snap target to `wy` and the adaptive well radius around it.
+ *  Radius = half the distance to the next target on the cursor's side, so
+ *  adjacent wells meet at midpoints without overlapping. Pentatonic-like sparse
+ *  scales and far-apart Y guides get wider wells than chromatic / dense
+ *  scales — wherever the snap grid is sparser, magnetic pull reaches farther. */
+export function findAdaptiveSnap(wy: number, config: SnapConfig): AdaptiveSnapResult {
+  const targets = collectSnapTargets(wy, config, MAX_ADAPTIVE_RADIUS * 2);
+  if (targets.length === 0) return { target: null, radius: 0, captured: false };
+
+  let nearestIdx = 0;
+  let nearestDist = Math.abs(targets[0]! - wy);
+  for (let i = 1; i < targets.length; i++) {
+    const d = Math.abs(targets[i]! - wy);
+    if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
+  }
+  const T = targets[nearestIdx]!;
+
+  let radius: number;
+  if (wy >= T) {
+    const above = nearestIdx + 1 < targets.length ? targets[nearestIdx + 1]! : null;
+    radius = above !== null ? Math.min((above - T) / 2, MAX_ADAPTIVE_RADIUS) : MAX_ADAPTIVE_RADIUS;
+  } else {
+    const below = nearestIdx - 1 >= 0 ? targets[nearestIdx - 1]! : null;
+    radius = below !== null ? Math.min((T - below) / 2, MAX_ADAPTIVE_RADIUS) : MAX_ADAPTIVE_RADIUS;
+  }
+
+  return { target: T, radius, captured: Math.abs(wy - T) <= radius };
 }
 
 /** Nearest value in `targets` to `v` if it's within `radius`, else null. */
