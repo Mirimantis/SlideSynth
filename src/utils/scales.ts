@@ -67,11 +67,23 @@ export function isMicrotonal(scale: ScaleDefinition): boolean {
   return scale.intervals.some(iv => iv !== Math.floor(iv));
 }
 
+/** Memoize getScaleNotes results — the note list is a pure function of
+ *  (scaleId, root) and never changes for a given pair. Without this cache,
+ *  the magnetic-snap path was allocating ~70 numbers per cursor update,
+ *  enough to show up as GC stutter in resource-constrained preview tabs.
+ *  Callers must treat the returned array as read-only. */
+const scaleNotesCache = new Map<string, readonly number[]>();
+
 /**
  * Get all MIDI note values belonging to the given scale
  * within the staff range [MIN_NOTE, MAX_NOTE].
+ * The returned array is shared across callers and must not be mutated.
  */
-export function getScaleNotes(root: number, scale: ScaleDefinition): number[] {
+export function getScaleNotes(root: number, scale: ScaleDefinition): readonly number[] {
+  const cacheKey = `${scale.id}|${root}`;
+  const cached = scaleNotesCache.get(cacheKey);
+  if (cached) return cached;
+
   const notes: number[] = [];
   const startOctave = Math.floor((MIN_NOTE - root) / scale.period);
   const endOctave = Math.ceil((MAX_NOTE - root) / scale.period);
@@ -83,6 +95,7 @@ export function getScaleNotes(root: number, scale: ScaleDefinition): number[] {
       }
     }
   }
+  scaleNotesCache.set(cacheKey, notes);
   return notes;
 }
 
