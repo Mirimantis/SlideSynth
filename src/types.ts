@@ -39,12 +39,33 @@ export interface ControlPoint {
   position: Vec2;           // x = beats, y = MIDI note number (continuous float)
   handleIn: Vec2 | null;    // relative to position
   handleOut: Vec2 | null;   // relative to position
-  volume: number;           // 0–1
+}
+
+// ── Parameter curves (animation-style envelopes per BezierCurve) ──
+// Each parameter (volume, and future: pan, filter cutoff, …) is its own
+// Bezier curve with INDEPENDENT control points whose X is a beat and Y is the
+// parameter value (0–1 for volume). Edited in the Parameters Graph panel.
+
+export interface ParamPoint {
+  position: Vec2;           // x = beats, y = parameter value (0–1 for volume)
+  handleIn: Vec2 | null;    // relative to position
+  handleOut: Vec2 | null;   // relative to position
+}
+
+export interface ParamCurve {
+  points: ParamPoint[];     // ordered by increasing position.x; >= 1 point
+}
+
+/** Keyed map of parameter lanes attached to a BezierCurve. Adding a new lane
+ *  (pan, cutoff, …) does not require touching BezierCurve again. */
+export interface CurveParameters {
+  volume?: ParamCurve;
 }
 
 export interface BezierCurve {
   id: string;
   points: ControlPoint[];   // ordered by increasing position.x
+  parameters?: CurveParameters; // independent parameter envelopes (volume, …)
   groupId?: string | null;  // grouped curves move/delete/transform together (chord clusters and freehand groups)
   voiceIndex?: number;      // Harmonic Prism: 0 = primary, 1..N-1 = harmonies (chord-cluster siblings only)
 }

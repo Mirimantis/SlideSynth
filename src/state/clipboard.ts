@@ -1,11 +1,13 @@
-import type { ControlPoint } from '../types';
+import type { ControlPoint, CurveParameters } from '../types';
 import { store } from './store';
 import { history } from './history';
 import { createCurve, deepCopyPoints } from '../model/curve';
+import { deepCopyParameters, offsetParametersX } from '../model/param-curve';
 import { expandSelectionToGroups, remapGroupIds, createGroupId } from '../model/curve-groups';
 
 interface ClipboardEntry {
   points: ControlPoint[];
+  parameters: CurveParameters | undefined; // parameter envelopes (volume, …) at copy time
   groupId: string | null;     // group membership at copy time (so paste can preserve cluster identity within the paste)
   voiceIndex: number | null;  // chord-cluster voice index, if any
 }
@@ -38,6 +40,7 @@ export function copySelectedCurves(): boolean {
     if (!curve || curve.points.length === 0) continue;
     entries.push({
       points: deepCopyPoints(curve.points),
+      parameters: deepCopyParameters(curve.parameters),
       groupId: curve.groupId ?? null,
       voiceIndex: curve.voiceIndex ?? null,
     });
@@ -101,6 +104,9 @@ export function pasteCurves(atBeat: number): string[] | null {
       for (const pt of curve.points) {
         pt.position.x += offsetX;
       }
+      const params = deepCopyParameters(entry.parameters);
+      offsetParametersX(params, offsetX);
+      if (params) curve.parameters = params;
       curve.groupId = entry.groupId;
       if (entry.voiceIndex !== null) curve.voiceIndex = entry.voiceIndex;
       track.curves.push(curve);
@@ -161,6 +167,9 @@ export function duplicateCurves(): string[] | null {
       for (const pt of curve.points) {
         pt.position.x += offsetX;
       }
+      const params = deepCopyParameters(original.parameters);
+      offsetParametersX(params, offsetX);
+      if (params) curve.parameters = params;
       curve.groupId = original.groupId ?? null;
       if (original.voiceIndex !== undefined) curve.voiceIndex = original.voiceIndex;
       t.curves.push(curve);
@@ -216,6 +225,9 @@ export function continueCurves(): string[] | null {
         pt.position.x += offsetX;
         pt.position.y += offsetY;
       }
+      const params = deepCopyParameters(original.parameters);
+      offsetParametersX(params, offsetX);
+      if (params) curve.parameters = params;
       if (original.groupId) {
         let g = oldToNewGroup.get(original.groupId);
         if (!g) {

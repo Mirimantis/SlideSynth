@@ -1,7 +1,6 @@
 import { store } from '../state/store';
 import { history } from '../state/history';
 import { noteNumberToName } from '../constants';
-import { setPointVolume } from '../model/curve';
 import { getMovableSelection } from '../model/curve-groups';
 import { openTonePicker } from './tone-picker';
 
@@ -187,11 +186,6 @@ export function renderPropertyPanel(container: HTMLElement): void {
       <div class="prop-value-sub">MIDI ${point.position.y.toFixed(2)}</div>
     </div>
     <div class="prop-section">
-      <div class="prop-label">Volume</div>
-      <input type="range" id="prop-vol" min="0" max="1" step="0.05" value="${point.volume}" />
-      <span class="prop-val-text">${point.volume.toFixed(2)}</span>
-    </div>
-    <div class="prop-section">
       <div class="prop-label">Handle In</div>
       <div class="prop-value">${point.handleIn ? `(${point.handleIn.x.toFixed(2)}, ${point.handleIn.y.toFixed(2)})` : 'none'}</div>
     </div>
@@ -200,18 +194,6 @@ export function renderPropertyPanel(container: HTMLElement): void {
       <div class="prop-value">${point.handleOut ? `(${point.handleOut.x.toFixed(2)}, ${point.handleOut.y.toFixed(2)})` : 'none'}</div>
     </div>
   `;
-
-  container.querySelector('#prop-vol')?.addEventListener('mousedown', () => {
-    history.snapshot();
-  });
-  container.querySelector('#prop-vol')?.addEventListener('input', (e) => {
-    const v = Number((e.target as HTMLInputElement).value);
-    store.mutate(() => {
-      setPointVolume(curve, state.selectedPointIndex!, v);
-    });
-    const span = container.querySelector('.prop-val-text');
-    if (span) span.textContent = v.toFixed(2);
-  });
 }
 
 function escapeAttr(s: string): string {

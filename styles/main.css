@@ -14,7 +14,35 @@
   --accent-hover: #81d4fa;
   --panel-width: 200px;
   --panel-width-left: 240px;
+  --rail-width: 48px;
+  --param-graph-height: 140px;
   --toolbar-height: auto;
+  /* Icon colors — SVG shapes use currentColor; these drive it dynamically so
+     the UI can be re-skinned without editing the SVG geometry. */
+  --icon-color: var(--text-dim);
+  --icon-color-hover: var(--accent-hover);
+  --icon-color-active: var(--accent);
+}
+
+/* ── SVG icons (shape-only assets, color from currentColor) ─────── */
+
+.icon,
+.icon-svg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.icon svg,
+.icon-svg {
+  width: 1.25em;
+  height: 1.25em;
+  display: block;
 }
 
 body {
@@ -40,6 +68,37 @@ body {
   border-bottom: 1px solid #335;
   padding: 6px 12px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  position: relative; /* anchor for the absolutely-centered zone */
+}
+
+/* 3-zone top bar: left flows, center is absolutely centered over canvas centre,
+   right hugs the end. */
+#toolbar-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar-zone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar-zone.center {
+  position: absolute;
+  /* Centre over the CANVAS centre (where the rail locks), not the viewport
+     centre. The canvas sits between the rail (left) and the right panel, so its
+     centre is offset from the toolbar centre by half their width difference:
+     (rail - panel) / 2 = (48 - 200) / 2 = -76px. */
+  left: 50%;
+  transform: translateX(calc(-50% + (var(--rail-width) - var(--panel-width)) / 2));
+  white-space: nowrap;
+}
+
+.toolbar-zone.right {
+  margin-left: auto;
 }
 
 .toolbar-row {
@@ -273,44 +332,6 @@ body {
   color: var(--text-dim);
 }
 
-/* ── Scroll switch: Canvas ↔ Planchette ──────────────────────── */
-
-.scroll-switch {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
-  border-radius: 4px;
-  cursor: default;
-  user-select: none;
-}
-
-.scroll-switch-title {
-  font-size: 0.7rem;
-  color: var(--text-dim);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.scroll-switch-control {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
-  color: var(--text-dim);
-}
-
-.scroll-switch-side {
-  transition: color 0.15s;
-}
-
-/* Active side (the one currently scrolling) gets the accent color. */
-.scroll-switch:has(input:not(:checked)) .scroll-switch-side.left,
-.scroll-switch:has(input:checked) .scroll-switch-side.right {
-  color: var(--accent);
-}
-
 .toolbar-time-display {
   font-size: 0.75rem;
   color: var(--text-dim);
@@ -342,14 +363,14 @@ body {
 
 #main-area {
   display: grid;
-  grid-template-columns: var(--panel-width-left) 1fr var(--panel-width);
+  grid-template-columns: var(--rail-width) 1fr var(--panel-width);
   flex: 1;
   min-height: 0;
+  position: relative; /* anchor for the absolutely-positioned drawer overlay */
 }
 
 /* ── Side panels ─────────────────────────────────────────────── */
 
-#track-panel,
 #property-panel {
   background: var(--bg-light);
   border-right: 1px solid #335;
@@ -367,8 +388,24 @@ body {
   border-bottom: 1px solid #262636;
 }
 
+/* Object Properties takes only the height its content needs — it must NOT grow
+   to fill the panel, or its empty space pushes the Tracks list off the bottom. */
 #prop-content {
-  flex: 1;
+  flex: 0 0 auto;
+}
+
+/* The Tracks section fills the remaining space and scrolls internally, so the
+   track list is always reachable at the bottom of the panel. */
+#tracks-section {
+  flex: 1 1 auto;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+}
+
+#track-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .panel-header {
@@ -410,6 +447,97 @@ body {
   gap: 6px;
 }
 
+/* ── Icon rail + sliding drawers (WS3) ─────────────────────────── */
+
+#rail {
+  background: var(--bg-light);
+  border-right: 1px solid #335;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0;
+  position: relative;
+  z-index: 30; /* above the drawer overlay so icons stay clickable */
+}
+
+.rail-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--icon-color);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-size: 20px; /* drives the 1.25em SVG sizing */
+}
+
+.rail-icon:hover {
+  background: rgba(79, 195, 247, 0.1);
+  color: var(--icon-color-hover);
+}
+
+.rail-icon.active {
+  background: rgba(79, 195, 247, 0.16);
+  color: var(--icon-color-active);
+}
+
+/* Drawer overlay host: spans the area right of the rail, lets clicks through
+   to the canvas when no drawer is open. */
+#drawer-host {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--rail-width);
+  right: 0;
+  z-index: 20;
+  pointer-events: none;
+  overflow: hidden; /* clip the off-screen (translated) drawers */
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 240px;
+  background: var(--bg-light);
+  border-right: 1px solid #335;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.35);
+  transform: translateX(-105%);
+  transition: transform 0.18s ease;
+  pointer-events: auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer.open {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 8px 12px;
+  border-bottom: 1px solid #335;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+#tuning-section {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .tool-panel-grid .tool-btn {
   width: 100%;
 }
@@ -441,12 +569,82 @@ body {
   font-style: italic;
 }
 
-/* ── Canvas container ────────────────────────────────────────── */
+/* ── Center stack: main canvas above the Parameters Graph ──────── */
+
+#center-stack {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
 
 #canvas-container {
   position: relative;
   overflow: hidden;
   background: var(--bg);
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Parameters Graph lane ─────────────────────────────────────── */
+
+#param-container {
+  position: relative;
+  height: var(--param-graph-height);
+  flex-shrink: 0;
+  background: var(--bg);
+}
+
+/* Divider between the main canvas and the Parameters Graph, which doubles as a
+   drag handle for resizing the graph's height. */
+#param-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 7px;
+  background: #2a3a55;
+  border-top: 1px solid #46618f;
+  border-bottom: 1px solid #1a2742;
+  cursor: row-resize;
+  z-index: 4;
+  transition: background 0.15s;
+}
+
+#param-resize-handle::after {
+  /* grip dots in the centre to signal draggability */
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 0;
+  transform: translate(-50%, -50%);
+  border-top: 2px dotted rgba(255, 255, 255, 0.35);
+}
+
+#param-resize-handle:hover,
+#param-resize-handle.dragging {
+  background: var(--accent);
+}
+
+#param-canvas {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  display: block;
+}
+
+#param-graph-label {
+  position: absolute;
+  top: 11px;
+  left: 8px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* ── Zoom controls overlay ───────────────────────────────────── */

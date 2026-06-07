@@ -1,6 +1,9 @@
-import type { BezierCurve, ControlPoint, Vec2, BoundingBox, TransformHandle } from '../types';
+import type { BezierCurve, ControlPoint, ParamCurve, Vec2, BoundingBox, TransformHandle } from '../types';
 import { generateId } from './tone';
 import { subdivideCubic, distToPoint } from '../utils/bezier-math';
+import {
+  createParamPoint, splitParametersAtBeat, concatParameters, deepCopyParameters,
+} from './param-curve';
 import { AUTO_SMOOTH_X_RATIO } from '../constants';
 
 /** Create a new empty curve. */
@@ -12,13 +15,11 @@ export function createCurve(): BezierCurve {
 export function createControlPoint(
   x: number,
   y: number,
-  volume: number = 0.8,
 ): ControlPoint {
   return {
     position: { x, y },
     handleIn: null,
     handleOut: null,
-    volume,
   };
 }
 
@@ -178,13 +179,6 @@ export function sharpenCurveHandles(curve: BezierCurve): void {
   }
 }
 
-/** Set volume at a control point. */
-export function setPointVolume(curve: BezierCurve, index: number, volume: number): void {
-  const point = curve.points[index];
-  if (!point) return;
-  point.volume = Math.max(0, Math.min(1, volume));
-}
-
 /**
  * Get the four Bezier control points for a segment between points[i] and points[i+1].
  * Returns absolute coordinates.
@@ -223,10 +217,6 @@ export function splitCurveAtSegment(
   const seg = getSegmentControlPoints(curve, segmentIndex)!;
   const [L0, L1, L2, L3, _R0, R1, R2, R3] = subdivideCubic(seg.p0, seg.p1, seg.p2, seg.p3, t);
 
-  const volA = curve.points[segmentIndex]!.volume;
-  const volB = curve.points[segmentIndex + 1]!.volume;
-  const splitVolume = volA + (volB - volA) * t;
-
   // Left curve: points[0..segmentIndex] + split point
   const left = createCurve();
   left.points = deepCopyPoints(curve.points.slice(0, segmentIndex + 1));
@@ -238,7 +228,6 @@ export function splitCurveAtSegment(
     position: { x: L3.x, y: L3.y },
     handleIn: { x: L2.x - L3.x, y: L2.y - L3.y },
     handleOut: null,
-    volume: splitVolume,
   });
 
   // Right curve: split point + points[segmentIndex+1..end]
@@ -248,12 +237,14 @@ export function splitCurveAtSegment(
       position: { x: L3.x, y: L3.y }, // same split point, fresh copy
       handleIn: null,
       handleOut: { x: R1.x - L3.x, y: R1.y - L3.y },
-      volume: splitVolume,
     },
     ...deepCopyPoints(curve.points.slice(segmentIndex + 1)),
   ];
   // Adjust the first original point's handleIn to match the subdivision
   right.points[1]!.handleIn = { x: R2.x - R3.x, y: R2.y - R3.y };
+
+  // Split parameter lanes at the split beat so each half keeps its envelope.
+  applyParamSplit(curve, left, right, L3.x);
 
   // Group inheritance: both halves inherit the parent's groupId/voiceIndex
   // so a chord-cluster member that's been split keeps its cluster membership
@@ -287,6 +278,8 @@ export function splitCurveAtPoint(
   right.points = deepCopyPoints(curve.points.slice(pointIndex));
   right.points[0]!.handleIn = null;
 
+  applyParamSplit(curve, left, right, curve.points[pointIndex]!.position.x);
+
   if (curve.groupId) {
     left.groupId = curve.groupId;
     right.groupId = curve.groupId;
@@ -297,6 +290,16 @@ export function splitCurveAtPoint(
   }
 
   return { left, right };
+}
+
+/** Split the source curve's parameter lanes at `splitBeat` onto left/right halves. */
+function applyParamSplit(
+  source: BezierCurve, left: BezierCurve, right: BezierCurve, splitBeat: number,
+): void {
+  if (!source.parameters) return;
+  const { left: lp, right: rp } = splitParametersAtBeat(source.parameters, splitBeat);
+  if (lp) left.parameters = lp;
+  if (rp) right.parameters = rp;
 }
 
 /**
@@ -315,6 +318,7 @@ export function joinCurves(
 
   const merged = createCurve();
   merged.points = deepCopyPoints(sorted[0]!.points);
+  let mergedParams = deepCopyParameters(sorted[0]!.parameters);
   const consumedIds = new Set<string>([sorted[0]!.id]);
 
   for (let c = 1; c < sorted.length; c++) {
@@ -332,7 +336,6 @@ export function joinCurves(
       tail.position.x = (tail.position.x + head.position.x) / 2;
       tail.position.y = (tail.position.y + head.position.y) / 2;
       tail.handleOut = head.handleOut;
-      tail.volume = (tail.volume + head.volume) / 2;
       // Append remaining points (skip the merged head)
       for (let i = 1; i < incoming.length; i++) {
         merged.points.push(incoming[i]!);
@@ -343,8 +346,10 @@ export function joinCurves(
         merged.points.push(pt);
       }
     }
+    mergedParams = concatParameters(mergedParams, deepCopyParameters(sorted[c]!.parameters));
   }
 
+  if (mergedParams) merged.parameters = mergedParams;
   return { merged, consumedIds };
 }
 
@@ -494,13 +499,15 @@ export function curveFromRecording(
       position: { x: s.beat, y: s.note },
       handleIn: null,
       handleOut: null,
-      volume: s.volume,
     });
   }
   // applyAutoSmoothHandles handles indices >= 1; index 0 keeps null handles.
   for (let i = 1; i < curve.points.length; i++) {
     applyAutoSmoothHandles(curve, i);
   }
+  // Capture recorded velocity-over-time as the volume parameter lane.
+  const volumeLane: ParamCurve = { points: cleaned.map(s => createParamPoint(s.beat, s.volume)) };
+  curve.parameters = { volume: volumeLane };
   return curve;
 }
 
@@ -510,7 +517,6 @@ export function deepCopyPoints(points: ControlPoint[]): ControlPoint[] {
     position: { ...pt.position },
     handleIn: pt.handleIn ? { ...pt.handleIn } : null,
     handleOut: pt.handleOut ? { ...pt.handleOut } : null,
-    volume: pt.volume,
   }));
 }
 

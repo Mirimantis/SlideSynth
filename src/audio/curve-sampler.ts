@@ -1,5 +1,6 @@
 import type { BezierCurve, CurveSample } from '../types';
 import { getSegmentControlPoints } from '../model/curve';
+import { evaluateParamAtBeat, DEFAULT_VOLUME } from '../model/param-curve';
 import { evaluateCubic } from '../utils/bezier-math';
 import { noteToFrequency, CURVE_SAMPLE_RATE } from '../constants';
 
@@ -22,9 +23,6 @@ export function sampleCurve(
     const seg = getSegmentControlPoints(curve, i);
     if (!seg) continue;
 
-    const ptA = curve.points[i]!;
-    const ptB = curve.points[i + 1]!;
-
     // Segment time span
     const segStartBeat = seg.p0.x;
     const segEndBeat = seg.p3.x;
@@ -41,10 +39,11 @@ export function sampleCurve(
       const t = s / n;
       const pt = evaluateCubic(seg.p0, seg.p1, seg.p2, seg.p3, t);
 
-      // Volume: linear interpolation between endpoints
-      const volume = ptA.volume + (ptB.volume - ptA.volume) * t;
-
       const timeBeat = pt.x;
+
+      // Volume: sample the independent volume parameter lane at this beat.
+      const volCurve = curve.parameters?.volume;
+      const volume = volCurve ? evaluateParamAtBeat(volCurve, timeBeat) : DEFAULT_VOLUME;
 
       // Filter to requested range
       if (startBeat !== undefined && timeBeat < startBeat) continue;
@@ -99,7 +98,8 @@ export function evaluateCurveAtBeat(
 
     const t = (lo + hi) / 2;
     const pt = evaluateCubic(seg.p0, seg.p1, seg.p2, seg.p3, t);
-    const volume = ptA.volume + (ptB.volume - ptA.volume) * t;
+    const volCurve = curve.parameters?.volume;
+    const volume = volCurve ? evaluateParamAtBeat(volCurve, pt.x) : DEFAULT_VOLUME;
     return { noteNumber: pt.y, volume };
   }
 

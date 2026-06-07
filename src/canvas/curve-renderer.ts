@@ -81,10 +81,8 @@ function renderCurve(
     const inMultiPointSelection = !!selectedPointKeys && selectedPointKeys.has(`${curve.id}:${i}`);
     // White-fill highlight when this point is the primary (showHandles +
     // selectedPointIndex match) OR when it's part of the multi-point set
-    // (BACKLOG 8.3). The volume bar still requires showHandles since it's
-    // an editing affordance and only one point is "primary".
+    // (BACKLOG 8.3).
     const isPointHighlighted = (showHandles && selectedPointIndex === i) || inMultiPointSelection;
-    const isPrimary = showHandles && selectedPointIndex === i;
 
     if (showHandles) {
       // Draw handles when curve is selected and in single-select/point mode
@@ -103,21 +101,6 @@ function renderCurve(
       ctx.strokeStyle = isPointHighlighted ? '#fff' : '#000';
       ctx.lineWidth = 1.5;
       ctx.stroke();
-
-      // Volume indicator: small bar below point (primary point only)
-      if (isPrimary) {
-        const barWidth = 20;
-        const barHeight = 3;
-        const barX = screen.sx - barWidth / 2;
-        const barY = screen.sy + POINT_RADIUS + 4;
-
-        // Background
-        ctx.fillStyle = '#333';
-        ctx.fillRect(barX, barY, barWidth, barHeight);
-        // Fill
-        ctx.fillStyle = tone.color;
-        ctx.fillRect(barX, barY, barWidth * pt.volume, barHeight);
-      }
     } else if (isSelected) {
       // Selected but no handles (multi-curve or multi-point mode): full-size
       // anchor; white-fill any point that's part of the multi-point selection
