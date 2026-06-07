@@ -1,4 +1,8 @@
 import { createViewport } from './canvas/viewport';
+import { createParamViewport } from './canvas/param-viewport';
+import { renderParamGraph } from './canvas/param-graph-renderer';
+import { createParamInteraction } from './canvas/param-interaction';
+import { ensureVolumeParam } from './model/param-curve';
 import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_NOTE, MAX_NOTE, Y_PAN_MARGIN, noteNumberToName, noteToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
@@ -47,6 +51,17 @@ import { showToast } from './ui/toast';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { getScaleById } from './utils/scales';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
+import { createDrawerRail } from './ui/drawer';
+import { setIcon } from './utils/svg-helpers';
+import iconTransport from './assets/icons/transport.svg?raw';
+import iconTools from './assets/icons/tools.svg?raw';
+import iconSnap from './assets/icons/snap.svg?raw';
+import iconPrism from './assets/icons/prism.svg?raw';
+import iconTuning from './assets/icons/tuning.svg?raw';
+import iconPlay from './assets/icons/play.svg?raw';
+import iconPause from './assets/icons/pause.svg?raw';
+import iconStop from './assets/icons/stop.svg?raw';
+import iconRecord from './assets/icons/record.svg?raw';
 import type { AppState, ToolMode, ControlPoint, BezierCurve } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -56,184 +71,204 @@ viewport.topInset = RULER_HEIGHT;
 // ── DOM layout ──────────────────────────────────────────────────
 const app = document.getElementById('app')!;
 app.innerHTML = `
-  <div id="toolbar"></div>
+  <div id="toolbar">
+    <div class="toolbar-row" id="toolbar-left"></div>
+    <div class="toolbar-zone center">
+      <label class="toggle-switch" title="Lock the playhead rail at canvas centre during playback (the canvas scrolls past it). Off = stationary canvas with a moving playhead.">
+        <span class="toggle-switch-track">
+          <input type="checkbox" id="lock-rail-toggle" />
+          <span class="toggle-switch-thumb"></span>
+        </span>
+        <span class="toggle-switch-label">Lock Rail</span>
+      </label>
+    </div>
+    <div class="toolbar-zone right">
+      <div class="transport-buttons transport">
+        <button id="btn-play" title="Play (Space)"></button>
+        <button id="btn-pause" title="Pause" disabled></button>
+        <button id="btn-stop" title="Stop"></button>
+        <button id="btn-record" class="record-btn" title="Record (R) — captures curves onto the selected track" hidden></button>
+      </div>
+      <label class="toggle-switch" title="Toggle snap (S)">
+        <span class="toggle-switch-track">
+          <input type="checkbox" id="snap-toggle" checked />
+          <span class="toggle-switch-thumb"></span>
+        </span>
+        <span class="toggle-switch-label">Snap</span>
+      </label>
+    </div>
+  </div>
   <div id="main-area">
-    <div id="track-panel">
-      <div class="panel-header">Transport</div>
-      <div id="transport-section">
-        <div class="transport-buttons transport">
-          <button id="btn-play" title="Play (Space)">&#9654;</button>
-          <button id="btn-pause" title="Pause" disabled>&#10074;&#10074;</button>
-          <button id="btn-stop" title="Stop">&#9632;</button>
-          <button id="btn-record" class="record-btn" title="Record (R) — captures curves onto the selected track" hidden>&#9679;</button>
-        </div>
-        <div class="transport-row">
-          <label class="toggle-switch" title="Loop playback (L)">
-            <span class="toggle-switch-track">
-              <input type="checkbox" id="loop-toggle" />
-              <span class="toggle-switch-thumb"></span>
-            </span>
-            <span class="toggle-switch-label">Loop</span>
-          </label>
-        </div>
-        <div class="transport-row scroll-switch-row">
-          <div class="scroll-switch" title="Choose which element scrolls during Playback: the Canvas (stationary planchette on the rail) or the Planchette (stationary canvas with a moving playhead)">
-            <div class="scroll-switch-title">Scroll</div>
-            <div class="scroll-switch-control">
-              <span class="scroll-switch-side left">Canvas</span>
-              <label class="toggle-switch-track">
-                <input type="checkbox" id="scroll-canvas-toggle" />
+    <div id="rail">
+      <button class="rail-icon" data-drawer="transport" title="Transport" aria-label="Transport"></button>
+      <button class="rail-icon" data-drawer="tools" title="Tools" aria-label="Tools"></button>
+      <button class="rail-icon" data-drawer="snap" title="Snap" aria-label="Snap"></button>
+      <button class="rail-icon" data-drawer="prism" title="Harmonic Prism" aria-label="Harmonic Prism"></button>
+      <button class="rail-icon" data-drawer="tuning" title="Tuning" aria-label="Tuning"></button>
+    </div>
+    <div id="drawer-host">
+      <div class="drawer" id="drawer-transport" data-drawer="transport">
+        <div class="drawer-header">Transport</div>
+        <div id="transport-section">
+          <div class="transport-row">
+            <label class="toggle-switch" title="Loop playback (L)">
+              <span class="toggle-switch-track">
+                <input type="checkbox" id="loop-toggle" />
                 <span class="toggle-switch-thumb"></span>
-              </label>
-              <span class="scroll-switch-side right">Planchette</span>
-            </div>
+              </span>
+              <span class="toggle-switch-label">Loop</span>
+            </label>
+          </div>
+          <div class="transport-row">
+            <label id="pitch-hud-label" class="toggle-switch" title="Show the pitch readout when the cursor is over the canvas">
+              <span class="toggle-switch-track">
+                <input type="checkbox" id="pitch-hud-toggle" />
+                <span class="toggle-switch-thumb"></span>
+              </span>
+              <span class="toggle-switch-label">Pitch HUD</span>
+            </label>
+          </div>
+          <div class="transport-row">
+            <label id="perf-hud-label" class="toggle-switch" title="Show frame ms, synth/oscillator/voice counts, and audio latency (!)">
+              <span class="toggle-switch-track">
+                <input type="checkbox" id="perf-hud-toggle" />
+                <span class="toggle-switch-thumb"></span>
+              </span>
+              <span class="toggle-switch-label">Perf HUD</span>
+            </label>
+          </div>
+          <div class="transport-row">
+            <label>BPM</label>
+            <input type="number" id="input-bpm" value="120" min="20" max="300" step="1" />
+          </div>
+          <div class="transport-row">
+            <label>Time</label>
+            <select id="input-time-sig" title="Time signature">
+              <option value="2/4">2/4</option>
+              <option value="3/4">3/4</option>
+              <option value="4/4" selected>4/4</option>
+              <option value="5/4">5/4</option>
+              <option value="7/4">7/4</option>
+              <option value="6/8">6/8</option>
+              <option value="9/8">9/8</option>
+              <option value="12/8">12/8</option>
+            </select>
+          </div>
+          <div class="transport-row">
+            <label class="toggle-switch" title="Metronome clicks during playback">
+              <span class="toggle-switch-track">
+                <input type="checkbox" id="metronome-toggle" />
+                <span class="toggle-switch-thumb"></span>
+              </span>
+              <span class="toggle-switch-label">Metronome</span>
+            </label>
+            <input type="range" id="metronome-volume" class="metronome-volume" min="0" max="100" value="60" title="Metronome volume" />
+          </div>
+          <div class="transport-row">
+            <label>MIDI Input</label>
+            <select id="input-midi-device" title="Live MIDI input device">
+              <option value="">None</option>
+            </select>
           </div>
         </div>
-        <div class="transport-row">
-          <label id="pitch-hud-label" class="toggle-switch" title="Show the pitch readout when the cursor is over the canvas">
-            <span class="toggle-switch-track">
-              <input type="checkbox" id="pitch-hud-toggle" />
-              <span class="toggle-switch-thumb"></span>
-            </span>
-            <span class="toggle-switch-label">Pitch HUD</span>
-          </label>
-        </div>
-        <div class="transport-row">
-          <label id="perf-hud-label" class="toggle-switch" title="Show frame ms, synth/oscillator/voice counts, and audio latency (!)">
-            <span class="toggle-switch-track">
-              <input type="checkbox" id="perf-hud-toggle" />
-              <span class="toggle-switch-thumb"></span>
-            </span>
-            <span class="toggle-switch-label">Perf HUD</span>
-          </label>
-        </div>
-        <div class="transport-row">
-          <label>BPM</label>
-          <input type="number" id="input-bpm" value="120" min="20" max="300" step="1" />
-        </div>
-        <div class="transport-row">
-          <label title="Reference frequency for A4. 440 = standard, 432 = 'Verdi tuning', 415 = Baroque pitch, etc.">Tune A4</label>
-          <input type="number" id="input-tuning" value="440" min="380" max="500" step="0.1" title="Reference frequency for A4 in Hz (default 440)" />
-          <span class="transport-hint" id="tuning-cents-display" title="Cents offset from A=440">0¢</span>
-        </div>
-        <div class="transport-row">
-          <label>Time</label>
-          <select id="input-time-sig" title="Time signature">
-            <option value="2/4">2/4</option>
-            <option value="3/4">3/4</option>
-            <option value="4/4" selected>4/4</option>
-            <option value="5/4">5/4</option>
-            <option value="7/4">7/4</option>
-            <option value="6/8">6/8</option>
-            <option value="9/8">9/8</option>
-            <option value="12/8">12/8</option>
-          </select>
-        </div>
-        <div class="transport-row">
-          <label class="toggle-switch" title="Metronome clicks during playback">
-            <span class="toggle-switch-track">
-              <input type="checkbox" id="metronome-toggle" />
-              <span class="toggle-switch-thumb"></span>
-            </span>
-            <span class="toggle-switch-label">Metronome</span>
-          </label>
-          <input type="range" id="metronome-volume" class="metronome-volume" min="0" max="100" value="60" title="Metronome volume" />
-        </div>
-        <div class="transport-row">
-          <label>MIDI Input</label>
-          <select id="input-midi-device" title="Live MIDI input device">
-            <option value="">None</option>
-          </select>
+      </div>
+      <div class="drawer" id="drawer-tools" data-drawer="tools">
+        <div class="drawer-header">Tools</div>
+        <div id="tool-panel"></div>
+      </div>
+      <div class="drawer" id="drawer-snap" data-drawer="snap">
+        <div class="drawer-header">Snap</div>
+        <div id="snap-section">
+          <div class="transport-row snap-preset-row">
+            <label for="snap-preset-select">Preset</label>
+            <select id="snap-preset-select" title="Snap preset — load a saved combo of snap + magnetic settings"></select>
+            <button id="snap-preset-save" class="snap-preset-btn" title="Save current snap settings as a new preset">Save</button>
+            <button id="snap-preset-delete" class="snap-preset-btn" title="Delete the active user preset" disabled>Del</button>
+          </div>
+          <div class="transport-row">
+            <label class="toggle-switch" title="Magnetic Snap: pitch follows physics model with snap-line attractors">
+              <span class="toggle-switch-track">
+                <input type="checkbox" id="magnetic-toggle" />
+                <span class="toggle-switch-thumb"></span>
+              </span>
+              <span class="toggle-switch-label">Magnetic</span>
+            </label>
+            <input type="range" id="input-magnetic-strength" class="magnetic-strength-slider" min="0" max="1" value="0.75" step="0.05" title="Snap attraction strength (0 = smooth cursor follow, 1 = strong snap pull)" />
+            <span class="magnetic-strength-value">0.75</span>
+          </div>
+          <div class="transport-row">
+            <label for="input-magnetic-spring">Spring</label>
+            <input type="range" id="input-magnetic-spring" class="magnetic-spring-slider" min="1" max="50" value="30" step="1" title="Cursor-to-pitch spring stiffness (1 = loose, 50 = tight tracking)" />
+            <span class="magnetic-spring-value">30</span>
+          </div>
+          <div class="transport-row">
+            <label for="input-magnetic-damping">Damping</label>
+            <input type="range" id="input-magnetic-damping" class="magnetic-damping-slider" min="0.25" max="15" value="3" step="0.25" title="Velocity damping (low = long vibrato wobbles, high = quick settle)" />
+            <span class="magnetic-damping-value">3</span>
+          </div>
+          <div class="transport-row guides-row">
+            <label class="toggle-switch" title="Show snap guides — when off, guides are hidden and don't snap">
+              <span class="toggle-switch-track">
+                <input type="checkbox" id="guides-visible-toggle" checked />
+                <span class="toggle-switch-thumb"></span>
+              </span>
+              <span class="toggle-switch-label">Guides</span>
+            </label>
+            <label class="toggle-switch" title="Lock guides — when locked, guides can't be selected, dragged, or deleted from the canvas (snap pull still works)">
+              <span class="toggle-switch-track">
+                <input type="checkbox" id="guides-locked-toggle" />
+                <span class="toggle-switch-thumb"></span>
+              </span>
+              <span class="toggle-switch-label">Lock</span>
+            </label>
+            <button id="add-guide-x-btn" class="snap-preset-btn" title="Add a vertical (beat) guide at the centre of the viewport">+ X</button>
+            <button id="add-guide-y-btn" class="snap-preset-btn" title="Add a horizontal (pitch) guide at the centre of the viewport">+ Y</button>
+          </div>
         </div>
       </div>
-      <div class="panel-header">Tools</div>
-      <div id="tool-panel"></div>
-      <div class="panel-header">Snap</div>
-      <div id="snap-section">
-        <div class="transport-row snap-preset-row">
-          <label for="snap-preset-select">Preset</label>
-          <select id="snap-preset-select" title="Snap preset — load a saved combo of snap + magnetic settings"></select>
-          <button id="snap-preset-save" class="snap-preset-btn" title="Save current snap settings as a new preset">Save</button>
-          <button id="snap-preset-delete" class="snap-preset-btn" title="Delete the active user preset" disabled>Del</button>
-        </div>
-        <div class="transport-row">
-          <label class="toggle-switch" title="Toggle snap (S)">
-            <span class="toggle-switch-track">
-              <input type="checkbox" id="snap-toggle" checked />
-              <span class="toggle-switch-thumb"></span>
-            </span>
-            <span class="toggle-switch-label">Snap</span>
-          </label>
-        </div>
-        <div class="transport-row">
-          <label class="toggle-switch" title="Magnetic Snap: pitch follows physics model with snap-line attractors">
-            <span class="toggle-switch-track">
-              <input type="checkbox" id="magnetic-toggle" />
-              <span class="toggle-switch-thumb"></span>
-            </span>
-            <span class="toggle-switch-label">Magnetic</span>
-          </label>
-          <input type="range" id="input-magnetic-strength" class="magnetic-strength-slider" min="0" max="1" value="0.75" step="0.05" title="Snap attraction strength (0 = smooth cursor follow, 1 = strong snap pull)" />
-          <span class="magnetic-strength-value">0.75</span>
-        </div>
-        <div class="transport-row">
-          <label for="input-magnetic-spring">Spring</label>
-          <input type="range" id="input-magnetic-spring" class="magnetic-spring-slider" min="1" max="50" value="30" step="1" title="Cursor-to-pitch spring stiffness (1 = loose, 50 = tight tracking)" />
-          <span class="magnetic-spring-value">30</span>
-        </div>
-        <div class="transport-row">
-          <label for="input-magnetic-damping">Damping</label>
-          <input type="range" id="input-magnetic-damping" class="magnetic-damping-slider" min="0.25" max="15" value="3" step="0.25" title="Velocity damping (low = long vibrato wobbles, high = quick settle)" />
-          <span class="magnetic-damping-value">3</span>
-        </div>
-        <div class="transport-row guides-row">
-          <label class="toggle-switch" title="Show snap guides — when off, guides are hidden and don't snap">
-            <span class="toggle-switch-track">
-              <input type="checkbox" id="guides-visible-toggle" checked />
-              <span class="toggle-switch-thumb"></span>
-            </span>
-            <span class="toggle-switch-label">Guides</span>
-          </label>
-          <label class="toggle-switch" title="Lock guides — when locked, guides can't be selected, dragged, or deleted from the canvas (snap pull still works)">
-            <span class="toggle-switch-track">
-              <input type="checkbox" id="guides-locked-toggle" />
-              <span class="toggle-switch-thumb"></span>
-            </span>
-            <span class="toggle-switch-label">Lock</span>
-          </label>
-          <button id="add-guide-x-btn" class="snap-preset-btn" title="Add a vertical (beat) guide at the centre of the viewport">+ X</button>
-          <button id="add-guide-y-btn" class="snap-preset-btn" title="Add a horizontal (pitch) guide at the centre of the viewport">+ Y</button>
-        </div>
+      <div class="drawer" id="drawer-prism" data-drawer="prism">
+        <div class="drawer-header" title="Harmonic Prism — press H on a selected curve to project harmonic echoes">Harmonic Prism</div>
+        <div id="prism-panel"></div>
       </div>
-      <div class="panel-header" title="Harmonic Prism — press H on a selected curve to project harmonic echoes">Harmonic Prism</div>
-      <div id="prism-panel"></div>
-      <div class="panel-header">Tracks</div>
-      <div id="track-list"></div>
-      <div class="track-panel-actions">
-        <button id="add-track-btn" title="Add track">+ Track</button>
-        <button id="new-tone-btn" title="Create new tone">+ Tone</button>
+      <div class="drawer" id="drawer-tuning" data-drawer="tuning">
+        <div class="drawer-header">Tuning</div>
+        <div id="tuning-scale-slot"></div>
+        <div id="tuning-section">
+          <div class="transport-row">
+            <label title="Reference frequency for A4. 440 = standard, 432 = 'Verdi tuning', 415 = Baroque pitch, etc.">Tune A4</label>
+            <input type="number" id="input-tuning" value="440" min="380" max="500" step="0.1" title="Reference frequency for A4 in Hz (default 440)" />
+            <span class="transport-hint" id="tuning-cents-display" title="Cents offset from A=440">0¢</span>
+          </div>
+        </div>
       </div>
     </div>
-    <div id="canvas-container">
-      <canvas id="bg-canvas"></canvas>
-      <canvas id="fg-canvas"></canvas>
-      <div id="zoom-controls">
-        <span class="zoom-label">Zoom</span>
-        <input type="range" id="zoom-x" min="0" max="1000" value="0" step="1" title="Zoom X (time) — logarithmic" />
-        <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="1" title="Zoom Y (pitch)" />
-      </div>
-      <div id="pitch-hud" hidden></div>
-      <div id="perf-hud" hidden></div>
-      <div id="countdown-overlay" hidden></div>
-      <div id="afk-warning" hidden>
-        <div class="afk-warning-title">Idle. Recording will pause in</div>
-        <div class="afk-warning-countdown" id="afk-warning-countdown">0</div>
-        <div class="afk-warning-hints">
-          play something to continue recording.<br/>
-          Space or Esc to stop recording.<br/>
-          PgUp / PgDown to first / last curve.<br/>
-          Home to recenter on playhead.
+    <div id="center-stack">
+      <div id="canvas-container">
+        <canvas id="bg-canvas"></canvas>
+        <canvas id="fg-canvas"></canvas>
+        <div id="zoom-controls">
+          <span class="zoom-label">Zoom</span>
+          <input type="range" id="zoom-x" min="0" max="1000" value="0" step="1" title="Zoom X (time) — logarithmic" />
+          <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="1" title="Zoom Y (pitch)" />
         </div>
+        <div id="pitch-hud" hidden></div>
+        <div id="perf-hud" hidden></div>
+        <div id="countdown-overlay" hidden></div>
+        <div id="afk-warning" hidden>
+          <div class="afk-warning-title">Idle. Recording will pause in</div>
+          <div class="afk-warning-countdown" id="afk-warning-countdown">0</div>
+          <div class="afk-warning-hints">
+            play something to continue recording.<br/>
+            Space or Esc to stop recording.<br/>
+            PgUp / PgDown to first / last curve.<br/>
+            Home to recenter on playhead.
+          </div>
+        </div>
+      </div>
+      <div id="param-container">
+        <div id="param-resize-handle" title="Drag to resize the Parameters Graph"></div>
+        <div id="param-graph-label">Volume</div>
+        <canvas id="param-canvas"></canvas>
       </div>
     </div>
     <div id="property-panel">
@@ -242,6 +277,14 @@ app.innerHTML = `
       <div class="panel-header">Object Properties</div>
       <div id="prop-content">
         <p class="placeholder-text">Select a point to edit properties</p>
+      </div>
+      <div class="panel-header">Tracks</div>
+      <div id="tracks-section">
+        <div id="track-list"></div>
+        <div class="track-panel-actions">
+          <button id="add-track-btn" title="Add track">+ Track</button>
+          <button id="new-tone-btn" title="Create new tone">+ Tone</button>
+        </div>
       </div>
     </div>
   </div>
@@ -253,6 +296,75 @@ const bgCanvas = document.getElementById('bg-canvas') as HTMLCanvasElement;
 const fgCanvas = document.getElementById('fg-canvas') as HTMLCanvasElement;
 const bgCtx = bgCanvas.getContext('2d')!;
 const fgCtx = fgCanvas.getContext('2d')!;
+
+// ── Parameters Graph (WS2): a time-locked lane below the main canvas. ──
+const paramContainer = document.getElementById('param-container')!;
+const paramCanvas = document.getElementById('param-canvas') as HTMLCanvasElement;
+const paramCtx = paramCanvas.getContext('2d')!;
+const paramViewport = createParamViewport(viewport);
+
+/** Resolve the BezierCurve for the current single selection (across all tracks). */
+function getSelectedParamCurve(): BezierCurve | null {
+  const selId = store.getSelectedCurveId();
+  if (!selId) return null;
+  for (const track of store.getComposition().tracks) {
+    const c = track.curves.find(cc => cc.id === selId);
+    if (c) return c;
+  }
+  return null;
+}
+
+const paramInteraction = createParamInteraction(paramCanvas, paramViewport, getSelectedParamCurve);
+
+// Reset the param-point selection whenever the selected curve changes.
+let lastParamCurveId: string | null = null;
+store.subscribe(() => {
+  const id = store.getSelectedCurveId();
+  if (id !== lastParamCurveId) {
+    lastParamCurveId = id;
+    paramInteraction.resetSelection();
+  }
+});
+
+// ── Parameters Graph: drag-to-resize height ────────────────────
+const PARAM_HEIGHT_KEY = 'slidesynth.paramGraphHeight';
+const PARAM_MIN_H = 60;
+function setParamGraphHeight(px: number): void {
+  document.documentElement.style.setProperty('--param-graph-height', `${Math.round(px)}px`);
+}
+// Restore a saved height before the initial canvas sizing.
+{
+  const saved = Number(localStorage.getItem(PARAM_HEIGHT_KEY));
+  if (Number.isFinite(saved) && saved >= PARAM_MIN_H && saved <= 600) setParamGraphHeight(saved);
+}
+{
+  const handle = document.getElementById('param-resize-handle')!;
+  const centerStack = document.getElementById('center-stack')!;
+  let resizing = false;
+  handle.addEventListener('mousedown', (e) => {
+    resizing = true;
+    handle.classList.add('dragging');
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!resizing) return;
+    const stack = centerStack.getBoundingClientRect();
+    // Keep at least 120px of main canvas above the graph.
+    const maxH = Math.max(PARAM_MIN_H, stack.height - 120);
+    const h = Math.max(PARAM_MIN_H, Math.min(maxH, stack.bottom - e.clientY));
+    setParamGraphHeight(h);
+    resizeCanvases();
+  });
+  window.addEventListener('mouseup', () => {
+    if (!resizing) return;
+    resizing = false;
+    handle.classList.remove('dragging');
+    const cur = getComputedStyle(document.documentElement)
+      .getPropertyValue('--param-graph-height').trim();
+    const px = parseInt(cur, 10);
+    if (px) { try { localStorage.setItem(PARAM_HEIGHT_KEY, String(px)); } catch { /* ignore */ } }
+  });
+}
 
 const pitchHud = document.getElementById('pitch-hud') as HTMLDivElement;
 
@@ -323,6 +435,9 @@ function writePitchHud(snappedY: number | null, rawY: number | null): void {
 }
 
 let bgDirty = true;
+let paramW = 0;
+let paramH = 0;
+const PARAM_HANDLE_H = 7; // px; matches #param-resize-handle height + #param-canvas top
 
 function resizeCanvases() {
   const rect = canvasContainer.getBoundingClientRect();
@@ -345,6 +460,19 @@ function resizeCanvases() {
     viewport.minZoomY = usableH / (MAX_NOTE - MIN_NOTE + 2 * Y_PAN_MARGIN);
     viewport.setZoomY(viewport.state.zoomY);
   }
+
+  // Parameters Graph canvas — its own rect (different height) + DPR transform.
+  // Subtract the resize-handle strip at the top so the canvas fills the area
+  // below it exactly (canvas is offset by the same amount via CSS top).
+  const prect = paramContainer.getBoundingClientRect();
+  paramW = Math.floor(prect.width);
+  paramH = Math.max(0, Math.floor(prect.height) - PARAM_HANDLE_H);
+  paramCanvas.width = paramW * dpr;
+  paramCanvas.height = paramH * dpr;
+  paramCanvas.style.width = `${paramW}px`;
+  paramCanvas.style.height = `${paramH}px`;
+  paramCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  paramViewport.setHeight(paramH);
 
   bgDirty = true;
 }
@@ -518,8 +646,10 @@ playback.setSchedulerHook((fromBeat, toBeat, comp, beatToAudioTime) => {
 
 // ── Toolbar ─────────────────────────────────────────────────────
 const toolbarContainer = document.getElementById('toolbar')!;
+// Key + Scale selection now lives in the Tuning drawer (WS3), not the top bar.
+const tuningScaleSlot = document.getElementById('tuning-scale-slot')!;
 
-const toolbar = createToolbar(toolbarContainer, {
+const toolbar = createToolbar(tuningScaleSlot, {
   onScaleRootChange(root: number | null, hidePitchLines: boolean) {
     store.setScaleRoot(root, hidePitchLines);
     bgDirty = true;
@@ -550,7 +680,33 @@ store.subscribe(() => {
   }
 });
 
-// ── Tool panel (left sidebar, between Transport and Tracks) ────
+// ── Icon rail + sliding drawers (WS3) ──────────────────────────
+// Inject shape-only SVG icons (color comes from CSS currentColor) and wire the
+// rail so each icon toggles its overlay drawer.
+{
+  const railEl = document.getElementById('rail')!;
+  const drawerHost = document.getElementById('drawer-host')!;
+  const railIcons: Record<string, string> = {
+    transport: iconTransport,
+    tools: iconTools,
+    snap: iconSnap,
+    prism: iconPrism,
+    tuning: iconTuning,
+  };
+  railEl.querySelectorAll<HTMLElement>('.rail-icon').forEach(btn => {
+    const id = btn.dataset.drawer;
+    const svg = id ? railIcons[id] : undefined;
+    if (svg) setIcon(btn, svg);
+  });
+  createDrawerRail(railEl, drawerHost);
+}
+// Transport-button icons (top bar).
+setIcon(document.getElementById('btn-play')!, iconPlay);
+setIcon(document.getElementById('btn-pause')!, iconPause);
+setIcon(document.getElementById('btn-stop')!, iconStop);
+setIcon(document.getElementById('btn-record')!, iconRecord);
+
+// ── Tool panel (Tools drawer) ──────────────────────────────────
 const toolPanelContainer = document.getElementById('tool-panel')!;
 const toolPanel = createToolPanel(toolPanelContainer, {
   onToolChange(tool: ToolMode) {
@@ -585,13 +741,15 @@ const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
 const btnRecord = document.getElementById('btn-record') as HTMLButtonElement;
 const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
 const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
-const scrollCanvasToggle = document.getElementById('scroll-canvas-toggle') as HTMLInputElement;
-// Inverted semantics: unchecked (thumb left) = Canvas scrolls = scrollCanvasEnabled true.
-// Checked (thumb right) = Planchette scrolls = classic static canvas mode.
-scrollCanvasToggle.checked = !store.getState().scrollCanvasEnabled;
-scrollCanvasToggle.addEventListener('change', () => {
-  store.setScrollCanvas(!scrollCanvasToggle.checked);
-  scrollCanvasToggle.blur();
+const lockRailToggle = document.getElementById('lock-rail-toggle') as HTMLInputElement;
+// "Lock Rail" semantics (non-inverted): checked = rail locked at canvas centre =
+// the canvas scrolls during playback = scrollCanvasEnabled true. Unchecked =
+// stationary canvas with a moving playhead. Store API keeps the legacy
+// `scrollCanvasEnabled` name; only the label/polarity changed.
+lockRailToggle.checked = store.getState().scrollCanvasEnabled;
+lockRailToggle.addEventListener('change', () => {
+  store.setScrollCanvas(lockRailToggle.checked);
+  lockRailToggle.blur();
 });
 const pitchHudToggle = document.getElementById('pitch-hud-toggle') as HTMLInputElement;
 pitchHudToggle.checked = store.getState().pitchHudVisible;
@@ -681,7 +839,7 @@ function updateRecordButtonVisuals() {
   btnRecord.classList.toggle('recording', g.recordArmed && g.phase === 'playing');
   btnRecord.disabled = st.selectedTrackId === null;
 
-  scrollCanvasToggle.checked = !st.scrollCanvasEnabled;
+  lockRailToggle.checked = st.scrollCanvasEnabled;
 
   // Lock loop toggle while recording.
   loopToggle.disabled = g.recordArmed && g.phase === 'playing';
@@ -2120,6 +2278,7 @@ function renderTrackList() {
           bbox: computeMultiCurveBBox(track.curves),
           activeHandle: null,
           dragStart: null,
+          pointIndicesPerCurve: null,
         };
         // Switch to select tool so the transform box is usable
         store.setTool('select');
@@ -2163,6 +2322,18 @@ fgCanvas.addEventListener('mousedown', (e) => {
   }
 });
 
+// Middle-mouse drag in the Parameters Graph pans the shared X (both canvases)
+// and the pitch Y (the param Y axis is fixed 0..1, so it's unaffected). Reuses
+// the same isPanning flow handled by the window mousemove/mouseup below.
+paramCanvas.addEventListener('mousedown', (e) => {
+  if (e.button === 1) {
+    isPanning = true;
+    lastMouse = { x: e.clientX, y: e.clientY };
+    paramCanvas.style.cursor = 'grabbing';
+    e.preventDefault();
+  }
+});
+
 window.addEventListener('mousemove', (e) => {
   if (isPanning) {
     // During scrolling Playback the X offset is owned by the scroll formula — a
@@ -2185,6 +2356,7 @@ window.addEventListener('mouseup', () => {
   if (isPanning) {
     isPanning = false;
     fgCanvas.style.cursor = '';
+    paramCanvas.style.cursor = '';
   }
 });
 
@@ -3138,8 +3310,10 @@ function render() {
     renderProjectionSourceHighlight(fgCtx, viewport, prismSource);
   }
 
-  // Draw preview line when in draw mode (hidden during Ctrl-select)
-  if (state.activeTool === 'draw' && interaction.cursorWorld) {
+  // Draw preview line when in draw mode (hidden during Ctrl-select, and when the
+  // cursor has left the canvas so the planchette/dashed preview doesn't freeze
+  // at its last position).
+  if (state.activeTool === 'draw' && interaction.cursorWorld && interaction.cursorInCanvas) {
     // Use the drawing curve, or the single selected curve if not actively drawing
     const singleId = store.getSelectedCurveId();
     const previewCurve = interaction.drawingCurve
@@ -3338,6 +3512,56 @@ function render() {
     );
   }
 
+  // ── Parameters Graph: selected curve's volume lane (X-locked to main canvas) ──
+  {
+    const selCurve = getSelectedParamCurve();
+    let paramColor = '#4fc3f7';
+    if (selCurve) {
+      for (const track of comp.tracks) {
+        if (track.curves.includes(selCurve)) {
+          const tone = comp.toneLibrary.find(t => t.id === track.toneId);
+          if (tone) paramColor = tone.color;
+          break;
+        }
+      }
+    }
+    const paramPlayheadBeat = playback.isPlaying()
+      ? playback.getPositionBeats()
+      : state.playback.positionBeats;
+    const selPts = selCurve?.points;
+    const pitchStart = selPts && selPts.length > 0 ? selPts[0]!.position.x : null;
+    const pitchEnd = selPts && selPts.length > 0 ? selPts[selPts.length - 1]!.position.x : null;
+    // Lazily attach a default volume lane to a selected curve that doesn't have
+    // one yet (e.g. a just-drawn curve before finishDrawing, or a chord sibling),
+    // so the graph shows and is editable immediately — not only after the first
+    // draw event. The default matches the audio fallback, so this is a no-op for
+    // sound and undo.
+    if (selCurve && !selCurve.parameters?.volume && selCurve.points.length >= 2) {
+      ensureVolumeParam(selCurve);
+    }
+    // While the curve is actively being drawn, keep the trailing volume point
+    // pinned to the live end of the pitch curve. Otherwise the end point stays
+    // where it was when the lane was first created (at the 2nd pitch point),
+    // leaving a stray volume point near the start of a long curve.
+    if (selCurve && interaction.drawingCurve === selCurve && pitchEnd !== null) {
+      const vpts = selCurve.parameters?.volume?.points;
+      if (vpts && vpts.length >= 2) {
+        const prevX = vpts[vpts.length - 2]!.position.x + 0.001;
+        vpts[vpts.length - 1]!.position.x = Math.max(prevX, pitchEnd);
+      }
+    }
+    renderParamGraph(
+      paramCtx, paramViewport, viewport,
+      paramW, paramH,
+      selCurve?.parameters?.volume ?? null,
+      paramColor,
+      paramInteraction.selectedIndex(),
+      paramPlayheadBeat,
+      pitchStart,
+      pitchEnd,
+    );
+  }
+
   requestAnimationFrame(render);
 }
 
@@ -3425,6 +3649,14 @@ store.subscribe(() => {
 // ── Initialization ──────────────────────────────────────────────
 syncCompositionDerived();
 window.addEventListener('resize', () => { resizeCanvases(); updateZoom(); });
+// Keep the canvases correctly sized whenever their containers change size for
+// ANY reason — window resize, the param-graph resize handle, drawer layout, or
+// a post-hot-reload relayout (which previously left the canvas 0-height until a
+// hard refresh). The observer also fires once on observe(), covering initial
+// sizing after layout settles.
+const canvasResizeObserver = new ResizeObserver(() => { resizeCanvases(); updateZoom(); });
+canvasResizeObserver.observe(canvasContainer);
+canvasResizeObserver.observe(paramContainer);
 resizeCanvases();
 
 // Default view: about 30 seconds visible in X (at the composition's BPM),

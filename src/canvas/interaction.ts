@@ -3,6 +3,7 @@ import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
 import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, computePointSubsetBBox, deepCopyPoints, applyTransformToCurve, splitCurveAtSegment, splitCurveAtPoint, applyAutoSmoothHandles, reclampHandlesAround } from '../model/curve';
+import { deepCopyParameters, ensureVolumeParam } from '../model/param-curve';
 import { pointKeysByCurve } from '../model/point-selection';
 import { snapToGrid, getAdaptiveSubdivisions } from '../utils/snap';
 import type { SnapConfig } from '../utils/snap';
@@ -311,6 +312,8 @@ export function createInteraction(
               if (!original || original.points.length === 0) continue;
               const dup = createCurve();
               dup.points = deepCopyPoints(original.points);
+              const dupParams = deepCopyParameters(original.parameters);
+              if (dupParams) dup.parameters = dupParams;
               dup.groupId = original.groupId ?? null;
               if (original.voiceIndex !== undefined) dup.voiceIndex = original.voiceIndex;
               track.curves.push(dup);
@@ -924,7 +927,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
             istate.dragPointIndex = i;
             istate.dragStartWorld = { ...habs };
             store.setSelectedPoint(i);
-            return;
+            return 'hit';
           }
         }
         if (pt.handleOut) {
@@ -936,7 +939,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
             istate.dragPointIndex = i;
             istate.dragStartWorld = { ...habs };
             store.setSelectedPoint(i);
-            return;
+            return 'hit';
           }
         }
       }
@@ -1309,6 +1312,11 @@ function handleDrag(istate: InteractionState, snapped: { wx: number; wy: number 
 }
 
 function finishDrawing(istate: InteractionState): void {
+  // Attach a default volume lane once the drawn curve spans a real time range,
+  // so it's immediately editable in the Parameters Graph. No-op for < 2 points
+  // or if a lane already exists; the default value matches the sampler fallback
+  // so audio is unchanged.
+  if (istate.drawingCurve) ensureVolumeParam(istate.drawingCurve);
   istate.drawingCurve = null;
   istate.dragging = null;
   store.setSelectedCurve(null);

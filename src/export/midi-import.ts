@@ -8,6 +8,8 @@ import {
   curveFromRecording,
   type RecordedSample,
 } from '../model/curve';
+import { createDefaultVolumeCurve } from '../model/param-curve';
+import { COMPOSITION_VERSION } from './json-export';
 import { createTrack } from '../model/track';
 import { createDefaultToneLibrary } from '../model/tone';
 import { createDefaultSnapSettings } from '../model/composition';
@@ -174,7 +176,7 @@ export function midiToComposition(buffer: ArrayBuffer): Composition {
   // Length is derived dynamically from the points themselves.
 
   return {
-    version: 2,
+    version: COMPOSITION_VERSION,
     name: 'Imported MIDI',
     bpm,
     beatsPerMeasure: DEFAULT_BEATS_PER_MEASURE,
@@ -310,8 +312,9 @@ function noteWithBendToCurve(
   // Fast path: no bend overlap and starting bend is centred → flat 2-point curve.
   if (interior.length === 0 && bendAtStart === 0) {
     const c = createCurve();
-    addPointToCurve(c, createControlPoint(startBeat, note.noteNumber, volume));
-    addPointToCurve(c, createControlPoint(endBeat, note.noteNumber, volume));
+    addPointToCurve(c, createControlPoint(startBeat, note.noteNumber));
+    addPointToCurve(c, createControlPoint(endBeat, note.noteNumber));
+    c.parameters = { volume: createDefaultVolumeCurve(startBeat, endBeat, volume) };
     return c;
   }
 
@@ -336,8 +339,9 @@ function noteWithBendToCurve(
     // Bend gesture too short for curveFromRecording's duration filter; emit a
     // direct 2-point curve at the bent endpoints so we don't lose the note.
     const c = createCurve();
-    addPointToCurve(c, createControlPoint(startBeat, bendToY(bendAtStart), volume));
-    addPointToCurve(c, createControlPoint(endBeat, bendToY(lastBend), volume));
+    addPointToCurve(c, createControlPoint(startBeat, bendToY(bendAtStart)));
+    addPointToCurve(c, createControlPoint(endBeat, bendToY(lastBend)));
+    c.parameters = { volume: createDefaultVolumeCurve(startBeat, endBeat, volume) };
     return c;
   }
   if (simplified.points.length > MAX_POINTS_PER_CURVE) {
