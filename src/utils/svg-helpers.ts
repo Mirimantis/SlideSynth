@@ -11,7 +11,12 @@
  * Import an icon with Vite's built-in `?raw` suffix to get its markup as a string:
  *   import drawIcon from '../assets/icons/tools.svg?raw';
  *   setIcon(button, drawIcon);
+ *
+ * Committed icons are pre-cleaned by `npm run icons`; setIcon also runs the same
+ * normalizer at injection time as a safety net, so an un-normalized export still
+ * renders with the correct color. The transform is idempotent.
  */
+import { normalizeSvg } from './svg-normalize.js';
 
 /**
  * Replace `host`'s contents with the given raw SVG markup and return the
@@ -19,7 +24,7 @@
  * assets only — do not pass user-supplied markup.
  */
 export function setIcon(host: HTMLElement, rawSvg: string): SVGElement | null {
-  host.innerHTML = rawSvg;
+  host.innerHTML = normalizeSvg(rawSvg);
   const svg = host.querySelector('svg');
   if (svg) svg.classList.add('icon-svg');
   return svg;
