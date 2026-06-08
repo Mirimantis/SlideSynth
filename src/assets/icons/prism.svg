@@ -1,4 +1,7 @@
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-  <path d="M12 4 L20 19 L4 19 Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-  <path d="M20 11 L23 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <path d="M12,4 C12,4 20,19 20,19 C20,19 4,19 4,19 C4,19 12,4 12,4 Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M20,11 C20,11 23,11 23,11" transform="matrix(1,0,0,1,0,1)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <path d="M15.022100289590096,11 C15.022100289590096,11 24.6986739826248,11 24.6986739826248,11" transform="matrix(1,0,0,1,-13.422344155,1)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <path d="M20,11 C20,11 23.450083828684786,9.67657369303463 23.450083828684786,9.67657369303463" transform="matrix(1,0,0,1,-0.858405731,-1.458161866)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <path d="M20,11 C20,11 22.396585886298073,8.994360615759831 22.396585886298073,8.994360615759831" transform="matrix(1,0,0,1,-2.067977442,-3.799268404)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
 </svg>
