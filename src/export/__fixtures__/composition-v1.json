@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "name": "Fixture v1",
+  "bpm": 100,
+  "beatsPerMeasure": 4,
+  "toneLibrary": [
+    {
+      "id": "tone-1",
+      "name": "Fixture Sine",
+      "color": "#88ccff",
+      "dashPattern": [],
+      "layers": [{ "type": "sine", "gain": 1, "detune": 0 }],
+      "distortion": null
+    }
+  ],
+  "tracks": [
+    {
+      "id": "track-1",
+      "name": "Track 1",
+      "toneId": "tone-1",
+      "muted": false,
+      "solo": false,
+      "volume": 1,
+      "curves": [
+        {
+          "id": "curve-v1-a",
+          "chordGroupId": "legacy-grp",
+          "points": [
+            { "position": { "x": 0, "y": 48 }, "handleIn": null, "handleOut": { "x": 0.25, "y": 0.5 }, "volume": 0.8 },
+            { "position": { "x": 1.5, "y": 50 }, "handleIn": { "x": -0.25, "y": -0.5 }, "handleOut": null, "volume": 0.4 }
+          ]
+        },
+        {
+          "id": "curve-v1-b",
+          "chordGroupId": "legacy-grp",
+          "points": [
+            { "position": { "x": 0, "y": 52 }, "handleIn": null, "handleOut": null, "volume": 0.8 },
+            { "position": { "x": 1.5, "y": 52 }, "handleIn": null, "handleOut": null, "volume": 0.8 }
+          ]
+        }
+      ]
+    }
+  ]
+}

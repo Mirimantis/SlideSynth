@@ -1,0 +1,105 @@
+{
+  "version": 3,
+  "name": "Fixture v3",
+  "bpm": 90,
+  "beatsPerMeasure": 3,
+  "timeSignatureDenominator": 4,
+  "loopStartBeats": 1,
+  "loopEndBeats": 7,
+  "tuningOffsetCents": 25,
+  "snap": {
+    "enabled": true,
+    "scaleRoot": 2,
+    "scaleId": "dorian",
+    "hidePitchLines": false,
+    "magneticEnabled": true,
+    "magneticStrength": 0.7,
+    "magneticSpringK": 12,
+    "magneticDamping": 3.5
+  },
+  "guides": [
+    { "id": "guide-x1", "orientation": "x", "position": 2, "label": "hit" },
+    { "id": "guide-y1", "orientation": "y", "position": 64.5, "label": "target" }
+  ],
+  "toneLibrary": [
+    {
+      "id": "tone-1",
+      "name": "Fixture Sine",
+      "color": "#88ccff",
+      "dashPattern": [],
+      "layers": [{ "type": "sine", "gain": 1, "detune": 0 }],
+      "distortion": null
+    }
+  ],
+  "tracks": [
+    {
+      "id": "track-lead",
+      "name": "Lead",
+      "toneId": "tone-1",
+      "muted": false,
+      "solo": false,
+      "volume": 0.9,
+      "curves": [
+        {
+          "id": "curve-bend",
+          "points": [
+            { "position": { "x": 1, "y": 60 }, "handleIn": null, "handleOut": { "x": 0.5, "y": 1.25 } },
+            { "position": { "x": 3, "y": 64 }, "handleIn": { "x": -0.4, "y": -0.8 }, "handleOut": { "x": 0.3, "y": 0 } },
+            { "position": { "x": 4.5, "y": 62.5 }, "handleIn": { "x": -0.5, "y": 0.6 }, "handleOut": null }
+          ],
+          "parameters": {
+            "volume": {
+              "points": [
+                { "position": { "x": 1, "y": 0.3 }, "handleIn": null, "handleOut": { "x": 0.8, "y": 0.2 } },
+                { "position": { "x": 3, "y": 0.9 }, "handleIn": { "x": -0.6, "y": 0 }, "handleOut": null },
+                { "position": { "x": 4.5, "y": 0.5 }, "handleIn": null, "handleOut": null }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "track-chord",
+      "name": "Chord",
+      "toneId": "tone-1",
+      "muted": false,
+      "solo": false,
+      "volume": 1,
+      "curves": [
+        {
+          "id": "curve-chord-root",
+          "groupId": "grp-1",
+          "voiceIndex": 0,
+          "points": [
+            { "position": { "x": 2, "y": 55 }, "handleIn": null, "handleOut": null },
+            { "position": { "x": 6, "y": 55 }, "handleIn": null, "handleOut": null }
+          ],
+          "parameters": {
+            "volume": {
+              "points": [
+                { "position": { "x": 2, "y": 0.6 }, "handleIn": null, "handleOut": null }
+              ]
+            }
+          }
+        },
+        {
+          "id": "curve-chord-third",
+          "groupId": "grp-1",
+          "voiceIndex": 1,
+          "points": [
+            { "position": { "x": 2, "y": 58.86 }, "handleIn": null, "handleOut": null },
+            { "position": { "x": 6, "y": 58.86 }, "handleIn": null, "handleOut": null }
+          ],
+          "parameters": {
+            "volume": {
+              "points": [
+                { "position": { "x": 2, "y": 0.45 }, "handleIn": null, "handleOut": null }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
