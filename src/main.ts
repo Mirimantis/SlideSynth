@@ -1644,12 +1644,13 @@ function addFileMenuItem(label: string, handler: () => void) {
 addFileMenuItem('Save Composition', () => {
   const comp = store.getComposition();
   const json = serializeComposition(comp);
-  downloadFile(json, `${comp.name || 'composition'}.json`);
+  downloadFile(json, `${comp.name || 'composition'}.gliss`);
 });
 
 addFileMenuItem('Load Composition', async () => {
   try {
-    const json = await openFile('.json');
+    // .gliss is the native format; .json accepts legacy flat saves.
+    const json = await openFile('.gliss,.json');
     const comp = deserializeComposition(json);
     history.snapshot();
     playback.stop();

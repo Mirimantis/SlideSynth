@@ -8,19 +8,82 @@ function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
-/**
- * Serialize a composition to JSON string.
- */
-export function serializeComposition(comp: Composition): string {
-  return JSON.stringify({ ...comp, version: COMPOSITION_VERSION }, null, 2);
+// ── .gliss envelope ─────────────────────────────────────────────
+// On-disk shape (formatVersion 1 ⇔ internal composition v4):
+//   { app, formatVersion, kind, meta?, tuning?, snap?, composition }
+// `tuning` and `snap` are lifted out of the flat Composition so preset packs
+// (.glisskit, future) can carry them without a composition, and so a gallery
+// can read `meta` cheaply. The internal Composition type keeps its flat shape
+// — the envelope is purely a serialization concern.
+
+export const GLISS_APP_ID = 'glissandograph';
+export const GLISS_FORMAT_VERSION = 1;
+
+interface GlissEnvelope {
+  app: typeof GLISS_APP_ID;
+  formatVersion: number;
+  kind: 'composition';
+  meta?: { name?: string; savedAt?: string };
+  tuning?: { referenceOffsetCents?: number };
+  snap?: { settings?: Composition['snap']; guides?: Composition['guides'] };
+  composition: Omit<Composition, 'name' | 'snap' | 'guides' | 'tuningOffsetCents'>;
 }
 
 /**
- * Deserialize a composition from JSON string.
+ * Serialize a composition to a .gliss envelope JSON string.
+ */
+export function serializeComposition(comp: Composition): string {
+  const { name, snap, guides, tuningOffsetCents, ...core } = comp;
+  const envelope: GlissEnvelope = {
+    app: GLISS_APP_ID,
+    formatVersion: GLISS_FORMAT_VERSION,
+    kind: 'composition',
+    meta: { name, savedAt: new Date().toISOString() },
+    tuning: { referenceOffsetCents: tuningOffsetCents },
+    snap: { settings: snap, guides },
+    composition: { ...core, version: COMPOSITION_VERSION },
+  };
+  return JSON.stringify(envelope, null, 2);
+}
+
+/**
+ * Deserialize a composition from JSON string. Accepts both the .gliss
+ * envelope (formatVersion 1) and legacy flat v1–v3 JSON saves.
  */
 export function deserializeComposition(json: string): Composition {
-  const data = JSON.parse(json) as Composition;
+  const parsed = JSON.parse(json) as Record<string, unknown>;
+  if (parsed && parsed.app === GLISS_APP_ID) {
+    return compositionFromEnvelope(parsed as unknown as GlissEnvelope);
+  }
+  return migrateLegacyComposition(parsed as unknown as Composition);
+}
 
+/** Fold a .gliss envelope back onto the flat internal Composition shape. */
+function compositionFromEnvelope(env: GlissEnvelope): Composition {
+  if (typeof env.formatVersion !== 'number' || env.formatVersion > GLISS_FORMAT_VERSION) {
+    throw new Error(
+      `This .gliss file uses format version ${env.formatVersion}, which is newer than ` +
+      `this app understands (${GLISS_FORMAT_VERSION}). Update the app to open it.`,
+    );
+  }
+  if (!env.composition || !Array.isArray((env.composition as Composition).tracks)) {
+    throw new Error('Invalid .gliss file: missing composition section');
+  }
+  const comp: Composition = {
+    ...(env.composition as Composition),
+    name: env.meta?.name ?? 'Untitled',
+    snap: env.snap?.settings ?? createDefaultSnapSettings(),
+    guides: env.snap?.guides ?? [],
+    tuningOffsetCents: env.tuning?.referenceOffsetCents ?? 0,
+  };
+  comp.version = COMPOSITION_VERSION;
+  return comp;
+}
+
+/**
+ * Migrate a legacy flat v1–v3 composition JSON to the current in-memory shape.
+ */
+function migrateLegacyComposition(data: Composition): Composition {
   if (!data.version || !data.tracks || !data.toneLibrary) {
     throw new Error('Invalid composition file');
   }
