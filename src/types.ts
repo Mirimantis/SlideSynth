@@ -33,42 +33,38 @@ export interface ToneDefinition {
   distortion: DistortionConfig | null;
 }
 
-// ── Bezier Curves ───────────────────────────────────────────────
+// ── Bezier Curves — unified lane model ─────────────────────────
+// Pitch and every parameter (volume, and future: pan, cutoff, vibrato, …)
+// are the SAME primitive: a Bezier graph-editor curve whose X is a beat and
+// whose Y lives in the lane's own value-domain. The main canvas is the
+// specialized editor view of the pitch lane; the Parameters Graph is the
+// generic view for the rest. Plain data only — history/clipboard deep-clone
+// via JSON, and .gliss round-trip preservation relies on plain objects.
 
-export interface ControlPoint {
-  position: Vec2;           // x = beats, y = MIDI note number (continuous float)
+export interface LanePoint {
+  position: Vec2;           // x = beats; y = lane value (cents for pitch, 0–1 for volume)
   handleIn: Vec2 | null;    // relative to position
   handleOut: Vec2 | null;   // relative to position
 }
 
-// ── Parameter curves (animation-style envelopes per BezierCurve) ──
-// Each parameter (volume, and future: pan, filter cutoff, …) is its own
-// Bezier curve with INDEPENDENT control points whose X is a beat and Y is the
-// parameter value (0–1 for volume). Edited in the Parameters Graph panel.
+export type LaneType = 'pitch' | 'volume';   // widen later (pan, cutoff, …)
 
-export interface ParamPoint {
-  position: Vec2;           // x = beats, y = parameter value (0–1 for volume)
-  handleIn: Vec2 | null;    // relative to position
-  handleOut: Vec2 | null;   // relative to position
-}
-
-export interface ParamCurve {
-  points: ParamPoint[];     // ordered by increasing position.x; >= 1 point
-}
-
-/** Keyed map of parameter lanes attached to a BezierCurve. Adding a new lane
- *  (pan, cutoff, …) does not require touching BezierCurve again. */
-export interface CurveParameters {
-  volume?: ParamCurve;
+export interface Lane {
+  type: LaneType;
+  unit: 'cents' | 'normalized';
+  range: [number, number];  // Y-domain clamp for anchors / sampled values
+  points: LanePoint[];      // ordered by increasing position.x; pitch >= 2, others >= 1
+  gravity?: unknown;        // reserved for per-lane gravity-well maps; must round-trip verbatim
 }
 
 export interface BezierCurve {
   id: string;
-  points: ControlPoint[];   // ordered by increasing position.x
-  parameters?: CurveParameters; // independent parameter envelopes (volume, …)
+  /** lanes[0] is ALWAYS the pitch lane (constructor-enforced invariant). */
+  lanes: Lane[];
   groupId?: string | null;  // grouped curves move/delete/transform together (chord clusters and freehand groups)
   voiceIndex?: number;      // Harmonic Prism: 0 = primary, 1..N-1 = harmonies (chord-cluster siblings only)
 }
+
 
 // ── Track ───────────────────────────────────────────────────────
 
@@ -94,7 +90,7 @@ export interface SnapSettings {
   scaleRoot: number | null;     // 0..11, or null = no scale
   scaleId: string | null;       // ScaleDefinition.id, or null
   /** When true: hide the default chromatic pitch lines and disable the
-   *  integer-semitone Y-snap fallback. Scale snap, projection echoes, and
+   *  12-TET-line Y-snap fallback. Scale snap, projection echoes, and
    *  user guides still work. Toolbar's "None" Key option (8.19) sets this
    *  alongside scaleRoot=null; "Chromatic" leaves it false. */
   hidePitchLines: boolean;
@@ -114,7 +110,7 @@ export interface SnapSettings {
 export interface GuideDefinition {
   id: string;
   orientation: 'x' | 'y';
-  position: number;             // beats for 'x', float MIDI note for 'y'
+  position: number;             // beats for 'x', pitch cents for 'y'
   label: string;                // user-editable, may be empty
 }
 
@@ -139,9 +135,9 @@ export interface Composition {
 
 export interface ViewportState {
   offsetX: number;          // world units (beats)
-  offsetY: number;          // world units (MIDI note number)
+  offsetY: number;          // world units (pitch cents)
   zoomX: number;            // pixels per beat
-  zoomY: number;            // pixels per semitone
+  zoomY: number;            // pixels per cent
 }
 
 // ── Playback ────────────────────────────────────────────────────
@@ -220,7 +216,7 @@ export interface AppState {
   snapEnabled: boolean;
   scaleRoot: number | null;    // 0-11, or null = no scale
   scaleId: string | null;      // ScaleDefinition.id, or null
-  hidePitchLines: boolean;     // true = "None" Key mode (no default semitone lines, no chromatic Y-snap)
+  hidePitchLines: boolean;     // true = "None" Key mode (no default pitch lines, no chromatic Y-snap)
   magneticEnabled: boolean;
   magneticStrength: number;
   magneticSpringK: number;
@@ -268,7 +264,7 @@ export interface BoundingBox {
 
 export interface TransformBoxState {
   curveIds: string[];
-  originalPointsMap: Map<string, ControlPoint[]>;
+  originalPointsMap: Map<string, LanePoint[]>;
   bbox: BoundingBox;
   activeHandle: TransformHandle | null;
   dragStart: Vec2 | null;

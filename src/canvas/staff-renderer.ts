@@ -1,7 +1,7 @@
 import type { Viewport } from './viewport';
 import {
-  MIN_NOTE, MAX_NOTE,
-  noteNumberToName, isCNote, isNaturalNote,
+  MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_SEMITONE,
+  centsToNoteName, isCCents, isNaturalCents,
   DEFAULT_BEATS_PER_MEASURE, SUBDIVISIONS_PER_BEAT,
 } from '../constants';
 import type { ScaleDefinition } from '../utils/scales';
@@ -31,8 +31,9 @@ export function renderStaff(
 
   const minBeat = Math.floor(topLeft.wx);
   const maxBeat = Math.ceil(bottomRight.wx);
-  const minNote = Math.floor(bottomRight.wy);
-  const maxNote = Math.ceil(topLeft.wy);
+  // Visible pitch range snapped outward to 12-TET lines (100-cent grid).
+  const minNote = Math.floor(bottomRight.wy / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
+  const maxNote = Math.ceil(topLeft.wy / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
 
   const hasScale = scaleRoot !== null && scale !== null;
   const microtonalScale = hasScale && isMicrotonal(scale!);
@@ -44,16 +45,16 @@ export function renderStaff(
 
   // ── Horizontal note lines ──────────────────────────────────
   if (drawPitchLines) {
-    for (let n = Math.max(minNote, MIN_NOTE); n <= Math.min(maxNote, MAX_NOTE); n++) {
+    for (let n = Math.max(minNote, MIN_PITCH_CENTS); n <= Math.min(maxNote, MAX_PITCH_CENTS); n += CENTS_PER_SEMITONE) {
       const { sy } = vp.worldToScreen(0, n);
 
       if (highlightIntegers) {
         const inScale = isNoteInScale(n, scaleRoot!, scale!);
         if (inScale) {
-          if (isCNote(n)) {
+          if (isCCents(n)) {
             ctx.strokeStyle = '#5577aa';
             ctx.lineWidth = 2.0;
-          } else if (isNaturalNote(n)) {
+          } else if (isNaturalCents(n)) {
             ctx.strokeStyle = '#445566';
             ctx.lineWidth = 1.0;
           } else {
@@ -65,10 +66,10 @@ export function renderStaff(
           ctx.lineWidth = 0.3;
         }
       } else {
-        if (isCNote(n)) {
+        if (isCCents(n)) {
           ctx.strokeStyle = '#445';
           ctx.lineWidth = 1.5;
-        } else if (isNaturalNote(n)) {
+        } else if (isNaturalCents(n)) {
           ctx.strokeStyle = '#334';
           ctx.lineWidth = 0.8;
         } else {
@@ -85,22 +86,22 @@ export function renderStaff(
       // Note labels on the left edge
       // When a scale is active, show labels for all in-scale notes at moderate zoom
       const inScaleForLabel = highlightIntegers && isNoteInScale(n, scaleRoot!, scale!);
-      const showLabel = isCNote(n)
-        || (vp.state.zoomY >= 10 && (isNaturalNote(n) || inScaleForLabel))
-        || vp.state.zoomY >= 18;
+      const showLabel = isCCents(n)
+        || (vp.state.zoomY >= 0.10 && (isNaturalCents(n) || inScaleForLabel))
+        || vp.state.zoomY >= 0.18;
       if (showLabel) {
         if (highlightIntegers) {
           if (inScaleForLabel) {
-            ctx.fillStyle = isCNote(n) ? '#99bbdd' : '#667788';
+            ctx.fillStyle = isCCents(n) ? '#99bbdd' : '#667788';
           } else {
             ctx.fillStyle = '#333';
           }
         } else {
-          ctx.fillStyle = isCNote(n) ? '#8899aa' : '#556';
+          ctx.fillStyle = isCCents(n) ? '#8899aa' : '#556';
         }
-        ctx.font = isCNote(n) ? 'bold 11px monospace' : '10px monospace';
+        ctx.font = isCCents(n) ? 'bold 11px monospace' : '10px monospace';
         ctx.textBaseline = 'middle';
-        ctx.fillText(noteNumberToName(n), 4, sy);
+        ctx.fillText(centsToNoteName(n), 4, sy);
       }
     }
   }
@@ -113,7 +114,9 @@ export function renderStaff(
     for (const n of scaleNotes) {
       if (n < minNote || n > maxNote) continue;
       const { sy } = vp.worldToScreen(0, n);
-      const isFractional = n !== Math.floor(n);
+      // "Fractional" = off the 12-TET 100-cent grid (microtonal degree).
+      const centsOff = Math.round(n - Math.floor(n / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE);
+      const isFractional = centsOff !== 0;
 
       ctx.strokeStyle = '#4a6a8a';
       ctx.lineWidth = 1.0;
@@ -128,16 +131,15 @@ export function renderStaff(
         ctx.setLineDash([]);
       }
 
-      // Guide line label
-      if (vp.state.zoomY >= 14) {
-        const baseNote = Math.floor(n);
-        const cents = Math.round((n - baseNote) * 100);
+      // Guide line label: nearest lower 12-TET line + cents remainder
+      if (vp.state.zoomY >= 0.14) {
+        const baseCents = Math.floor(n / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
         ctx.fillStyle = '#6688aa';
         ctx.font = '9px monospace';
         ctx.textBaseline = 'middle';
-        const label = cents > 0
-          ? `${noteNumberToName(baseNote)}+${cents}c`
-          : noteNumberToName(baseNote);
+        const label = centsOff > 0
+          ? `${centsToNoteName(baseCents)}+${centsOff}c`
+          : centsToNoteName(baseCents);
         ctx.fillText(label, 4, sy);
       }
     }

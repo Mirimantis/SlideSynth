@@ -15,7 +15,7 @@
 
 const SNAP_STRENGTH_MAX = 800;      // peak snap attractor stiffness at strength=1
 const MAX_DT_BEATS = 0.1;           // cap total elapsed dt — avoids huge catch-up after a long pause
-const MAX_VELOCITY = 200;           // semitones/beat — hard cap against numerical blowups
+const MAX_VELOCITY = 20000;         // cents/beat (200 ST/beat) — hard cap against numerical blowups
 /** Fixed sub-step size for the integrator. Semi-implicit Euler is stable when
  *  dt*ω < 2; with ω up to ~30 (snapK + springK at default settings) we need
  *  dt below ~0.067 beats. 0.02 stays well inside that bound for all sensible
@@ -23,14 +23,17 @@ const MAX_VELOCITY = 200;           // semitones/beat — hard cap against numer
  *  preview iframe, or background throttle still gets identical settling
  *  behavior to a 60 FPS foreground Chrome tab. */
 const STABLE_SUBSTEP_DT = 0.02;
-/** Reference radius above which snapK is scaled down. At radius=1 ST (the old
- *  fixed-falloff baseline) snapK is unchanged; wider wells get proportionally
- *  weaker peak forces so a sparse guide doesn't yank the particle. */
-const SNAPK_REFERENCE_RADIUS = 1;
+/** Reference radius above which snapK is scaled down. At radius=100 ¢ / 1 ST
+ *  (the old fixed-falloff baseline) snapK is unchanged; wider wells get
+ *  proportionally weaker peak forces so a sparse guide doesn't yank the
+ *  particle. The spring system is linear in distance, so rescaling this
+ *  constant (with MAX_VELOCITY) preserves the exact pre-cents feel for any
+ *  persisted springK/damping values. */
+const SNAPK_REFERENCE_RADIUS = 100;
 
 export interface MagneticState {
-  pitch: number | null;           // current simulated pitch (semitones)
-  velocity: number;               // semitones per beat
+  pitch: number | null;           // current simulated pitch (cents)
+  velocity: number;               // cents per beat
   lastUpdateBeats: number;
 }
 

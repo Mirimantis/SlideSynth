@@ -6,14 +6,23 @@ import {
   createControlPoint,
   addPointToCurve,
   curveFromRecording,
+  pitchLane,
+  pitchPoints,
   type RecordedSample,
 } from '../model/curve';
-import { createDefaultVolumeCurve } from '../model/param-curve';
+import { createDefaultLane } from '../model/lane';
 import { COMPOSITION_VERSION } from './json-export';
 import { createTrack } from '../model/track';
 import { createDefaultToneLibrary } from '../model/tone';
 import { createDefaultSnapSettings } from '../model/composition';
-import { MIN_NOTE, MAX_NOTE, DEFAULT_BPM, DEFAULT_BEATS_PER_MEASURE } from '../constants';
+import {
+  MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_SEMITONE, midiToCents,
+  DEFAULT_BPM, DEFAULT_BEATS_PER_MEASURE,
+} from '../constants';
+
+/** Importable MIDI note range (the staff range, in MIDI note numbers). */
+const MIN_MIDI_NOTE = MIN_PITCH_CENTS / CENTS_PER_SEMITONE;
+const MAX_MIDI_NOTE = MAX_PITCH_CENTS / CENTS_PER_SEMITONE;
 
 /** A paired note event in absolute ticks. */
 interface NoteEvent {
@@ -120,7 +129,7 @@ export function midiToComposition(buffer: ArrayBuffer): Composition {
         pendingNotes.delete(pendingKey);
 
         // Skip notes outside our range
-        if (event.noteNumber < MIN_NOTE || event.noteNumber > MAX_NOTE) continue;
+        if (event.noteNumber < MIN_MIDI_NOTE || event.noteNumber > MAX_MIDI_NOTE) continue;
 
         // Skip zero-duration notes
         if (tickCursor <= pending.startTick) continue;
@@ -312,14 +321,15 @@ function noteWithBendToCurve(
   // Fast path: no bend overlap and starting bend is centred → flat 2-point curve.
   if (interior.length === 0 && bendAtStart === 0) {
     const c = createCurve();
-    addPointToCurve(c, createControlPoint(startBeat, note.noteNumber));
-    addPointToCurve(c, createControlPoint(endBeat, note.noteNumber));
-    c.parameters = { volume: createDefaultVolumeCurve(startBeat, endBeat, volume) };
+    addPointToCurve(c, createControlPoint(startBeat, midiToCents(note.noteNumber)));
+    addPointToCurve(c, createControlPoint(endBeat, midiToCents(note.noteNumber)));
+    c.lanes.push(createDefaultLane('volume', startBeat, endBeat, volume));
     return c;
   }
 
+  // Bent pitch in cents: base note + signed bend fraction × range.
   const bendToY = (bend: number) =>
-    note.noteNumber + (bend / 8192) * bendRangeSemitones;
+    midiToCents(note.noteNumber) + (bend / 8192) * bendRangeSemitones * CENTS_PER_SEMITONE;
 
   const samples: RecordedSample[] = [];
   samples.push({ beat: startBeat, note: bendToY(bendAtStart), volume });
@@ -334,27 +344,28 @@ function noteWithBendToCurve(
     samples.push({ beat: endBeat, note: bendToY(lastBend), volume });
   }
 
-  const simplified = curveFromRecording(samples, 0.03, 0.15);
-  if (!simplified || simplified.points.length < 2) {
+  const simplified = curveFromRecording(samples, 0.03, 15);
+  if (!simplified || pitchPoints(simplified).length < 2) {
     // Bend gesture too short for curveFromRecording's duration filter; emit a
     // direct 2-point curve at the bent endpoints so we don't lose the note.
     const c = createCurve();
     addPointToCurve(c, createControlPoint(startBeat, bendToY(bendAtStart)));
     addPointToCurve(c, createControlPoint(endBeat, bendToY(lastBend)));
-    c.parameters = { volume: createDefaultVolumeCurve(startBeat, endBeat, volume) };
+    c.lanes.push(createDefaultLane('volume', startBeat, endBeat, volume));
     return c;
   }
-  if (simplified.points.length > MAX_POINTS_PER_CURVE) {
+  const simplifiedPts = pitchPoints(simplified);
+  if (simplifiedPts.length > MAX_POINTS_PER_CURVE) {
     console.warn(
       `[midi-import] Note at beat ${startBeat.toFixed(2)} (note ${note.noteNumber}) ` +
-      `produced ${simplified.points.length} bend points; capping at ${MAX_POINTS_PER_CURVE}.`,
+      `produced ${simplifiedPts.length} bend points; capping at ${MAX_POINTS_PER_CURVE}.`,
     );
-    const step = (simplified.points.length - 1) / (MAX_POINTS_PER_CURVE - 1);
+    const step = (simplifiedPts.length - 1) / (MAX_POINTS_PER_CURVE - 1);
     const decimated = [];
     for (let k = 0; k < MAX_POINTS_PER_CURVE; k++) {
-      decimated.push(simplified.points[Math.round(k * step)]!);
+      decimated.push(simplifiedPts[Math.round(k * step)]!);
     }
-    simplified.points = decimated;
+    pitchLane(simplified).points = decimated;
   }
   return simplified;
 }

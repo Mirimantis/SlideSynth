@@ -1,10 +1,13 @@
-import { MIN_NOTE, MAX_NOTE } from '../constants';
+import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_SEMITONE } from '../constants';
 
 export interface ScaleDefinition {
   id: string;
   name: string;
   group: string;
+  /** Scale degrees in SEMITONES from the root (human-readable catalog units;
+   *  fractional for microtonal scales). Converted to cents at output. */
   intervals: number[];
+  /** Repeat period in semitones (12 for octave-repeating scales). */
   period: number;
 }
 
@@ -75,8 +78,8 @@ export function isMicrotonal(scale: ScaleDefinition): boolean {
 const scaleNotesCache = new Map<string, readonly number[]>();
 
 /**
- * Get all MIDI note values belonging to the given scale
- * within the staff range [MIN_NOTE, MAX_NOTE].
+ * Get all pitch CENTS values belonging to the given scale (root = 0..11 pitch
+ * class) within the staff range [MIN_PITCH_CENTS, MAX_PITCH_CENTS].
  * The returned array is shared across callers and must not be mutated.
  */
 export function getScaleNotes(root: number, scale: ScaleDefinition): readonly number[] {
@@ -84,14 +87,16 @@ export function getScaleNotes(root: number, scale: ScaleDefinition): readonly nu
   const cached = scaleNotesCache.get(cacheKey);
   if (cached) return cached;
 
+  const rootCents = root * CENTS_PER_SEMITONE;
+  const periodCents = scale.period * CENTS_PER_SEMITONE;
   const notes: number[] = [];
-  const startOctave = Math.floor((MIN_NOTE - root) / scale.period);
-  const endOctave = Math.ceil((MAX_NOTE - root) / scale.period);
+  const startOctave = Math.floor((MIN_PITCH_CENTS - rootCents) / periodCents);
+  const endOctave = Math.ceil((MAX_PITCH_CENTS - rootCents) / periodCents);
   for (let oct = startOctave; oct <= endOctave; oct++) {
     for (const interval of scale.intervals) {
-      const note = root + oct * scale.period + interval;
-      if (note >= MIN_NOTE && note <= MAX_NOTE) {
-        notes.push(note);
+      const cents = rootCents + oct * periodCents + interval * CENTS_PER_SEMITONE;
+      if (cents >= MIN_PITCH_CENTS && cents <= MAX_PITCH_CENTS) {
+        notes.push(cents);
       }
     }
   }
@@ -99,30 +104,32 @@ export function getScaleNotes(root: number, scale: ScaleDefinition): readonly nu
   return notes;
 }
 
-/** Check whether a MIDI note (integer or fractional) is in the scale. */
-export function isNoteInScale(note: number, root: number, scale: ScaleDefinition): boolean {
-  const offset = ((note - root) % scale.period + scale.period) % scale.period;
-  return scale.intervals.some(iv => Math.abs(offset - iv) < 0.01);
+/** Check whether a pitch (cents) is in the scale (1-cent tolerance). */
+export function isNoteInScale(cents: number, root: number, scale: ScaleDefinition): boolean {
+  const periodCents = scale.period * CENTS_PER_SEMITONE;
+  const offset = ((cents - root * CENTS_PER_SEMITONE) % periodCents + periodCents) % periodCents;
+  return scale.intervals.some(iv => Math.abs(offset - iv * CENTS_PER_SEMITONE) < 1);
 }
 
-/** Find the nearest in-scale note to a given MIDI value. */
-export function nearestScaleNote(note: number, root: number, scale: ScaleDefinition): number {
-  const relativeNote = note - root;
-  const octave = Math.floor(relativeNote / scale.period);
+/** Find the nearest in-scale pitch (cents) to a given cents value. */
+export function nearestScaleNote(cents: number, root: number, scale: ScaleDefinition): number {
+  const rootCents = root * CENTS_PER_SEMITONE;
+  const periodCents = scale.period * CENTS_PER_SEMITONE;
+  const octave = Math.floor((cents - rootCents) / periodCents);
 
-  let bestNote = note;
+  let best = cents;
   let bestDist = Infinity;
 
   for (let o = octave - 1; o <= octave + 1; o++) {
     for (const interval of scale.intervals) {
-      const candidate = root + o * scale.period + interval;
-      const dist = Math.abs(candidate - note);
+      const candidate = rootCents + o * periodCents + interval * CENTS_PER_SEMITONE;
+      const dist = Math.abs(candidate - cents);
       if (dist < bestDist) {
         bestDist = dist;
-        bestNote = candidate;
+        best = candidate;
       }
     }
   }
 
-  return Math.max(MIN_NOTE, Math.min(MAX_NOTE, bestNote));
+  return Math.max(MIN_PITCH_CENTS, Math.min(MAX_PITCH_CENTS, best));
 }

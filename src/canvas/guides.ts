@@ -1,6 +1,6 @@
 import type { GuideDefinition } from '../types';
 import type { Viewport } from './viewport';
-import { noteNumberToName } from '../constants';
+import { centsToNoteName } from '../constants';
 
 export const GUIDE_COLOR = '#7a8fa6';
 export const GUIDE_SELECTED_COLOR = '#e6c84a';
@@ -71,8 +71,7 @@ function defaultLabel(g: GuideDefinition): string {
   if (g.orientation === 'x') {
     return `b${g.position.toFixed(2)}`;
   } else {
-    const nearest = Math.round(g.position);
-    return noteNumberToName(nearest);
+    return centsToNoteName(g.position);
   }
 }
 

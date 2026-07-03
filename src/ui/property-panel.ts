@@ -1,7 +1,8 @@
 import { store } from '../state/store';
 import { history } from '../state/history';
-import { noteNumberToName } from '../constants';
+import { centsToNoteName, CENTS_PER_SEMITONE } from '../constants';
 import { getMovableSelection } from '../model/curve-groups';
+import { pitchPoints } from '../model/curve';
 import { openTonePicker } from './tone-picker';
 
 /**
@@ -18,7 +19,7 @@ export function renderPropertyPanel(container: HTMLElement): void {
     if (guide) {
       const positionLabel = guide.orientation === 'x'
         ? `${guide.position.toFixed(3)} beats`
-        : `${noteNumberToName(Math.round(guide.position))} (MIDI ${guide.position.toFixed(2)})`;
+        : `${centsToNoteName(guide.position)} (${guide.position.toFixed(1)} ¢)`;
       // Locked guides become read-only in the property panel — the input is
       // disabled and the Delete button hidden. Lock toggle in the Snap section
       // is the way out.
@@ -162,19 +163,19 @@ export function renderPropertyPanel(container: HTMLElement): void {
     return;
   }
 
-  const point = curve.points[state.selectedPointIndex];
+  const point = pitchPoints(curve)[state.selectedPointIndex];
   if (!point) {
     container.innerHTML = '<p class="placeholder-text">Invalid selection</p>';
     return;
   }
 
-  const noteNum = Math.round(point.position.y);
-  const noteName = noteNumberToName(noteNum);
-  const cents = Math.round((point.position.y - noteNum) * 100);
+  const nearestLine = Math.round(point.position.y / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
+  const noteName = centsToNoteName(point.position.y);
+  const cents = Math.round(point.position.y - nearestLine);
 
   container.innerHTML = `
     <div class="prop-section">
-      <div class="prop-label">Point ${state.selectedPointIndex + 1} of ${curve.points.length}</div>
+      <div class="prop-label">Point ${state.selectedPointIndex + 1} of ${pitchPoints(curve).length}</div>
     </div>
     <div class="prop-section">
       <div class="prop-label">Time (beats)</div>
@@ -183,7 +184,7 @@ export function renderPropertyPanel(container: HTMLElement): void {
     <div class="prop-section">
       <div class="prop-label">Pitch</div>
       <div class="prop-value">${noteName}${cents !== 0 ? ` ${cents > 0 ? '+' : ''}${cents}ct` : ''}</div>
-      <div class="prop-value-sub">MIDI ${point.position.y.toFixed(2)}</div>
+      <div class="prop-value-sub">${point.position.y.toFixed(1)} ¢</div>
     </div>
     <div class="prop-section">
       <div class="prop-label">Handle In</div>

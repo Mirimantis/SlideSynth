@@ -1,11 +1,11 @@
-import { SUBDIVISIONS_PER_BEAT, MIN_NOTE, MAX_NOTE } from '../constants';
+import { SUBDIVISIONS_PER_BEAT, MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_SEMITONE } from '../constants';
 import type { ScaleDefinition } from './scales';
 import { nearestScaleNote, getScaleNotes } from './scales';
 
 /** Within this many beats of a guide, the guide wins X-snap over the subdivision grid. */
 const GUIDE_X_SNAP_RADIUS_BEATS = 0.25;
-/** Within this many semitones of a guide, the guide wins Y-snap over scale/integer. */
-const GUIDE_Y_SNAP_RADIUS_SEMITONES = 0.5;
+/** Within this many cents of a guide, the guide wins Y-snap over scale/chromatic. */
+const GUIDE_Y_SNAP_RADIUS_CENTS = 50;
 
 export interface SnapConfig {
   enabled: boolean;
@@ -16,11 +16,11 @@ export interface SnapConfig {
    *  semitone Y-snap fallback so the cursor floats freely in Y. Projection
    *  echoes, scale snap, and user guides are unaffected. */
   hidePitchLines?: boolean;
-  /** Harmonic Prism projection echo pitches (MIDI float). Optional. */
+  /** Harmonic Prism projection echo pitches (cents). Optional. */
   projectionTargets?: readonly number[];
   /** User-placed X-guide beat positions. Snap pulls within GUIDE_X_SNAP_RADIUS_BEATS. */
   guideXTargets?: readonly number[];
-  /** User-placed Y-guide MIDI-note positions. Snap pulls within GUIDE_Y_SNAP_RADIUS_SEMITONES. */
+  /** User-placed Y-guide pitch positions (cents). Snap pulls within GUIDE_Y_SNAP_RADIUS_CENTS. */
   guideYTargets?: readonly number[];
 }
 
@@ -79,7 +79,9 @@ export function snapToGrid(
     // explicit targets (guides, projection echoes) below pull it.
     snappedY = wy;
   } else {
-    snappedY = Math.round(Math.max(MIN_NOTE, Math.min(MAX_NOTE, wy)));
+    // Chromatic fallback: nearest 12-TET line (multiples of 100 cents).
+    const clamped = Math.max(MIN_PITCH_CENTS, Math.min(MAX_PITCH_CENTS, wy));
+    snappedY = Math.round(clamped / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
   }
   // Guide Y: same precedence as X — beats scale/integer snap when closer (and
   // when projection isn't owning the snap exclusively). In 8.19 None mode the
@@ -89,7 +91,7 @@ export function snapToGrid(
     !(config.projectionTargets && config.projectionTargets.length > 0)
     && config.guideYTargets && config.guideYTargets.length > 0
   ) {
-    const nearestGuide = nearestWithinRadius(wy, config.guideYTargets, GUIDE_Y_SNAP_RADIUS_SEMITONES);
+    const nearestGuide = nearestWithinRadius(wy, config.guideYTargets, GUIDE_Y_SNAP_RADIUS_CENTS);
     if (nearestGuide !== null) {
       const distToGuide = Math.abs(wy - nearestGuide);
       const distToOther = Math.abs(wy - snappedY);
@@ -101,12 +103,12 @@ export function snapToGrid(
   return { wx: Math.max(0, snappedX), wy: snappedY };
 }
 
-/** Hard cap on adaptive snap radius. Wider attractor wells get gentler peak
- *  forces (see SNAPK_REFERENCE_RADIUS in snap-magnetic), but reach is still
- *  bounded so a lone guide doesn't dominate notes that are nowhere near it.
- *  ~3 ST covers typical sparse-guide setups (gaps up to 6 ST contiguous);
- *  past this the cursor floats free between wells. */
-const MAX_ADAPTIVE_RADIUS = 3;
+/** Hard cap on adaptive snap radius (cents). Wider attractor wells get gentler
+ *  peak forces (see SNAPK_REFERENCE_RADIUS in snap-magnetic), but reach is
+ *  still bounded so a lone guide doesn't dominate notes that are nowhere near
+ *  it. 300 ¢ (~3 ST) covers typical sparse-guide setups (gaps up to 6 ST
+ *  contiguous); past this the cursor floats free between wells. */
+const MAX_ADAPTIVE_RADIUS = 300;
 
 export interface AdaptiveSnapResult {
   /** Nearest snap target to the cursor (scale note, chromatic semitone, or
@@ -140,9 +142,10 @@ function collectSnapTargets(wy: number, config: SnapConfig, range: number): numb
       if (Math.abs(n - wy) <= range) targets.push(n);
     }
   } else if (!config.hidePitchLines) {
-    const lo = Math.max(MIN_NOTE, Math.floor(wy - range));
-    const hi = Math.min(MAX_NOTE, Math.ceil(wy + range));
-    for (let n = lo; n <= hi; n++) targets.push(n);
+    // Chromatic 12-TET lines every 100 cents.
+    const lo = Math.max(MIN_PITCH_CENTS, Math.floor((wy - range) / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE);
+    const hi = Math.min(MAX_PITCH_CENTS, Math.ceil((wy + range) / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE);
+    for (let n = lo; n <= hi; n += CENTS_PER_SEMITONE) targets.push(n);
   }
 
   if (config.guideYTargets) {

@@ -1,37 +1,64 @@
 import type { ToneDefinition } from './types';
 
+// ── Pitch units ─────────────────────────────────────────────────
+// Canonical pitch is CENTS from a frozen storage anchor: 0 ¢ ≡ C-1 (MIDI note
+// 0 ≈ 8.1758 Hz). 100 ¢ = semitone, 1200 ¢ = octave, so ¢ ÷ 100 = MIDI note
+// number and every audible pitch is positive. A4 = 440 Hz sits at 6900 ¢.
+// The anchor never moves — concert-pitch tuning (A = 440/442/415…) rides on
+// top via the mutable reference below and shifts FREQUENCIES, not stored
+// pitch values.
+export const CENTS_PER_SEMITONE = 100;
+export const CENTS_PER_OCTAVE = 1200;
+/** Cents value of A4 at the frozen C-1 anchor (MIDI 69 × 100). */
+export const A4_CENTS = 6900;
+
 // ── Staff range ─────────────────────────────────────────────────
-// C0 (MIDI 12) through C9 (MIDI 120) — 9 octaves, 109 note lines
-export const MIN_NOTE = 12;  // C0
-export const MAX_NOTE = 120; // C9
-// Extra room past MIN_NOTE / MAX_NOTE for working comfortably near the edges.
-export const Y_PAN_MARGIN = 6; // semitones (half an octave)
+// C0 (1200 ¢) through C9 (12000 ¢) — 9 octaves, 109 note lines
+export const MIN_PITCH_CENTS = 1200;  // C0
+export const MAX_PITCH_CENTS = 12000; // C9
+// Extra room past the staff range for working comfortably near the edges.
+export const Y_PAN_MARGIN = 600; // cents (half an octave)
+
+// ── MIDI boundary conversions ───────────────────────────────────
+// Only import/export and live MIDI input should need these; everything
+// internal speaks cents.
+export const midiToCents = (note: number): number => note * CENTS_PER_SEMITONE;
+export const centsToMidi = (cents: number): number => cents / CENTS_PER_SEMITONE;
 
 // ── Note names ──────────────────────────────────────────────────
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 
+/** Name of an integer MIDI note number (12-TET grid). */
 export function noteNumberToName(n: number): string {
   const octave = Math.floor(n / 12) - 1;
-  const name = NOTE_NAMES[n % 12];
+  const name = NOTE_NAMES[((n % 12) + 12) % 12];
   return `${name}${octave}`;
 }
 
-export function isNaturalNote(n: number): boolean {
-  const i = n % 12;
+/** Note name of the 12-TET grid line nearest to a cents value. */
+export function centsToNoteName(cents: number): string {
+  return noteNumberToName(Math.round(cents / CENTS_PER_SEMITONE));
+}
+
+/** Is this cents value on a natural (white-key) 12-TET line? Expects grid-line
+ *  cents (multiples of 100); rounds to the nearest line first. */
+export function isNaturalCents(cents: number): boolean {
+  const i = ((Math.round(cents / CENTS_PER_SEMITONE) % 12) + 12) % 12;
   // C=0, D=2, E=4, F=5, G=7, A=9, B=11
   return [0, 2, 4, 5, 7, 9, 11].includes(i);
 }
 
-export function isCNote(n: number): boolean {
-  return n % 12 === 0;
+/** Is this cents value on a C line? */
+export function isCCents(cents: number): boolean {
+  return ((Math.round(cents / CENTS_PER_SEMITONE) % 12) + 12) % 12 === 0;
 }
 
 // ── Frequency conversion ────────────────────────────────────────
-// A4 = MIDI 69 = reference frequency (default 440 Hz). The reference is a
-// module-level mutable so the whole audio path retunes consistently when the
-// composition's tuningOffsetCents changes — synth voices, curve sampling, and
-// preview all flow through noteToFrequency. Composition load + the Tune
-// control in Transport push new values via setReferenceAHz().
+// The reference is a module-level mutable so the whole audio path retunes
+// consistently when the composition's tuningOffsetCents changes — synth
+// voices, curve sampling, and preview all flow through centsToFrequency.
+// Composition load + the Tune control in Transport push new values via
+// setReferenceAHz().
 export const STANDARD_A4_HZ = 440;
 let currentReferenceAHz = STANDARD_A4_HZ;
 
@@ -47,20 +74,20 @@ export function getReferenceAHz(): number {
 
 /** Convert a cents offset (relative to A=440) to a reference A frequency in Hz. */
 export function centsToReferenceAHz(cents: number): number {
-  return STANDARD_A4_HZ * Math.pow(2, cents / 1200);
+  return STANDARD_A4_HZ * Math.pow(2, cents / CENTS_PER_OCTAVE);
 }
 
 /** Convert a reference A frequency to a cents offset relative to A=440. */
 export function referenceAHzToCents(hz: number): number {
-  return 1200 * Math.log2(hz / STANDARD_A4_HZ);
+  return CENTS_PER_OCTAVE * Math.log2(hz / STANDARD_A4_HZ);
 }
 
-export function noteToFrequency(note: number): number {
-  return currentReferenceAHz * Math.pow(2, (note - 69) / 12);
+export function centsToFrequency(cents: number): number {
+  return currentReferenceAHz * Math.pow(2, (cents - A4_CENTS) / CENTS_PER_OCTAVE);
 }
 
-export function frequencyToNote(hz: number): number {
-  return 12 * Math.log2(hz / currentReferenceAHz) + 69;
+export function frequencyToCents(hz: number): number {
+  return CENTS_PER_OCTAVE * Math.log2(hz / currentReferenceAHz) + A4_CENTS;
 }
 
 // ── Default values ──────────────────────────────────────────────
@@ -93,15 +120,15 @@ export const SCROLL_BUFFER = 64;        // generous open space past the last poi
 export const MAX_CANVAS_EXTENT = 10000; // memory cap (~83 min at 120 BPM)
 
 // ── Viewport defaults ───────────────────────────────────────────
-export const DEFAULT_ZOOM_X = 120;  // pixels per beat
-export const DEFAULT_ZOOM_Y = 14;   // pixels per semitone
+export const DEFAULT_ZOOM_X = 120;   // pixels per beat
+export const DEFAULT_ZOOM_Y = 0.14;  // pixels per cent (14 px per semitone)
 // Min is 0.5 px/beat so the viewport can show ~10 minutes at 120 BPM on a
 // typical canvas width. The slider maps to this range logarithmically so the
 // useful mid-range resolution isn't swamped by the extended low end.
 export const MIN_ZOOM_X = 0.5;
 export const MAX_ZOOM_X = 600;
-export const MIN_ZOOM_Y = 4;
-export const MAX_ZOOM_Y = 140;
+export const MIN_ZOOM_Y = 0.04;  // 4 px per semitone
+export const MAX_ZOOM_Y = 1.4;   // 140 px per semitone
 
 // ── Playback ────────────────────────────────────────────────────
 export const SCHEDULER_INTERVAL_MS = 25;

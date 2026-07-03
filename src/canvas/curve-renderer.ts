@@ -1,6 +1,6 @@
 import type { BezierCurve, ToneDefinition, Vec2 } from '../types';
 import type { Viewport } from './viewport';
-import { getSegmentControlPoints } from '../model/curve';
+import { getSegmentControlPoints, pitchPoints } from '../model/curve';
 
 const POINT_RADIUS = 5;
 const POINT_RADIUS_UNSELECTED = 3;
@@ -46,20 +46,21 @@ function renderCurve(
   selectedPointIndex: number | null,
   selectedPointKeys: ReadonlySet<string> | null,
 ): void {
-  if (curve.points.length === 0) return;
+  const points = pitchPoints(curve);
+  if (points.length === 0) return;
 
   // Draw curve segments
-  if (curve.points.length >= 2) {
+  if (points.length >= 2) {
     ctx.beginPath();
     ctx.strokeStyle = tone.color;
     ctx.lineWidth = isSelected ? 4 : 2;
     ctx.setLineDash(tone.dashPattern);
 
-    const first = curve.points[0]!;
+    const first = points[0]!;
     const firstScreen = vp.worldToScreen(first.position.x, first.position.y);
     ctx.moveTo(firstScreen.sx, firstScreen.sy);
 
-    for (let i = 0; i < curve.points.length - 1; i++) {
+    for (let i = 0; i < points.length - 1; i++) {
       const seg = getSegmentControlPoints(curve, i);
       if (!seg) continue;
 
@@ -75,8 +76,8 @@ function renderCurve(
   }
 
   // Draw control points (always visible; handles only when selected)
-  for (let i = 0; i < curve.points.length; i++) {
-    const pt = curve.points[i]!;
+  for (let i = 0; i < points.length; i++) {
+    const pt = points[i]!;
     const screen = vp.worldToScreen(pt.position.x, pt.position.y);
     const inMultiPointSelection = !!selectedPointKeys && selectedPointKeys.has(`${curve.id}:${i}`);
     // White-fill highlight when this point is the primary (showHandles +

@@ -1,14 +1,5 @@
-import { noteToFrequency, frequencyToNote, noteNumberToName } from '../constants';
+import { centsToFrequency, frequencyToCents, centsToNoteName } from '../constants';
 
-// Re-export from constants for convenience
-export { noteToFrequency, frequencyToNote, noteNumberToName };
-
-/** Linear interpolation. */
-export function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-/** Clamp value between min and max. */
-export function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
+// Music math utilities — pitch is canonical CENTS from C-1 (0 ¢ ≈ 8.1758 Hz).
+// Re-exported from constants for convenience.
+export { centsToFrequency, frequencyToCents, centsToNoteName };

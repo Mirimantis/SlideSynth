@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "name": "Fixture v2",
+  "bpm": 120,
+  "beatsPerMeasure": 4,
+  "loopStartBeats": 0,
+  "loopEndBeats": 8,
+  "snap": {
+    "enabled": true,
+    "scaleRoot": 0,
+    "scaleId": "major",
+    "magneticEnabled": false,
+    "magneticStrength": 0.5,
+    "magneticSpringK": 8,
+    "magneticDamping": 2
+  },
+  "guides": [
+    { "id": "guide-y2", "orientation": "y", "position": 69, "label": "A4" }
+  ],
+  "toneLibrary": [
+    {
+      "id": "tone-1",
+      "name": "Fixture Sine",
+      "color": "#88ccff",
+      "dashPattern": [],
+      "layers": [{ "type": "sine", "gain": 1, "detune": 0 }],
+      "distortion": null
+    }
+  ],
+  "tracks": [
+    {
+      "id": "track-1",
+      "name": "Track 1",
+      "toneId": "tone-1",
+      "muted": false,
+      "solo": false,
+      "volume": 1,
+      "curves": [
+        {
+          "id": "curve-v2",
+          "points": [
+            { "position": { "x": 0, "y": 60 }, "handleIn": null, "handleOut": null, "volume": 0.2 },
+            { "position": { "x": 2, "y": 62 }, "handleIn": null, "handleOut": null, "volume": 0.6 },
+            { "position": { "x": 4, "y": 64 }, "handleIn": null, "handleOut": null, "volume": 1 }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -7,10 +7,10 @@
 
 import type { BezierCurve } from '../types';
 import type { Viewport } from './viewport';
-import { getSegmentControlPoints } from '../model/curve';
+import { getSegmentControlPoints, pitchPoints } from '../model/curve';
 import { evaluateCurveAtBeat } from '../audio/curve-sampler';
 import { chordOffsets, type ChordSpec } from '../utils/harmonics';
-import { MIN_NOTE, MAX_NOTE } from '../constants';
+import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
 
 const ECHO_STROKE = 'rgba(200, 160, 255, 0.55)';    // lavender, dimmed
 const ECHO_LINE_WIDTH = 1.25;
@@ -48,7 +48,7 @@ export function renderProjection(
   canvasWidth: number,
   canvasHeight: number,
 ): void {
-  if (sourceCurve.points.length < 2) return;
+  if (pitchPoints(sourceCurve).length < 2) return;
   const octaves = Math.max(0, Math.min(3, Math.round(octaveRange)));
   const offsets = chordOffsets(chordSpec);
   if (offsets.length === 0) return;
@@ -56,7 +56,7 @@ export function renderProjection(
   // Source Y extent — used for offscreen culling per echo.
   let minSourceY = Infinity;
   let maxSourceY = -Infinity;
-  for (const pt of sourceCurve.points) {
+  for (const pt of pitchPoints(sourceCurve)) {
     if (pt.position.y < minSourceY) minSourceY = pt.position.y;
     if (pt.position.y > maxSourceY) maxSourceY = pt.position.y;
   }
@@ -68,12 +68,12 @@ export function renderProjection(
 
   for (let octave = -octaves; octave <= octaves; octave++) {
     for (const offset of offsets) {
-      const yShift = octave * 12 + offset;
+      const yShift = octave * CENTS_PER_OCTAVE + offset;
       if (octave === 0 && offset === 0) continue; // source itself
       // Cull: is this echo anywhere on screen vertically?
       const shiftedMin = minSourceY + yShift;
       const shiftedMax = maxSourceY + yShift;
-      if (shiftedMax < MIN_NOTE || shiftedMin > MAX_NOTE) continue;
+      if (shiftedMax < MIN_PITCH_CENTS || shiftedMin > MAX_PITCH_CENTS) continue;
       const topScreenY = vp.worldToScreen(0, shiftedMax).sy;
       const botScreenY = vp.worldToScreen(0, shiftedMin).sy;
       if (botScreenY < 0 || topScreenY > canvasHeight) continue;
@@ -93,11 +93,11 @@ function drawEcho(
   _canvasWidth: number,
 ): void {
   ctx.beginPath();
-  const first = curve.points[0]!;
+  const first = pitchPoints(curve)[0]!;
   const firstScreen = vp.worldToScreen(first.position.x, first.position.y + yShift);
   ctx.moveTo(firstScreen.sx, firstScreen.sy);
 
-  for (let i = 0; i < curve.points.length - 1; i++) {
+  for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
     const seg = getSegmentControlPoints(curve, i);
     if (!seg) continue;
     const p1 = vp.worldToScreen(seg.p1.x, seg.p1.y + yShift);
@@ -118,11 +118,11 @@ export function renderProjectionSourceHighlight(
   vp: Viewport,
   curve: BezierCurve,
 ): void {
-  if (curve.points.length < 2) return;
+  if (pitchPoints(curve).length < 2) return;
 
   // Build a linear gradient spanning the curve's screen-space X extent.
-  const firstWX = curve.points[0]!.position.x;
-  const lastWX = curve.points[curve.points.length - 1]!.position.x;
+  const firstWX = pitchPoints(curve)[0]!.position.x;
+  const lastWX = pitchPoints(curve)[pitchPoints(curve).length - 1]!.position.x;
   const x0 = vp.worldToScreen(firstWX, 0).sx;
   const x1 = vp.worldToScreen(lastWX, 0).sx;
   // If the curve spans no screen width (extreme zoom-out), fall back to a
@@ -143,10 +143,10 @@ export function renderProjectionSourceHighlight(
   ctx.globalAlpha = 0.85;
   ctx.beginPath();
 
-  const first = curve.points[0]!;
+  const first = pitchPoints(curve)[0]!;
   const firstScreen = vp.worldToScreen(first.position.x, first.position.y);
   ctx.moveTo(firstScreen.sx, firstScreen.sy);
-  for (let i = 0; i < curve.points.length - 1; i++) {
+  for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
     const seg = getSegmentControlPoints(curve, i);
     if (!seg) continue;
     const p1 = vp.worldToScreen(seg.p1.x, seg.p1.y);
@@ -186,7 +186,7 @@ export function renderPrismDrawPreview(
   for (let i = 0; i < offsets.length; i++) {
     const offset = offsets[i]!;
     const y = snappedBaseY + offset;
-    if (y < MIN_NOTE || y > MAX_NOTE) continue;
+    if (y < MIN_PITCH_CENTS || y > MAX_PITCH_CENTS) continue;
 
     const screenY = vp.worldToScreen(0, y).sy;
     if (screenY < rulerHeight - PRIMARY_R || screenY > canvasHeight + PRIMARY_R) continue;
@@ -240,8 +240,8 @@ export function computeProjectionTargetsAtX(
   const targets: number[] = [];
   for (let octave = -octaves; octave <= octaves; octave++) {
     for (const offset of offsets) {
-      const y = hit.noteNumber + offset + octave * 12;
-      if (y >= MIN_NOTE && y <= MAX_NOTE) targets.push(y);
+      const y = hit.noteNumber + offset + octave * CENTS_PER_OCTAVE;
+      if (y >= MIN_PITCH_CENTS && y <= MAX_PITCH_CENTS) targets.push(y);
     }
   }
   return targets;
