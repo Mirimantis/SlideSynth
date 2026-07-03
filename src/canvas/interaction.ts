@@ -9,10 +9,10 @@ import { snapToGrid, getAdaptiveSubdivisions } from '../utils/snap';
 import type { SnapConfig } from '../utils/snap';
 import { getScaleById } from '../utils/scales';
 import { computeProjectionTargetsAtX } from './projection-renderer';
-import { SUBDIVISIONS_PER_BEAT, MIN_NOTE, MAX_NOTE } from '../constants';
+import { SUBDIVISIONS_PER_BEAT, MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
 import { chordOffsets } from '../utils/harmonics';
 import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/curve-groups';
-import { distToPoint, nearestPointOnCubic, nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
+import { nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
 import { hitTestLoopMarkers } from './loop-markers';
 import { hitTestGuides } from './guides';
@@ -157,7 +157,7 @@ export function createInteraction(
         const snappedNow = dragSnap.enabled ? snapToGrid(raw.wx, raw.wy, dragSnap) : raw;
         const next = guide.orientation === 'x'
           ? Math.max(0, snappedNow.wx)
-          : Math.max(MIN_NOTE, Math.min(MAX_NOTE, snappedNow.wy));
+          : Math.max(MIN_PITCH_CENTS, Math.min(MAX_PITCH_CENTS, snappedNow.wy));
         store.updateGuide(guide.id, { position: next });
       }
       return;
@@ -452,7 +452,7 @@ export function createInteraction(
           // Octave arrows are instant actions, not drags
           if (hit === 'octaveUp' || hit === 'octaveDown') {
             history.snapshot();
-            const shift = hit === 'octaveUp' ? 12 : -12;
+            const shift = hit === 'octaveUp' ? CENTS_PER_OCTAVE : -CENTS_PER_OCTAVE;
             const subsetMap = tb.pointIndicesPerCurve;
             store.mutate(() => {
               for (const curveId of tb.curveIds) {
@@ -728,13 +728,9 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
 
   // Hit-test against existing points on the target curve
   if (targetCurve) {
-    const hitRadiusX = 8 / vp.state.zoomX;
-    const hitRadiusY = 8 / vp.state.zoomY;
-    const hitRadius = Math.max(hitRadiusX, hitRadiusY);
-
     for (let i = 0; i < pitchPoints(targetCurve).length; i++) {
       const pt = pitchPoints(targetCurve)[i]!;
-      if (distToPoint(worldPt, pt.position) < hitRadius) {
+      if (screenDist(worldPt, pt.position, vp) < DRAW_HIT_PX) {
         // Hit an existing point — clear handles and set up for handle drag.
         // If the user releases without dragging, handles stay null (sharp point).
         // If the user drags, handleDrag creates new handles.
@@ -820,10 +816,6 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
   const activeTrack = getSelectedTrack();
   if (!activeTrack) return 'miss';
 
-  const hitRadiusX = 4 / vp.state.zoomX;
-  const hitRadiusY = 4 / vp.state.zoomY;
-  const hitRadius = Math.max(hitRadiusX, hitRadiusY);
-
   // Plain click (no shift): scan every visible (non-muted) track so the user
   // can grab any curve they see, with the active track auto-following the hit
   // (BACKLOG 8.23). Shift-click stays locked to the active track so an
@@ -840,7 +832,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
     for (const curve of t.curves) {
       for (let i = 0; i < pitchPoints(curve).length; i++) {
         const pt = pitchPoints(curve)[i]!;
-        if (distToPoint(worldPt, pt.position) < hitRadius) {
+        if (screenDist(worldPt, pt.position, vp) < SELECT_HIT_PX) {
           if (shiftKey) {
             // Shift+click on an anchor: toggle the *individual point* in the
             // multi-point selection (BACKLOG 8.3). The parent-curve set is
@@ -918,7 +910,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
         const pt = pitchPoints(curve)[i]!;
         if (pt.handleIn) {
           const habs: Vec2 = { x: pt.position.x + pt.handleIn.x, y: pt.position.y + pt.handleIn.y };
-          if (distToPoint(worldPt, habs) < hitRadius) {
+          if (screenDist(worldPt, habs, vp) < SELECT_HIT_PX) {
             history.snapshot();
             istate.dragging = 'handleIn';
             istate.dragCurveId = curve.id;
@@ -930,7 +922,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
         }
         if (pt.handleOut) {
           const habs: Vec2 = { x: pt.position.x + pt.handleOut.x, y: pt.position.y + pt.handleOut.y };
-          if (distToPoint(worldPt, habs) < hitRadius) {
+          if (screenDist(worldPt, habs, vp) < SELECT_HIT_PX) {
             history.snapshot();
             istate.dragging = 'handleOut';
             istate.dragCurveId = curve.id;
@@ -951,8 +943,11 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
       for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
         const seg = getSegmentControlPoints(curve, i);
         if (!seg) continue;
-        const nearest = nearestPointOnCubic(seg.p0, seg.p1, seg.p2, seg.p3, worldPt);
-        if (nearest.dist < hitRadius) {
+        const nearest = nearestPointOnCubicScaled(
+          seg.p0, seg.p1, seg.p2, seg.p3, worldPt,
+          vp.state.zoomX, vp.state.zoomY,
+        );
+        if (nearest.dist < SELECT_HIT_PX) {
           if (shiftKey) {
             store.toggleSelectedCurve(curve.id);
             rebuildTransformBox(istate, activeTrack);
@@ -1031,14 +1026,10 @@ function handleDeleteClick(worldPt: Vec2, vp: Viewport): void {
   const track = getSelectedTrack();
   if (!track) return;
 
-  const hitRadiusX = 8 / vp.state.zoomX;
-  const hitRadiusY = 8 / vp.state.zoomY;
-  const hitRadius = Math.max(hitRadiusX, hitRadiusY);
-
   for (const curve of track.curves) {
     for (let i = 0; i < pitchPoints(curve).length; i++) {
       const pt = pitchPoints(curve)[i]!;
-      if (distToPoint(worldPt, pt.position) < hitRadius) {
+      if (screenDist(worldPt, pt.position, vp) < DELETE_HIT_PX) {
         history.snapshot();
         // Group-aware: deleting any point on a grouped curve removes the entire
         // group (matches Phase 2 design: groups couple delete actions).
@@ -1065,13 +1056,22 @@ function handleDeleteClick(worldPt: Vec2, vp: Viewport): void {
   }
 }
 
-/** Screen-space distance between two world points. */
+/** Screen-space distance between two world points. The only correct way to
+ *  hit-test a fixed-pixel radius: X (beats) and Y (pitch cents) use very
+ *  different world-units-per-pixel scales, so comparing a raw world-space
+ *  Euclidean distance against a single radius (the old approach) silently
+ *  breaks whenever those two scales diverge — as they now do, since pitch
+ *  moved from semitone- to cents-scale Y values. */
 function screenDist(a: Vec2, b: Vec2, vp: Viewport): number {
   const dx = (a.x - b.x) * vp.state.zoomX;
   const dy = (a.y - b.y) * vp.state.zoomY;
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+const DRAW_HIT_PX = 8;       // Draw tool: click-to-grab-existing-point radius
+const SELECT_HIT_PX = 4;     // Select tool: point / handle / segment hit radius
+const DELETE_HIT_PX = 8;     // Delete tool: point hit radius
+const FIND_CURVE_HIT_PX = 8; // findCurveAt: point / segment hit radius
 const SCISSORS_HIT_PX = 8; // pixel threshold for scissors hit-testing
 
 /**
@@ -1193,7 +1193,7 @@ function handleDrawClickPrism(istate: InteractionState, worldPt: Vec2): void {
     }
   }
 
-  const clampY = (y: number) => Math.max(MIN_NOTE, Math.min(MAX_NOTE, y));
+  const clampY = (y: number) => Math.max(MIN_PITCH_CENTS, Math.min(MAX_PITCH_CENTS, y));
 
   if (primary && primary.groupId) {
     // EXTEND existing chord cluster: add a parallel point to each sibling.
@@ -1325,14 +1325,10 @@ function finishDrawing(istate: InteractionState): void {
 
 /** Find the curve (point or segment) at a given world position. */
 function findCurveAt(worldPt: Vec2, vp: Viewport, track: Track): BezierCurve | null {
-  const hitRadiusX = 8 / vp.state.zoomX;
-  const hitRadiusY = 8 / vp.state.zoomY;
-  const hitRadius = Math.max(hitRadiusX, hitRadiusY);
-
   // Check anchor points
   for (const curve of track.curves) {
     for (const pt of pitchPoints(curve)) {
-      if (distToPoint(worldPt, pt.position) < hitRadius) return curve;
+      if (screenDist(worldPt, pt.position, vp) < FIND_CURVE_HIT_PX) return curve;
     }
   }
 
@@ -1342,8 +1338,11 @@ function findCurveAt(worldPt: Vec2, vp: Viewport, track: Track): BezierCurve | n
     for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
       const seg = getSegmentControlPoints(curve, i);
       if (!seg) continue;
-      const nearest = nearestPointOnCubic(seg.p0, seg.p1, seg.p2, seg.p3, worldPt);
-      if (nearest.dist < hitRadius) return curve;
+      const nearest = nearestPointOnCubicScaled(
+        seg.p0, seg.p1, seg.p2, seg.p3, worldPt,
+        vp.state.zoomX, vp.state.zoomY,
+      );
+      if (nearest.dist < FIND_CURVE_HIT_PX) return curve;
     }
   }
 

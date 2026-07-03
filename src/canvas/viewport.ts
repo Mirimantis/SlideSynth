@@ -3,7 +3,7 @@ import {
   DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y,
   MIN_ZOOM_X, MAX_ZOOM_X,
   MIN_ZOOM_Y, MAX_ZOOM_Y,
-  MIN_NOTE, MAX_NOTE, Y_PAN_MARGIN,
+  MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN,
   MIN_CANVAS_EXTENT, SCROLL_BUFFER,
 } from '../constants';
 
@@ -20,7 +20,7 @@ export interface Viewport {
   topInset: number;
   /** World (beats, noteNumber) → screen pixels */
   worldToScreen(wx: number, wy: number): { sx: number; sy: number };
-  /** Screen pixels → world (beats, noteNumber) */
+  /** Screen pixels → world (beats, pitch cents) */
   screenToWorld(sx: number, sy: number): { wx: number; wy: number };
   /** Zoom X by factor, centered on screen point */
   zoomXAt(factor: number, screenX: number): void;
@@ -42,7 +42,7 @@ export interface Viewport {
 export function createViewport(): Viewport {
   const state: ViewportState = {
     offsetX: 0,
-    offsetY: MAX_NOTE,
+    offsetY: MAX_PITCH_CENTS,
     zoomX: DEFAULT_ZOOM_X,
     zoomY: DEFAULT_ZOOM_Y,
   };
@@ -57,7 +57,7 @@ export function createViewport(): Viewport {
     worldToScreen(wx: number, wy: number) {
       // X: beats → pixels (left = beat 0)
       const sx = (wx - state.offsetX) * state.zoomX;
-      // Y: note number → pixels (top = high notes, bottom = low notes)
+      // Y: pitch cents → pixels (top = high notes, bottom = low notes)
       // Higher note numbers appear higher (lower Y pixel value)
       const sy = (state.offsetY - wy) * state.zoomY;
       return { sx, sy };
@@ -108,11 +108,11 @@ export function createViewport(): Viewport {
       const maxOffsetX = Math.max(minOffsetX, effectiveExtent - visibleBeats);
       state.offsetX = clamp(state.offsetX, minOffsetX, maxOffsetX);
 
-      // Y: can't scroll past the note range plus a small margin for edge work.
+      // Y: can't scroll past the pitch range plus a small margin for edge work.
       // The top band (rulers) is reserved, so the highest pannable note sits below it.
-      const visibleNotes = canvasHeight / state.zoomY;
-      const minOffsetY = (MIN_NOTE - Y_PAN_MARGIN) + visibleNotes;
-      const maxOffsetY = MAX_NOTE + Y_PAN_MARGIN + vp.topInset / state.zoomY;
+      const visibleCents = canvasHeight / state.zoomY;
+      const minOffsetY = (MIN_PITCH_CENTS - Y_PAN_MARGIN) + visibleCents;
+      const maxOffsetY = MAX_PITCH_CENTS + Y_PAN_MARGIN + vp.topInset / state.zoomY;
       state.offsetY = clamp(state.offsetY, minOffsetY, maxOffsetY);
     },
   };

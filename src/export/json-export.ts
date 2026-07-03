@@ -89,10 +89,19 @@ export function deserializeComposition(json: string): Composition {
     data.tuningOffsetCents = 0;
   }
 
-  // v3 → v4: unified lanes model. `points` becomes the mandatory pitch lane
-  // (lanes[0]); `parameters.volume` becomes the volume lane. Curves already
-  // carrying `lanes` pass through untouched.
+  // v3 → v4: unified lanes model + cents pitch canon. `points` (Y = MIDI note)
+  // becomes the mandatory pitch lane (lanes[0]) with Y scaled ×100 into cents;
+  // `parameters.volume` becomes the volume lane (values unchanged). Y-oriented
+  // guides scale the same way. Curves already carrying `lanes` pass through
+  // untouched, and the guide scaling is gated on the pre-migration version so
+  // re-deserializing a v4 file never double-scales.
+  const preMigrationVersion = data.version;
   migrateV3ToV4(data);
+  if (preMigrationVersion < 4) {
+    for (const g of data.guides) {
+      if (g.orientation === 'y') g.position *= 100;
+    }
+  }
 
   // All migrations applied — the in-memory composition is now current-version.
   data.version = COMPOSITION_VERSION;
@@ -100,10 +109,18 @@ export function deserializeComposition(json: string): Composition {
   return data;
 }
 
-/** Convert v3 curves (points + parameters) to the v4 lanes model, in place. */
+/** Convert v3 curves (points + parameters, MIDI-note Y) to the v4 lanes model
+ *  (cents Y), in place. Bezier handles are RELATIVE offsets in the same Y unit
+ *  as the anchors, so their Y components scale ×100 too — miss that and every
+ *  migrated curve's shape distorts. */
 function migrateV3ToV4(data: Composition): void {
   const pitchSpec = LANE_SPECS.pitch;
   const volumeSpec = LANE_SPECS.volume;
+  const scalePoint = (p: LanePoint): LanePoint => ({
+    position: { x: p.position.x, y: p.position.y * 100 },
+    handleIn: p.handleIn ? { x: p.handleIn.x, y: p.handleIn.y * 100 } : null,
+    handleOut: p.handleOut ? { x: p.handleOut.x, y: p.handleOut.y * 100 } : null,
+  });
   for (const track of data.tracks) {
     for (const curve of track.curves as unknown as Array<{
       lanes?: Lane[];
@@ -115,7 +132,7 @@ function migrateV3ToV4(data: Composition): void {
         type: 'pitch',
         unit: pitchSpec.unit,
         range: [pitchSpec.range[0], pitchSpec.range[1]],
-        points: curve.points ?? [],
+        points: (curve.points ?? []).map(scalePoint),
       }];
       if (curve.parameters?.volume) {
         lanes.push({

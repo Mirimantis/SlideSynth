@@ -1,7 +1,7 @@
 import type { AppState, BezierCurve, Composition, GuideDefinition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode } from '../types';
 import { createComposition } from '../model/composition';
 import { createTrack } from '../model/track';
-import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_NOTE, AUTO_SMOOTH_X_RATIO } from '../constants';
+import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 
 // Snap-section AppState fields (snapEnabled / scaleRoot / scaleId / magnetic*) are
@@ -153,7 +153,7 @@ function createInitialState(): AppState {
     },
     viewport: {
       offsetX: 0,
-      offsetY: MAX_NOTE,
+      offsetY: MAX_PITCH_CENTS,
       zoomX: DEFAULT_ZOOM_X,
       zoomY: DEFAULT_ZOOM_Y,
     },
@@ -453,18 +453,19 @@ class Store {
     }
   }
 
-  /** Apply a pitch-bend offset (in semitones) to every MIDI-input planchette's
+  /** Apply a pitch-bend offset (in CENTS) to every MIDI-input planchette's
    *  cursor + snapped Y. Called when the live MIDI pitch-bend wheel moves so
    *  both the visual planchette and the recording sample track the bent pitch
    *  (BACKLOG 8.25). MIDI ingress isn't snap-affected — discrete pitch comes
-   *  from the controller, bend is just a continuous offset on top. */
-  setMidiPitchBendOffset(offsetSemitones: number) {
+   *  from the controller, bend is just a continuous offset on top. The voice
+   *  id embeds the MIDI note number; planchette Y is cents. */
+  setMidiPitchBendOffset(offsetCents: number) {
     let dirty = false;
     for (const p of this.state.performance.planchettes) {
       if (!p.voiceId.startsWith('midi-')) continue;
       const baseNote = Number(p.voiceId.slice('midi-'.length));
       if (!Number.isFinite(baseNote)) continue;
-      const bent = baseNote + offsetSemitones;
+      const bent = baseNote * 100 + offsetCents;
       if (p.cursorWorldY !== bent || p.snappedWorldY !== bent) {
         p.cursorWorldY = bent;
         p.snappedWorldY = bent;

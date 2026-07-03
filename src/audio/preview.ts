@@ -2,7 +2,7 @@ import type { ToneDefinition, Composition, VoiceId } from '../types';
 import { createToneSynth, type ToneSynth } from './tone-synth';
 import { getAudioContext, getMasterGain, ensureResumed } from './engine';
 import { evaluateCurveAtBeat } from './curve-sampler';
-import { noteToFrequency } from '../constants';
+import { centsToFrequency } from '../constants';
 
 const RAMP_IN = 0.01;   // seconds — fade-in to avoid click
 const RAMP_OUT = 0.015;  // seconds — fade-out to avoid click
@@ -81,7 +81,7 @@ export function createPreviewManager(): PreviewManager {
       const synth = createToneSynth(tone);
       synth.connect(getPreviewGain());
       synth.start();
-      synth.setFrequency(noteToFrequency(noteNumber));
+      synth.setFrequency(centsToFrequency(noteNumber));
       // Ramp from 0 to preview volume
       synth.setVolume(0);
       synth.setVolume(PREVIEW_VOLUME, ctx.currentTime + RAMP_IN);
@@ -91,7 +91,7 @@ export function createPreviewManager(): PreviewManager {
     updateDrawPitch(noteNumber: number, voiceId: VoiceId = DEFAULT_VOICE) {
       const synth = drawSynths.get(voiceId);
       if (synth) {
-        synth.setFrequency(noteToFrequency(noteNumber));
+        synth.setFrequency(centsToFrequency(noteNumber));
       }
     },
 
@@ -144,7 +144,7 @@ export function createPreviewManager(): PreviewManager {
         for (const curve of track.curves) {
           const sample = evaluateCurveAtBeat(curve, beat);
           if (sample) {
-            entry.synth.setFrequency(noteToFrequency(sample.noteNumber));
+            entry.synth.setFrequency(centsToFrequency(sample.noteNumber));
             entry.synth.setVolume(sample.volume * PREVIEW_VOLUME);
             found = true;
             break;

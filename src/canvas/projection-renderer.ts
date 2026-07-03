@@ -10,7 +10,7 @@ import type { Viewport } from './viewport';
 import { getSegmentControlPoints, pitchPoints } from '../model/curve';
 import { evaluateCurveAtBeat } from '../audio/curve-sampler';
 import { chordOffsets, type ChordSpec } from '../utils/harmonics';
-import { MIN_NOTE, MAX_NOTE } from '../constants';
+import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
 
 const ECHO_STROKE = 'rgba(200, 160, 255, 0.55)';    // lavender, dimmed
 const ECHO_LINE_WIDTH = 1.25;
@@ -68,12 +68,12 @@ export function renderProjection(
 
   for (let octave = -octaves; octave <= octaves; octave++) {
     for (const offset of offsets) {
-      const yShift = octave * 12 + offset;
+      const yShift = octave * CENTS_PER_OCTAVE + offset;
       if (octave === 0 && offset === 0) continue; // source itself
       // Cull: is this echo anywhere on screen vertically?
       const shiftedMin = minSourceY + yShift;
       const shiftedMax = maxSourceY + yShift;
-      if (shiftedMax < MIN_NOTE || shiftedMin > MAX_NOTE) continue;
+      if (shiftedMax < MIN_PITCH_CENTS || shiftedMin > MAX_PITCH_CENTS) continue;
       const topScreenY = vp.worldToScreen(0, shiftedMax).sy;
       const botScreenY = vp.worldToScreen(0, shiftedMin).sy;
       if (botScreenY < 0 || topScreenY > canvasHeight) continue;
@@ -186,7 +186,7 @@ export function renderPrismDrawPreview(
   for (let i = 0; i < offsets.length; i++) {
     const offset = offsets[i]!;
     const y = snappedBaseY + offset;
-    if (y < MIN_NOTE || y > MAX_NOTE) continue;
+    if (y < MIN_PITCH_CENTS || y > MAX_PITCH_CENTS) continue;
 
     const screenY = vp.worldToScreen(0, y).sy;
     if (screenY < rulerHeight - PRIMARY_R || screenY > canvasHeight + PRIMARY_R) continue;
@@ -240,8 +240,8 @@ export function computeProjectionTargetsAtX(
   const targets: number[] = [];
   for (let octave = -octaves; octave <= octaves; octave++) {
     for (const offset of offsets) {
-      const y = hit.noteNumber + offset + octave * 12;
-      if (y >= MIN_NOTE && y <= MAX_NOTE) targets.push(y);
+      const y = hit.noteNumber + offset + octave * CENTS_PER_OCTAVE;
+      if (y >= MIN_PITCH_CENTS && y <= MAX_PITCH_CENTS) targets.push(y);
     }
   }
   return targets;

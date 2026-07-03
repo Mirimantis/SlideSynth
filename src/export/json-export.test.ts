@@ -44,7 +44,7 @@ describe('legacy volume migration (v2 → lanes)', () => {
     const curve = comp.tracks[0]!.curves[0]!;
     // lanes[0] is the pitch lane with the original points
     expect(curve.lanes[0]!.type).toBe('pitch');
-    expect(pitchPoints(curve).map(p => p.position.y)).toEqual([60, 62, 64]);
+    expect(pitchPoints(curve).map(p => p.position.y)).toEqual([6000, 6200, 6400]); // cents
     // No pitch point retains a volume field
     for (const p of pitchPoints(curve) as Array<{ volume?: number }>) {
       expect(p.volume).toBeUndefined();
@@ -81,6 +81,6 @@ describe('legacy volume migration (v2 → lanes)', () => {
     const twice = deserializeComposition(JSON.stringify(once));
     const lane = getLane(twice.tracks[0]!.curves[0]!, 'volume')!;
     expect(lane.points.map(p => p.position.y)).toEqual([0.2, 0.6, 1.0]);
-    expect(pitchPoints(twice.tracks[0]!.curves[0]!).map(p => p.position.y)).toEqual([60, 62, 64]);
+    expect(pitchPoints(twice.tracks[0]!.curves[0]!).map(p => p.position.y)).toEqual([6000, 6200, 6400]);
   });
 });

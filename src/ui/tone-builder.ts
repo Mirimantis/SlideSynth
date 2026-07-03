@@ -2,7 +2,7 @@ import type { ToneDefinition, OscillatorShape, OversampleAmount } from '../types
 import { generateId } from '../model/tone';
 import { ensureResumed, getMasterGain } from '../audio/engine';
 import { createToneSynth, type ToneSynth } from '../audio/tone-synth';
-import { noteToFrequency } from '../constants';
+import { centsToFrequency, A4_CENTS } from '../constants';
 
 const DASH_PRESETS: { label: string; pattern: number[] }[] = [
   { label: 'Solid', pattern: [] },
@@ -239,7 +239,7 @@ export function openToneBuilder(
         await ensureResumed();
         previewSynth = createToneSynth(tone);
         previewSynth.connect(getMasterGain());
-        previewSynth.setFrequency(noteToFrequency(69)); // A4
+        previewSynth.setFrequency(centsToFrequency(A4_CENTS)); // A4
         previewSynth.setVolume(0.5);
         previewSynth.start();
         (modal.querySelector('#tb-preview') as HTMLButtonElement).disabled = true;

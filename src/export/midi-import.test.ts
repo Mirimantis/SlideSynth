@@ -46,8 +46,8 @@ describe('midiToComposition — pitch bend', () => {
     const comp = midiToComposition(buf);
     const curve = comp.tracks[0]!.curves[0]!;
     expect(pitchPoints(curve)).toHaveLength(2);
-    expect(pitchPoints(curve)[0]!.position.y).toBe(60);
-    expect(pitchPoints(curve)[1]!.position.y).toBe(60);
+    expect(pitchPoints(curve)[0]!.position.y).toBe(6000);
+    expect(pitchPoints(curve)[1]!.position.y).toBe(6000);
   });
 
   it('half-bend up at note start → curve Y is shifted +1 semitone (default ±2 range)', () => {
@@ -63,8 +63,8 @@ describe('midiToComposition — pitch bend', () => {
     const curve = comp.tracks[0]!.curves[0]!;
     // Every sample sits at note 61 (60 + 1 semitone), so RDP collapses to 2 points
     expect(pitchPoints(curve).length).toBeGreaterThanOrEqual(2);
-    expect(pitchPoints(curve)[0]!.position.y).toBeCloseTo(61, 5);
-    expect(pitchPoints(curve)[pitchPoints(curve).length - 1]!.position.y).toBeCloseTo(61, 5);
+    expect(pitchPoints(curve)[0]!.position.y).toBeCloseTo(6100, 3);
+    expect(pitchPoints(curve)[pitchPoints(curve).length - 1]!.position.y).toBeCloseTo(6100, 3);
   });
 
   it('mid-note bend → multi-point curve covering the bend gesture', () => {
@@ -80,10 +80,10 @@ describe('midiToComposition — pitch bend', () => {
     const curve = comp.tracks[0]!.curves[0]!;
     // Expect at least 3 points: start at 60, midpoint at ~62, end at ~62
     expect(pitchPoints(curve).length).toBeGreaterThanOrEqual(3);
-    expect(pitchPoints(curve)[0]!.position.y).toBeCloseTo(60, 5);
+    expect(pitchPoints(curve)[0]!.position.y).toBeCloseTo(6000, 3);
     // Last point near +2 semitones (bend ~ +8191 = ~+2 semis at default range)
     const lastY = pitchPoints(curve)[pitchPoints(curve).length - 1]!.position.y;
-    expect(lastY).toBeCloseTo(62, 1);
+    expect(lastY).toBeCloseTo(6200, 0);
   });
 
   it('cross-track bend (Type-1: bend on track A, notes on track B, same channel)', () => {
@@ -105,7 +105,7 @@ describe('midiToComposition — pitch bend', () => {
     const curve = allCurves[0]!;
     // Mid-note bend down to -2 semitones, then end stays at -2
     const lastY = pitchPoints(curve)[pitchPoints(curve).length - 1]!.position.y;
-    expect(lastY).toBeCloseTo(58, 1);
+    expect(lastY).toBeCloseTo(5800, 0);
   });
 
   it('RPN 0/0 sets bend range to ±12 semitones (guitar-style)', () => {
@@ -123,7 +123,7 @@ describe('midiToComposition — pitch bend', () => {
     ]);
     const comp = midiToComposition(buf);
     const curve = comp.tracks[0]!.curves[0]!;
-    expect(pitchPoints(curve)[0]!.position.y).toBeCloseTo(66, 1);
+    expect(pitchPoints(curve)[0]!.position.y).toBeCloseTo(6600, 0);
   });
 
   it('chord on one channel: both notes get the same bend', () => {
@@ -146,8 +146,8 @@ describe('midiToComposition — pitch bend', () => {
     const endB = pitchPoints(second)[pitchPoints(second).length - 1]!.position.y;
     const startA = pitchPoints(first)[0]!.position.y;
     const startB = pitchPoints(second)[0]!.position.y;
-    expect(endA - startA).toBeCloseTo(2, 1);
-    expect(endB - startB).toBeCloseTo(2, 1);
+    expect(endA - startA).toBeCloseTo(200, 0);
+    expect(endB - startB).toBeCloseTo(200, 0);
   });
 
   it('c_twice.mid pattern: centre-reset bend at noteOff tick is ignored (post-release hygiene)', () => {
@@ -179,7 +179,7 @@ describe('midiToComposition — pitch bend', () => {
     // the 8191/8192 = 0.99988 quantization at max bend (~0.00024 semitone error).
     for (const curve of allCurves) {
       for (const pt of pitchPoints(curve)) {
-        expect(pt.position.y).toBeCloseTo(60, 1);
+        expect(pt.position.y).toBeCloseTo(6000, 0);
       }
     }
   });
@@ -194,6 +194,6 @@ describe('midiToComposition — pitch bend', () => {
     ]);
     const comp = midiToComposition(buf);
     const curve = comp.tracks[0]!.curves[0]!;
-    expect(pitchPoints(curve)[0]!.position.y).toBeCloseTo(62, 1);
+    expect(pitchPoints(curve)[0]!.position.y).toBeCloseTo(6200, 0);
   });
 });

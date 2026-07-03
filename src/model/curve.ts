@@ -288,7 +288,7 @@ export function joinCurves(
 // ── Transform Box helpers ──────────────────────────────────────
 
 const BBOX_PAD_X = 0.15; // beats
-const BBOX_PAD_Y = 0.3;  // semitones
+const BBOX_PAD_Y = 30;   // cents
 
 /** Compute axis-aligned bounding box from pitch anchor positions. */
 export function computeCurveBBox(curve: BezierCurve): BoundingBox {
@@ -358,7 +358,7 @@ export function computePointSubsetBBox(
   };
 }
 
-/** Sample captured during a glissandograph recording. */
+/** Sample captured during a glissandograph recording. `note` is pitch cents. */
 export interface RecordedSample {
   beat: number;
   note: number;
@@ -382,7 +382,7 @@ function anisotropicPerpDist(
 
 /** Ramer-Douglas-Peucker simplification with anisotropic X/Y tolerances. */
 function rdpSimplify(
-  samples: RecordedSample[], toleranceBeats: number, toleranceSemis: number,
+  samples: RecordedSample[], toleranceBeats: number, toleranceCents: number,
 ): RecordedSample[] {
   if (samples.length <= 2) return [...samples];
   const first = samples[0]!;
@@ -390,12 +390,12 @@ function rdpSimplify(
   let maxDist = 0;
   let maxIdx = 0;
   for (let i = 1; i < samples.length - 1; i++) {
-    const d = anisotropicPerpDist(samples[i]!, first, last, toleranceBeats, toleranceSemis);
+    const d = anisotropicPerpDist(samples[i]!, first, last, toleranceBeats, toleranceCents);
     if (d > maxDist) { maxDist = d; maxIdx = i; }
   }
   if (maxDist > 1) {
-    const left = rdpSimplify(samples.slice(0, maxIdx + 1), toleranceBeats, toleranceSemis);
-    const right = rdpSimplify(samples.slice(maxIdx), toleranceBeats, toleranceSemis);
+    const left = rdpSimplify(samples.slice(0, maxIdx + 1), toleranceBeats, toleranceCents);
+    const right = rdpSimplify(samples.slice(maxIdx), toleranceBeats, toleranceCents);
     return [...left.slice(0, -1), ...right];
   }
   return [first, last];
@@ -403,20 +403,20 @@ function rdpSimplify(
 
 /**
  * Build an editable BezierCurve from glissandograph recording samples.
- * Runs RDP simplification with separate beat/semitone tolerances, enforces
+ * Runs RDP simplification with separate beat/cents tolerances, enforces
  * monotonic X (>= 0.001 apart), applies horizontal auto-smooth handles.
  * Returns null if the gesture was too short (< 0.05 beats) or yielded < 2 points.
  */
 export function curveFromRecording(
   samples: RecordedSample[],
   toleranceBeats: number = 0.03,
-  toleranceSemis: number = 0.15,
+  toleranceCents: number = 15,
 ): BezierCurve | null {
   if (samples.length < 2) return null;
   const duration = samples[samples.length - 1]!.beat - samples[0]!.beat;
   if (duration < 0.05) return null;
 
-  const simplified = rdpSimplify(samples, toleranceBeats, toleranceSemis);
+  const simplified = rdpSimplify(samples, toleranceBeats, toleranceCents);
 
   // Enforce monotonic X (drop points too close to their predecessor)
   const cleaned: RecordedSample[] = [];
@@ -439,9 +439,20 @@ export function curveFromRecording(
   for (let i = 1; i < points.length; i++) {
     applyAutoSmoothHandles(curve, i);
   }
-  // Capture recorded velocity-over-time as the volume lane.
+  // Capture recorded volume as a lane spanning the gesture's start/end — NOT
+  // one point per pitch-simplification sample. Volume's point density is
+  // independent of pitch's (per-lane retention, per the lanes model): mirroring
+  // the pitch curve's density made even a flat/near-constant volume look as
+  // busy as a fast glissando. A future continuous dynamics-bus capture would
+  // want its own independent simplification pass here; today's capture is a
+  // single value per sample, so start/end is all there is to show anyway.
   const volumeLane = createLane('volume');
-  volumeLane.points = cleaned.map(s => createLanePoint(s.beat, Math.max(0, Math.min(1, s.volume))));
+  const startVolume = Math.max(0, Math.min(1, cleaned[0]!.volume));
+  const endVolume = Math.max(0, Math.min(1, cleaned[cleaned.length - 1]!.volume));
+  volumeLane.points = [
+    createLanePoint(cleaned[0]!.beat, startVolume),
+    createLanePoint(cleaned[cleaned.length - 1]!.beat, endVolume),
+  ];
   curve.lanes.push(volumeLane);
   return curve;
 }

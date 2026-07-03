@@ -2,7 +2,7 @@ import type { BezierCurve, CurveSample } from '../types';
 import { getSegmentControlPoints, pitchPoints } from '../model/curve';
 import { evaluateLaneAtBeat, getLane, DEFAULT_VOLUME } from '../model/lane';
 import { evaluateCubic } from '../utils/bezier-math';
-import { noteToFrequency, CURVE_SAMPLE_RATE } from '../constants';
+import { centsToFrequency, CURVE_SAMPLE_RATE } from '../constants';
 
 /**
  * Sample a BezierCurve into an array of {timeSeconds, frequency, volume} tuples.
@@ -51,7 +51,7 @@ export function sampleCurve(
       if (endBeat !== undefined && timeBeat > endBeat) continue;
 
       const timeSeconds = timeBeat * beatsToSeconds;
-      const frequency = noteToFrequency(pt.y);
+      const frequency = centsToFrequency(pt.y);
 
       samples.push({ timeSeconds, frequency, volume });
     }

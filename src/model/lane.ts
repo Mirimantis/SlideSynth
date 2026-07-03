@@ -1,6 +1,6 @@
 import type { BezierCurve, Lane, LanePoint, LaneType, Vec2 } from '../types';
 import { evaluateCubic, findTForX } from '../utils/bezier-math';
-import { MIN_NOTE, MAX_NOTE } from '../constants';
+import { MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
 
 /** Default volume for a flat volume lane — matches the historical per-point
  *  default so migrated/new curves sound identical. */
@@ -15,8 +15,8 @@ export const LANE_SPECS: Record<LaneType, {
   /** Sampled value when a lane has no points (pitch lanes can't be empty by invariant). */
   emptyValue: number;
 }> = {
-  pitch:  { unit: 'midi',       range: [MIN_NOTE, MAX_NOTE], minPoints: 2, emptyValue: MIN_NOTE },
-  volume: { unit: 'normalized', range: [0, 1],               minPoints: 1, emptyValue: DEFAULT_VOLUME },
+  pitch:  { unit: 'cents',      range: [MIN_PITCH_CENTS, MAX_PITCH_CENTS], minPoints: 2, emptyValue: MIN_PITCH_CENTS },
+  volume: { unit: 'normalized', range: [0, 1],                             minPoints: 1, emptyValue: DEFAULT_VOLUME },
 };
 
 /** Create an empty lane of the given type with its registry domain. */

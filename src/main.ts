@@ -3,7 +3,7 @@ import { createParamViewport } from './canvas/param-viewport';
 import { renderParamGraph } from './canvas/param-graph-renderer';
 import { createParamInteraction } from './canvas/param-interaction';
 import { ensureLane, getLane } from './model/lane';
-import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_NOTE, MAX_NOTE, Y_PAN_MARGIN, noteNumberToName, noteToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
@@ -249,7 +249,7 @@ app.innerHTML = `
         <div id="zoom-controls">
           <span class="zoom-label">Zoom</span>
           <input type="range" id="zoom-x" min="0" max="1000" value="0" step="1" title="Zoom X (time) — logarithmic" />
-          <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="1" title="Zoom Y (pitch)" />
+          <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="0.001" title="Zoom Y (pitch)" />
         </div>
         <div id="pitch-hud" hidden></div>
         <div id="perf-hud" hidden></div>
@@ -409,23 +409,24 @@ function writePitchHud(snappedY: number | null, rawY: number | null): void {
     hudRawCents.textContent = '';
     return;
   }
-  const nearest = Math.round(snappedY);
-  const cents = Math.round((snappedY - nearest) * 100);
-  hudSnapName.textContent = noteNumberToName(nearest);
+  // Y is cents; the HUD shows the nearest 12-TET line + signed ¢ remainder.
+  const nearestLine = Math.round(snappedY / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
+  const cents = Math.round(snappedY - nearestLine);
+  hudSnapName.textContent = centsToNoteName(snappedY);
   hudSnapCents.textContent = formatCents(cents);
-  // Hz reflects the current global tuning offset since noteToFrequency reads
+  // Hz reflects the current global tuning offset since centsToFrequency reads
   // the module-level reference A4. A=432 etc. shifts every readout in lockstep.
-  hudSnapHz.textContent = formatHz(noteToFrequency(snappedY));
+  hudSnapHz.textContent = formatHz(centsToFrequency(snappedY));
 
   const hasRaw = rawY != null
-    && Math.abs(rawY - snappedY) >= 0.02
-    && Math.round(rawY) >= MIN_NOTE
-    && Math.round(rawY) <= MAX_NOTE;
+    && Math.abs(rawY - snappedY) >= 2
+    && rawY >= MIN_PITCH_CENTS - CENTS_PER_SEMITONE / 2
+    && rawY <= MAX_PITCH_CENTS + CENTS_PER_SEMITONE / 2;
   if (hasRaw) {
-    const rawNearest = Math.round(rawY!);
-    const rawCents = Math.round((rawY! - rawNearest) * 100);
+    const rawNearestLine = Math.round(rawY! / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
+    const rawCents = Math.round(rawY! - rawNearestLine);
     hudSep.textContent = '·';
-    hudRawName.textContent = noteNumberToName(rawNearest);
+    hudRawName.textContent = centsToNoteName(rawY!);
     hudRawCents.textContent = formatCents(rawCents);
   } else {
     hudSep.textContent = '';
@@ -457,7 +458,7 @@ function resizeCanvases() {
   // within the area below the top rulers.
   const usableH = h - viewport.topInset;
   if (usableH > 0) {
-    viewport.minZoomY = usableH / (MAX_NOTE - MIN_NOTE + 2 * Y_PAN_MARGIN);
+    viewport.minZoomY = usableH / (MAX_PITCH_CENTS - MIN_PITCH_CENTS + 2 * Y_PAN_MARGIN);
     viewport.setZoomY(viewport.state.zoomY);
   }
 
@@ -1039,22 +1040,22 @@ midiInput.onDevicesChanged(refreshMidiDeviceList);
 // noteOn/noteOff because it's just module state, so the held-key planchette
 // continues at the bent pitch through a wrap (mirrors 8.21).
 const LIVE_BEND_RANGE_SEMITONES = 2;
-let liveBendSemitones = 0;
+let liveBendCents = 0;
 // Track currently-held MIDI keys so the bend handler can re-tune every active
 // preview synth without scanning the audio engine. Voice id is `midi-${note}`.
 const heldMidiNotes = new Set<number>();
 
 midiInput.onPitchBend((value) => {
-  liveBendSemitones = (value / 8192) * LIVE_BEND_RANGE_SEMITONES;
+  liveBendCents = (value / 8192) * LIVE_BEND_RANGE_SEMITONES * CENTS_PER_SEMITONE;
   // Bending counts as activity for the perform-engine AFK gate, mirroring
   // noteOn/noteOff. A user holding a note and working the wheel is performing.
   composeEngine.markActivity(performance.now());
   // Audio: re-tune every active MIDI preview synth so what's heard tracks the
   // wheel. Visual + recording: planchette mutation drives both.
   for (const note of heldMidiNotes) {
-    preview.updateDrawPitch(note + liveBendSemitones, `midi-${note}`);
+    preview.updateDrawPitch(midiToCents(note) + liveBendCents, `midi-${note}`);
   }
-  store.setMidiPitchBendOffset(liveBendSemitones);
+  store.setMidiPitchBendOffset(liveBendCents);
   bgDirty = true;
 });
 
@@ -1076,7 +1077,7 @@ midiInput.onNoteOn((note, velocity) => {
   // Initial pitch reflects current bend so a key struck with the wheel held
   // off-centre starts at the bent pitch, no audible jump on the first frame.
   heldMidiNotes.add(note);
-  preview.startDrawPreview(tone, note + liveBendSemitones, `midi-${note}`);
+  preview.startDrawPreview(tone, midiToCents(note) + liveBendCents, `midi-${note}`);
   // velocity reserved for a future loudness-mapped preview; stable mid-volume for now.
   void velocity;
 
@@ -1099,7 +1100,7 @@ midiInput.onNoteOn((note, velocity) => {
     if (existing) finalizeMidiVoice(note);
     // Apply current bend offset on creation so the planchette spawns at the
     // bent pitch if the wheel was already off-centre when the key was struck.
-    const initialY = note + liveBendSemitones;
+    const initialY = midiToCents(note) + liveBendCents;
     store.addPerformPlanchette({
       voiceId,
       trackId: state.midiArmedTrackId,
@@ -1419,7 +1420,7 @@ function addGuideAtViewportCenter(orientation: 'x' | 'y'): void {
   const centre = viewport.screenToWorld(r.width / 2, r.height / 2);
   const position = orientation === 'x'
     ? Math.max(0, Math.round(centre.wx * 4) / 4)   // round to nearest 1/4 beat for tidiness
-    : Math.round(centre.wy);                        // nearest semitone
+    : Math.round(centre.wy / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE; // nearest 12-TET line
   const guide = {
     id: `guide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     orientation,
@@ -2505,7 +2506,7 @@ function updateHarmonyVoices(snappedBaseY: number) {
     const planchette = planchettes.find(p => p.voiceId === voiceId);
     if (!planchette) continue; // harmony index disabled this gesture (e.g. spec changed numVoices)
     const harmonyY = snappedBaseY + offsets[i]!;
-    const inRange = harmonyY >= MIN_NOTE && harmonyY <= MAX_NOTE;
+    const inRange = harmonyY >= MIN_PITCH_CENTS && harmonyY <= MAX_PITCH_CENTS;
     // cursorWorldY mirrors snapped (harmonies never have an independent raw
     // cursor — they're math offsets), so the rail render skips the ghost dot.
     store.setPlanchetteY(voiceId, inRange ? harmonyY : null, inRange ? harmonyY : null);
@@ -2624,7 +2625,7 @@ function voiceYFromBase(voiceId: string, snappedBaseY: number, offsets: readonly
     if (offsetIdx >= offsets.length) return null;
     y = snappedBaseY + offsets[offsetIdx]!;
   }
-  if (y < MIN_NOTE || y > MAX_NOTE) return null;
+  if (y < MIN_PITCH_CENTS || y > MAX_PITCH_CENTS) return null;
   return y;
 }
 
@@ -2678,7 +2679,7 @@ function syncHarmonyPlanchettes() {
     let initialY: number | null = null;
     if (primary?.snappedWorldY != null) {
       const y = primary.snappedWorldY + offsets[i]!;
-      if (y >= MIN_NOTE && y <= MAX_NOTE) initialY = y;
+      if (y >= MIN_PITCH_CENTS && y <= MAX_PITCH_CENTS) initialY = y;
     }
     store.addPerformPlanchette({
       voiceId,
@@ -2709,7 +2710,7 @@ function startPrismDrawPreview(tone: import('./types').ToneDefinition, snappedBa
   for (let i = 1; i < offsets.length; i++) {
     const voiceId = harmonyVoiceId(i - 1);
     const y = snappedBaseY + offsets[i]!;
-    if (y < MIN_NOTE || y > MAX_NOTE) continue;
+    if (y < MIN_PITCH_CENTS || y > MAX_PITCH_CENTS) continue;
     preview.startDrawPreview(tone, y, voiceId);
   }
 }
@@ -2724,7 +2725,7 @@ function updatePrismDrawPreview(snappedBaseY: number) {
     const voiceId = harmonyVoiceId(i - 1);
     if (!preview.isDrawPreviewActive(voiceId)) continue;
     const y = snappedBaseY + offsets[i]!;
-    if (y >= MIN_NOTE && y <= MAX_NOTE) preview.updateDrawPitch(y, voiceId);
+    if (y >= MIN_PITCH_CENTS && y <= MAX_PITCH_CENTS) preview.updateDrawPitch(y, voiceId);
   }
 }
 
@@ -3663,13 +3664,13 @@ resizeCanvases();
 // middle 3 octaves in Y (within the area below the top rulers).
 {
   const rect = canvasContainer.getBoundingClientRect();
-  const midNote = (MIN_NOTE + MAX_NOTE) / 2;          // F#4 for the 12–120 range
-  const visibleSemitones = 36;                         // 3 octaves
+  const midPitch = (MIN_PITCH_CENTS + MAX_PITCH_CENTS) / 2;     // F#4 (6600 ¢)
+  const visibleCents = 3600;                                    // 3 octaves
   const visibleBeats = (30 / 60) * store.getComposition().bpm;  // 30s of beats
   viewport.setZoomX(rect.width / visibleBeats);
-  viewport.setZoomY((rect.height - viewport.topInset) / visibleSemitones);
+  viewport.setZoomY((rect.height - viewport.topInset) / visibleCents);
   viewport.state.offsetX = 0;
-  viewport.state.offsetY = midNote + visibleSemitones / 2 + viewport.topInset / viewport.state.zoomY;
+  viewport.state.offsetY = midPitch + visibleCents / 2 + viewport.topInset / viewport.state.zoomY;
   viewport.clampOffset(rect.width, rect.height);
   updateZoom();
   bgDirty = true;

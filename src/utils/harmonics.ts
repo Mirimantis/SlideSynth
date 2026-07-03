@@ -1,15 +1,17 @@
 // Harmonic Prism — pure chord-offset math.
 //
-// Given a ChordSpec, `chordOffsets` returns MIDI-semitone offsets from the
-// base pitch, one per voice (offsets[0] is the root, always 0 before
-// direction is applied).
+// Given a ChordSpec, `chordOffsets` returns CENTS offsets from the base
+// pitch, one per voice (offsets[0] is the root, always 0 before direction is
+// applied). Interval tables stay in human-readable semitone steps / frequency
+// ratios; conversion to cents happens at the output boundary.
 //
 // Two tuning paths:
 //   • 12-TET: additive semitone steps from a compact interval pattern.
 //   • Just Intonation: prescribed frequency-ratio chains per
 //     (stacking, quality, numVoices). Ratios stay as ratios until a single
-//     final log2 conversion — never sum semitones of individual intervals
-//     for JI, that reintroduces 12-TET drift.
+//     final log2 conversion — never sum steps of individual intervals for
+//     JI, that reintroduces 12-TET drift. In cents JI intervals are exact
+//     (1200·log2(ratio)), no longer quantized through semitone floats.
 
 export type StackingStyle = 'tertian' | 'quartal' | 'quintal' | 'secondal';
 export type ChordQuality =
@@ -150,12 +152,16 @@ function uniformStepRatioJI(stacking: StackingStyle, quality: ChordQuality): num
 
 // ── Math helpers ──────────────────────────────────────────────────
 
-function ratioToSemitones(ratio: number): number {
-  return 12 * Math.log2(ratio);
+const CENTS_PER_SEMITONE = 100;
+const CENTS_PER_OCTAVE = 1200;
+
+function ratioToCents(ratio: number): number {
+  return CENTS_PER_OCTAVE * Math.log2(ratio);
 }
 
 // ── Core computation ─────────────────────────────────────────────
 
+/** 12-TET offsets in CENTS (semitone patterns × 100). */
 function chordOffsets12TET(spec: ChordSpec): number[] {
   const offsets: number[] = [0];
   if (spec.stacking === 'tertian') {
@@ -163,22 +169,23 @@ function chordOffsets12TET(spec: ChordSpec): number[] {
     let acc = 0;
     for (let i = 1; i < spec.numVoices; i++) {
       acc += pattern[(i - 1) % pattern.length]!;
-      offsets.push(acc);
+      offsets.push(acc * CENTS_PER_SEMITONE);
     }
   } else {
-    const step = uniformStep12TET(spec.stacking, spec.quality);
+    const step = uniformStep12TET(spec.stacking, spec.quality) * CENTS_PER_SEMITONE;
     for (let i = 1; i < spec.numVoices; i++) offsets.push(i * step);
   }
   return offsets;
 }
 
+/** JI offsets in CENTS (exact 1200·log2 of the ratio chain). */
 function chordOffsetsJI(spec: ChordSpec): number[] {
   if (spec.stacking === 'tertian') {
     const chains = TERTIAN_JI[spec.quality];
     // Table starts at dyad (numVoices=2) → index 0.
     const chain = chains?.[spec.numVoices - 2];
     if (!chain) return chordOffsets12TET(spec); // safety net
-    return chain.map(ratioToSemitones);
+    return chain.map(ratioToCents);
   }
 
   // Non-tertian: stack a single ratio multiplicatively.
@@ -187,7 +194,7 @@ function chordOffsetsJI(spec: ChordSpec): number[] {
   let product = 1;
   for (let i = 1; i < spec.numVoices; i++) {
     product *= ratio;
-    offsets.push(ratioToSemitones(product));
+    offsets.push(ratioToCents(product));
   }
   return offsets;
 }
@@ -202,10 +209,10 @@ function applyDirection(offsets: number[], direction: Direction): number[] {
 }
 
 /**
- * Compute semitone offsets from the base pitch for a chord spec.
- * Returns one number per voice. Offsets are additive in MIDI-note space,
- * so `baseY + offsets[i]` gives the voice's pitch regardless of whether
- * the base is at an integer or fractional MIDI note.
+ * Compute CENTS offsets from the base pitch for a chord spec.
+ * Returns one number per voice. Offsets are additive in cents space, so
+ * `baseY + offsets[i]` gives the voice's pitch regardless of whether the
+ * base sits on a 12-TET line or between lines.
  */
 export function chordOffsets(spec: ChordSpec): number[] {
   const base =
@@ -215,7 +222,7 @@ export function chordOffsets(spec: ChordSpec): number[] {
   // octave" reads consistently regardless of up/down/symmetric direction.
   const oct = spec.voiceOctaveOffsets;
   if (!oct || oct.length === 0) return directed;
-  return directed.map((s, i) => s + ((oct[i] ?? 0) * 12));
+  return directed.map((s, i) => s + ((oct[i] ?? 0) * CENTS_PER_OCTAVE));
 }
 
 // ── UI helpers ────────────────────────────────────────────────────
