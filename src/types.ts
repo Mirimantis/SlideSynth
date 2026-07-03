@@ -42,7 +42,7 @@ export interface ToneDefinition {
 // via JSON, and .gliss round-trip preservation relies on plain objects.
 
 export interface LanePoint {
-  position: Vec2;           // x = beats; y = lane value (pitch units for pitch, 0–1 for volume)
+  position: Vec2;           // x = beats; y = lane value (cents for pitch, 0–1 for volume)
   handleIn: Vec2 | null;    // relative to position
   handleOut: Vec2 | null;   // relative to position
 }
@@ -51,7 +51,7 @@ export type LaneType = 'pitch' | 'volume';   // widen later (pan, cutoff, …)
 
 export interface Lane {
   type: LaneType;
-  unit: 'midi' | 'cents' | 'normalized';
+  unit: 'cents' | 'normalized';
   range: [number, number];  // Y-domain clamp for anchors / sampled values
   points: LanePoint[];      // ordered by increasing position.x; pitch >= 2, others >= 1
   gravity?: unknown;        // reserved for per-lane gravity-well maps; must round-trip verbatim
@@ -65,9 +65,6 @@ export interface BezierCurve {
   voiceIndex?: number;      // Harmonic Prism: 0 = primary, 1..N-1 = harmonies (chord-cluster siblings only)
 }
 
-// Transitional aliases — removed in the cleanup commit of the lanes refactor.
-export type ControlPoint = LanePoint;
-export type ParamPoint = LanePoint;
 
 // ── Track ───────────────────────────────────────────────────────
 
@@ -93,7 +90,7 @@ export interface SnapSettings {
   scaleRoot: number | null;     // 0..11, or null = no scale
   scaleId: string | null;       // ScaleDefinition.id, or null
   /** When true: hide the default chromatic pitch lines and disable the
-   *  integer-semitone Y-snap fallback. Scale snap, projection echoes, and
+   *  12-TET-line Y-snap fallback. Scale snap, projection echoes, and
    *  user guides still work. Toolbar's "None" Key option (8.19) sets this
    *  alongside scaleRoot=null; "Chromatic" leaves it false. */
   hidePitchLines: boolean;
@@ -113,7 +110,7 @@ export interface SnapSettings {
 export interface GuideDefinition {
   id: string;
   orientation: 'x' | 'y';
-  position: number;             // beats for 'x', float MIDI note for 'y'
+  position: number;             // beats for 'x', pitch cents for 'y'
   label: string;                // user-editable, may be empty
 }
 
@@ -138,9 +135,9 @@ export interface Composition {
 
 export interface ViewportState {
   offsetX: number;          // world units (beats)
-  offsetY: number;          // world units (MIDI note number)
+  offsetY: number;          // world units (pitch cents)
   zoomX: number;            // pixels per beat
-  zoomY: number;            // pixels per semitone
+  zoomY: number;            // pixels per cent
 }
 
 // ── Playback ────────────────────────────────────────────────────
@@ -219,7 +216,7 @@ export interface AppState {
   snapEnabled: boolean;
   scaleRoot: number | null;    // 0-11, or null = no scale
   scaleId: string | null;      // ScaleDefinition.id, or null
-  hidePitchLines: boolean;     // true = "None" Key mode (no default semitone lines, no chromatic Y-snap)
+  hidePitchLines: boolean;     // true = "None" Key mode (no default pitch lines, no chromatic Y-snap)
   magneticEnabled: boolean;
   magneticStrength: number;
   magneticSpringK: number;
@@ -267,7 +264,7 @@ export interface BoundingBox {
 
 export interface TransformBoxState {
   curveIds: string[];
-  originalPointsMap: Map<string, ControlPoint[]>;
+  originalPointsMap: Map<string, LanePoint[]>;
   bbox: BoundingBox;
   activeHandle: TransformHandle | null;
   dragStart: Vec2 | null;

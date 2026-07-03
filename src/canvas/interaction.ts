@@ -1,4 +1,4 @@
-import type { Vec2, BezierCurve, ControlPoint, Track, TransformBoxState } from '../types';
+import type { Vec2, BezierCurve, LanePoint, Track, TransformBoxState } from '../types';
 import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
@@ -304,7 +304,7 @@ export function createInteraction(
           // fresh id (so the duplicated cluster moves together but doesn't
           // collide with the source).
           const newIds: string[] = [];
-          const newOrigMap = new Map<string, ControlPoint[]>();
+          const newOrigMap = new Map<string, LanePoint[]>();
           const created: BezierCurve[] = [];
           store.mutate(() => {
             for (const curveId of tb.curveIds) {
@@ -499,7 +499,7 @@ export function createInteraction(
           istate.altDuplicated = false;
           tb.activeHandle = hit;
           tb.dragStart = { ...snappedPt };
-          const map = new Map<string, ControlPoint[]>();
+          const map = new Map<string, LanePoint[]>();
           for (const curveId of tb.curveIds) {
             const curve = track.curves.find(c => c.id === curveId);
             if (curve) map.set(curveId, deepCopyPoints(pitchPoints(curve)));
@@ -1005,7 +1005,7 @@ export function rebuildTransformBox(istate: InteractionState, track: Track): voi
     istate.transformBox = null;
     return;
   }
-  const map = new Map<string, ControlPoint[]>();
+  const map = new Map<string, LanePoint[]>();
   for (const curve of curves) {
     map.set(curve.id, deepCopyPoints(pitchPoints(curve)));
   }

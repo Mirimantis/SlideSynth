@@ -62,7 +62,7 @@ import iconPlay from './assets/icons/play.svg?raw';
 import iconPause from './assets/icons/pause.svg?raw';
 import iconStop from './assets/icons/stop.svg?raw';
 import iconRecord from './assets/icons/record.svg?raw';
-import type { AppState, ToolMode, ControlPoint, BezierCurve } from './types';
+import type { AppState, ToolMode, LanePoint, BezierCurve } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -2270,7 +2270,7 @@ function renderTrackList() {
         const curveIds = track.curves.map(c => c.id);
         store.setSelectedCurves(curveIds);
         // Build transform box around all curves
-        const map = new Map<string, ControlPoint[]>();
+        const map = new Map<string, LanePoint[]>();
         for (const c of track.curves) {
           map.set(c.id, deepCopyPoints(pitchPoints(c)));
         }
