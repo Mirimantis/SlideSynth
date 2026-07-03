@@ -6,9 +6,11 @@ import {
   createControlPoint,
   addPointToCurve,
   curveFromRecording,
+  pitchLane,
+  pitchPoints,
   type RecordedSample,
 } from '../model/curve';
-import { createDefaultVolumeCurve } from '../model/param-curve';
+import { createDefaultLane } from '../model/lane';
 import { COMPOSITION_VERSION } from './json-export';
 import { createTrack } from '../model/track';
 import { createDefaultToneLibrary } from '../model/tone';
@@ -314,7 +316,7 @@ function noteWithBendToCurve(
     const c = createCurve();
     addPointToCurve(c, createControlPoint(startBeat, note.noteNumber));
     addPointToCurve(c, createControlPoint(endBeat, note.noteNumber));
-    c.parameters = { volume: createDefaultVolumeCurve(startBeat, endBeat, volume) };
+    c.lanes.push(createDefaultLane('volume', startBeat, endBeat, volume));
     return c;
   }
 
@@ -335,26 +337,27 @@ function noteWithBendToCurve(
   }
 
   const simplified = curveFromRecording(samples, 0.03, 0.15);
-  if (!simplified || simplified.points.length < 2) {
+  if (!simplified || pitchPoints(simplified).length < 2) {
     // Bend gesture too short for curveFromRecording's duration filter; emit a
     // direct 2-point curve at the bent endpoints so we don't lose the note.
     const c = createCurve();
     addPointToCurve(c, createControlPoint(startBeat, bendToY(bendAtStart)));
     addPointToCurve(c, createControlPoint(endBeat, bendToY(lastBend)));
-    c.parameters = { volume: createDefaultVolumeCurve(startBeat, endBeat, volume) };
+    c.lanes.push(createDefaultLane('volume', startBeat, endBeat, volume));
     return c;
   }
-  if (simplified.points.length > MAX_POINTS_PER_CURVE) {
+  const simplifiedPts = pitchPoints(simplified);
+  if (simplifiedPts.length > MAX_POINTS_PER_CURVE) {
     console.warn(
       `[midi-import] Note at beat ${startBeat.toFixed(2)} (note ${note.noteNumber}) ` +
-      `produced ${simplified.points.length} bend points; capping at ${MAX_POINTS_PER_CURVE}.`,
+      `produced ${simplifiedPts.length} bend points; capping at ${MAX_POINTS_PER_CURVE}.`,
     );
-    const step = (simplified.points.length - 1) / (MAX_POINTS_PER_CURVE - 1);
+    const step = (simplifiedPts.length - 1) / (MAX_POINTS_PER_CURVE - 1);
     const decimated = [];
     for (let k = 0; k < MAX_POINTS_PER_CURVE; k++) {
-      decimated.push(simplified.points[Math.round(k * step)]!);
+      decimated.push(simplifiedPts[Math.round(k * step)]!);
     }
-    simplified.points = decimated;
+    pitchLane(simplified).points = decimated;
   }
   return simplified;
 }

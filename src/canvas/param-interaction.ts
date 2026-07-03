@@ -3,9 +3,10 @@ import type { ParamViewport } from './param-viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
 import {
-  addParamPoint, removeParamPoint, moveParamPoint, createParamPoint, ensureVolumeParam,
-  setParamHandle, applyAutoSmoothParamHandles, reclampParamHandlesAround,
-} from '../model/param-curve';
+  addLanePoint, removeLanePoint, moveLanePoint, createLanePoint, ensureLane, getLane,
+  setLaneHandle, applyAutoSmoothLaneHandles, reclampLaneHandlesAround,
+} from '../model/lane';
+import { pitchPoints } from '../model/curve';
 import { distToPoint } from '../utils/bezier-math';
 
 const HIT_RADIUS_PX = 8;
@@ -47,9 +48,10 @@ export function createParamInteraction(
 
   /** Pitch curve's [startBeat, endBeat] — the lane's valid X range. */
   function pitchExtent(curve: BezierCurve): [number, number] | null {
-    const n = curve.points.length;
+    const points = pitchPoints(curve);
+    const n = points.length;
     if (n < 1) return null;
-    return [curve.points[0]!.position.x, curve.points[n - 1]!.position.x];
+    return [points[0]!.position.x, points[n - 1]!.position.x];
   }
 
   function clampBeat(curve: BezierCurve, beat: number): number {
@@ -59,7 +61,7 @@ export function createParamInteraction(
   }
 
   function hitPoint(curve: BezierCurve, sx: number, sy: number): number | null {
-    const lane = curve.parameters?.volume;
+    const lane = getLane(curve, 'volume');
     if (!lane) return null;
     for (let i = 0; i < lane.points.length; i++) {
       const pt = lane.points[i]!;
@@ -71,7 +73,7 @@ export function createParamInteraction(
 
   function hitHandle(curve: BezierCurve, sx: number, sy: number): 'in' | 'out' | null {
     if (selectedIndex === null) return null;
-    const pt = curve.parameters?.volume?.points[selectedIndex];
+    const pt = getLane(curve, 'volume')?.points[selectedIndex];
     if (!pt) return null;
     const checks: Array<['in' | 'out', { x: number; y: number } | null]> = [
       ['in', pt.handleIn], ['out', pt.handleOut],
@@ -104,10 +106,10 @@ export function createParamInteraction(
     const idx = hitPoint(curve, sx, sy);
     if (idx !== null) {
       if (tool === 'delete') {
-        const lane = curve.parameters?.volume;
+        const lane = getLane(curve, 'volume');
         if (lane && lane.points.length > 1) {
           history.snapshot();
-          store.mutate(() => { removeParamPoint(lane, idx); });
+          store.mutate(() => { removeLanePoint(lane, idx); });
           if (selectedIndex === idx) selectedIndex = null;
         }
         e.preventDefault();
@@ -123,22 +125,22 @@ export function createParamInteraction(
     }
 
     // Empty space.
-    if (tool === 'draw' && curve.points.length >= 2) {
+    if (tool === 'draw' && pitchPoints(curve).length >= 2) {
       const w = pvp.screenToWorld(sx, sy);
       const beat = clampBeat(curve, w.beat);
       history.snapshot();
       store.mutate(() => {
-        ensureVolumeParam(curve);
-        const lane = curve.parameters!.volume!;
-        const i = addParamPoint(lane, createParamPoint(beat, w.value));
+        const lane = ensureLane(curve, 'volume');
+        if (!lane) return;
+        const i = addLanePoint(lane, createLanePoint(beat, Math.max(0, Math.min(1, w.value))));
         // Auto-smooth if enabled (stays if the user just clicks; a drag below
         // overrides it by pulling a manual handle — same as the pitch pen tool).
         if (store.getState().bezierAutoSmooth) {
-          applyAutoSmoothParamHandles(lane, i, store.getState().autoSmoothXRatio);
+          applyAutoSmoothLaneHandles(lane, i, store.getState().autoSmoothXRatio);
         }
         // Trim this point's and its neighbors' handles so none overshoot the
         // newly inserted anchor (prevents backwards-flowing segments).
-        reclampParamHandlesAround(lane, i);
+        reclampLaneHandlesAround(lane, i);
         selectedIndex = i;
       });
       // Ctrl: drag moves the new point. Otherwise: drag pulls its handle.
@@ -152,28 +154,28 @@ export function createParamInteraction(
   window.addEventListener('mousemove', (e) => {
     if (drag === null || selectedIndex === null) return;
     const curve = getSelectedCurve();
-    const lane = curve?.parameters?.volume;
+    const lane = curve ? getLane(curve, 'volume') : undefined;
     const pt = lane?.points[selectedIndex];
     if (!curve || !lane || !pt) return;
     const { sx, sy } = localPos(e);
     const w = pvp.screenToWorld(sx, sy);
     if (drag === 'point') {
       store.mutate(() => {
-        moveParamPoint(lane, selectedIndex!, { x: clampBeat(curve, w.beat), y: w.value });
+        moveLanePoint(lane, selectedIndex!, { x: clampBeat(curve, w.beat), y: w.value });
         // Moving changes segment lengths — re-trim handles around the point.
-        reclampParamHandlesAround(lane, selectedIndex!);
+        reclampLaneHandlesAround(lane, selectedIndex!);
       });
     } else if (drag === 'penPull') {
       // Pull a fresh, mirrored handle out of the point (smooth pen-tool point).
       const rel = { x: w.beat - pt.position.x, y: w.value - pt.position.y };
       store.mutate(() => {
-        setParamHandle(lane, selectedIndex!, 'out', rel);
-        setParamHandle(lane, selectedIndex!, 'in', { x: -rel.x, y: -rel.y });
+        setLaneHandle(lane, selectedIndex!, 'out', rel);
+        setLaneHandle(lane, selectedIndex!, 'in', { x: -rel.x, y: -rel.y });
       });
     } else {
       const which = drag === 'handleIn' ? 'in' : 'out';
       store.mutate(() => {
-        setParamHandle(lane, selectedIndex!, which, { x: w.beat - pt.position.x, y: w.value - pt.position.y });
+        setLaneHandle(lane, selectedIndex!, which, { x: w.beat - pt.position.x, y: w.value - pt.position.y });
       });
     }
   });
@@ -182,18 +184,18 @@ export function createParamInteraction(
 
   canvas.addEventListener('dblclick', (e) => {
     const curve = getSelectedCurve();
-    if (!curve || curve.points.length < 2) return;
+    if (!curve || pitchPoints(curve).length < 2) return;
     const { sx, sy } = localPos(e);
     const w = pvp.screenToWorld(sx, sy);
     history.snapshot();
     store.mutate(() => {
-      ensureVolumeParam(curve);
-      const lane = curve.parameters!.volume!;
-      const i = addParamPoint(lane, createParamPoint(clampBeat(curve, w.beat), w.value));
+      const lane = ensureLane(curve, 'volume');
+      if (!lane) return;
+      const i = addLanePoint(lane, createLanePoint(clampBeat(curve, w.beat), Math.max(0, Math.min(1, w.value))));
       if (store.getState().bezierAutoSmooth) {
-        applyAutoSmoothParamHandles(lane, i, store.getState().autoSmoothXRatio);
+        applyAutoSmoothLaneHandles(lane, i, store.getState().autoSmoothXRatio);
       }
-      reclampParamHandlesAround(lane, i);
+      reclampLaneHandlesAround(lane, i);
       selectedIndex = i;
     });
     e.preventDefault();
@@ -205,11 +207,11 @@ export function createParamInteraction(
     const { sx, sy } = localPos(e);
     const idx = hitPoint(curve, sx, sy);
     if (idx === null) return;
-    const lane = curve.parameters?.volume;
+    const lane = getLane(curve, 'volume');
     if (!lane || lane.points.length <= 1) { e.preventDefault(); return; }
     e.preventDefault();
     history.snapshot();
-    store.mutate(() => { removeParamPoint(lane, idx); });
+    store.mutate(() => { removeLanePoint(lane, idx); });
     if (selectedIndex === idx) selectedIndex = null;
   });
 

@@ -2,7 +2,7 @@ import { createViewport } from './canvas/viewport';
 import { createParamViewport } from './canvas/param-viewport';
 import { renderParamGraph } from './canvas/param-graph-renderer';
 import { createParamInteraction } from './canvas/param-interaction';
-import { ensureVolumeParam } from './model/param-curve';
+import { ensureLane, getLane } from './model/lane';
 import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_NOTE, MAX_NOTE, Y_PAN_MARGIN, noteNumberToName, noteToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
@@ -44,7 +44,7 @@ import { history } from './state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
 import { getCompositionLength, measureLengthInBeats } from './model/composition';
-import { computeMultiCurveBBox, deepCopyPoints, joinCurves, sharpenCurveHandles, smoothCurveHandles } from './model/curve';
+import { computeMultiCurveBBox, deepCopyPoints, joinCurves, sharpenCurveHandles, smoothCurveHandles, pitchPoints } from './model/curve';
 import { assignGroup, dissolveGroup, allShareGroup, anyGrouped, createGroupId } from './model/curve-groups';
 import { chordOffsets } from './utils/harmonics';
 import { showToast } from './ui/toast';
@@ -2052,7 +2052,7 @@ window.addEventListener('keydown', (e) => {
       let maxX: number | null = null;
       for (const track of comp.tracks) {
         for (const curve of track.curves) {
-          for (const pt of curve.points) {
+          for (const pt of pitchPoints(curve)) {
             if (minX === null || pt.position.x < minX) minX = pt.position.x;
             if (maxX === null || pt.position.x > maxX) maxX = pt.position.x;
           }
@@ -2123,9 +2123,9 @@ window.addEventListener('keydown', (e) => {
               // Sort descending so splice doesn't shift later indices we still need.
               indices.sort((a, b) => b - a);
               for (const idx of indices) {
-                if (idx >= 0 && idx < curve.points.length) curve.points.splice(idx, 1);
+                if (idx >= 0 && idx < pitchPoints(curve).length) pitchPoints(curve).splice(idx, 1);
               }
-              if (curve.points.length < 2) {
+              if (pitchPoints(curve).length < 2) {
                 track.curves.splice(ci, 1);
               }
             }
@@ -2144,14 +2144,14 @@ window.addEventListener('keydown', (e) => {
         if (curve) {
           history.snapshot();
           store.mutate(() => {
-            curve.points.splice(s.selectedPointIndex!, 1);
-            if (curve.points.length === 0 && track) {
+            pitchPoints(curve).splice(s.selectedPointIndex!, 1);
+            if (pitchPoints(curve).length === 0 && track) {
               const idx = track.curves.indexOf(curve);
               if (idx >= 0) track.curves.splice(idx, 1);
             }
           });
           store.setSelectedPoint(null);
-          store.setSelectedCurve(curve.points.length > 0 ? curve.id : null);
+          store.setSelectedCurve(pitchPoints(curve).length > 0 ? curve.id : null);
         }
       }
       break;
@@ -2270,7 +2270,7 @@ function renderTrackList() {
         // Build transform box around all curves
         const map = new Map<string, ControlPoint[]>();
         for (const c of track.curves) {
-          map.set(c.id, deepCopyPoints(c.points));
+          map.set(c.id, deepCopyPoints(pitchPoints(c)));
         }
         interaction.transformBox = {
           curveIds,
@@ -3321,7 +3321,7 @@ function render() {
         ? comp.tracks.find(t => t.id === state.selectedTrackId)
             ?.curves.find(c => c.id === singleId)
         : null);
-    const points = previewCurve?.points;
+    const points = previewCurve ? pitchPoints(previewCurve) : undefined;
     const track = comp.tracks.find(t => t.id === state.selectedTrackId);
     const tone = track ? comp.toneLibrary.find(t => t.id === track.toneId) : null;
     const color = tone?.color ?? '#4fc3f7';
@@ -3528,7 +3528,7 @@ function render() {
     const paramPlayheadBeat = playback.isPlaying()
       ? playback.getPositionBeats()
       : state.playback.positionBeats;
-    const selPts = selCurve?.points;
+    const selPts = selCurve ? pitchPoints(selCurve) : undefined;
     const pitchStart = selPts && selPts.length > 0 ? selPts[0]!.position.x : null;
     const pitchEnd = selPts && selPts.length > 0 ? selPts[selPts.length - 1]!.position.x : null;
     // Lazily attach a default volume lane to a selected curve that doesn't have
@@ -3536,15 +3536,15 @@ function render() {
     // so the graph shows and is editable immediately — not only after the first
     // draw event. The default matches the audio fallback, so this is a no-op for
     // sound and undo.
-    if (selCurve && !selCurve.parameters?.volume && selCurve.points.length >= 2) {
-      ensureVolumeParam(selCurve);
+    if (selCurve && pitchPoints(selCurve).length >= 2) {
+      ensureLane(selCurve, 'volume');
     }
     // While the curve is actively being drawn, keep the trailing volume point
     // pinned to the live end of the pitch curve. Otherwise the end point stays
     // where it was when the lane was first created (at the 2nd pitch point),
     // leaving a stray volume point near the start of a long curve.
     if (selCurve && interaction.drawingCurve === selCurve && pitchEnd !== null) {
-      const vpts = selCurve.parameters?.volume?.points;
+      const vpts = getLane(selCurve, 'volume')?.points;
       if (vpts && vpts.length >= 2) {
         const prevX = vpts[vpts.length - 2]!.position.x + 0.001;
         vpts[vpts.length - 1]!.position.x = Math.max(prevX, pitchEnd);
@@ -3553,7 +3553,7 @@ function render() {
     renderParamGraph(
       paramCtx, paramViewport, viewport,
       paramW, paramH,
-      selCurve?.parameters?.volume ?? null,
+      (selCurve ? getLane(selCurve, 'volume') : null) ?? null,
       paramColor,
       paramInteraction.selectedIndex(),
       paramPlayheadBeat,

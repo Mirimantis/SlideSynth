@@ -33,42 +33,41 @@ export interface ToneDefinition {
   distortion: DistortionConfig | null;
 }
 
-// ── Bezier Curves ───────────────────────────────────────────────
+// ── Bezier Curves — unified lane model ─────────────────────────
+// Pitch and every parameter (volume, and future: pan, cutoff, vibrato, …)
+// are the SAME primitive: a Bezier graph-editor curve whose X is a beat and
+// whose Y lives in the lane's own value-domain. The main canvas is the
+// specialized editor view of the pitch lane; the Parameters Graph is the
+// generic view for the rest. Plain data only — history/clipboard deep-clone
+// via JSON, and .gliss round-trip preservation relies on plain objects.
 
-export interface ControlPoint {
-  position: Vec2;           // x = beats, y = MIDI note number (continuous float)
+export interface LanePoint {
+  position: Vec2;           // x = beats; y = lane value (pitch units for pitch, 0–1 for volume)
   handleIn: Vec2 | null;    // relative to position
   handleOut: Vec2 | null;   // relative to position
 }
 
-// ── Parameter curves (animation-style envelopes per BezierCurve) ──
-// Each parameter (volume, and future: pan, filter cutoff, …) is its own
-// Bezier curve with INDEPENDENT control points whose X is a beat and Y is the
-// parameter value (0–1 for volume). Edited in the Parameters Graph panel.
+export type LaneType = 'pitch' | 'volume';   // widen later (pan, cutoff, …)
 
-export interface ParamPoint {
-  position: Vec2;           // x = beats, y = parameter value (0–1 for volume)
-  handleIn: Vec2 | null;    // relative to position
-  handleOut: Vec2 | null;   // relative to position
-}
-
-export interface ParamCurve {
-  points: ParamPoint[];     // ordered by increasing position.x; >= 1 point
-}
-
-/** Keyed map of parameter lanes attached to a BezierCurve. Adding a new lane
- *  (pan, cutoff, …) does not require touching BezierCurve again. */
-export interface CurveParameters {
-  volume?: ParamCurve;
+export interface Lane {
+  type: LaneType;
+  unit: 'midi' | 'cents' | 'normalized';
+  range: [number, number];  // Y-domain clamp for anchors / sampled values
+  points: LanePoint[];      // ordered by increasing position.x; pitch >= 2, others >= 1
+  gravity?: unknown;        // reserved for per-lane gravity-well maps; must round-trip verbatim
 }
 
 export interface BezierCurve {
   id: string;
-  points: ControlPoint[];   // ordered by increasing position.x
-  parameters?: CurveParameters; // independent parameter envelopes (volume, …)
+  /** lanes[0] is ALWAYS the pitch lane (constructor-enforced invariant). */
+  lanes: Lane[];
   groupId?: string | null;  // grouped curves move/delete/transform together (chord clusters and freehand groups)
   voiceIndex?: number;      // Harmonic Prism: 0 = primary, 1..N-1 = harmonies (chord-cluster siblings only)
 }
+
+// Transitional aliases — removed in the cleanup commit of the lanes refactor.
+export type ControlPoint = LanePoint;
+export type ParamPoint = LanePoint;
 
 // ── Track ───────────────────────────────────────────────────────
 

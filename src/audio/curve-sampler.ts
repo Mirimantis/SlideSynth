@@ -1,6 +1,6 @@
 import type { BezierCurve, CurveSample } from '../types';
-import { getSegmentControlPoints } from '../model/curve';
-import { evaluateParamAtBeat, DEFAULT_VOLUME } from '../model/param-curve';
+import { getSegmentControlPoints, pitchPoints } from '../model/curve';
+import { evaluateLaneAtBeat, getLane, DEFAULT_VOLUME } from '../model/lane';
 import { evaluateCubic } from '../utils/bezier-math';
 import { noteToFrequency, CURVE_SAMPLE_RATE } from '../constants';
 
@@ -14,12 +14,14 @@ export function sampleCurve(
   startBeat?: number,
   endBeat?: number,
 ): CurveSample[] {
-  if (curve.points.length < 2) return [];
+  const points = pitchPoints(curve);
+  if (points.length < 2) return [];
 
   const samples: CurveSample[] = [];
   const beatsToSeconds = 60 / bpm;
+  const volumeLane = getLane(curve, 'volume');
 
-  for (let i = 0; i < curve.points.length - 1; i++) {
+  for (let i = 0; i < points.length - 1; i++) {
     const seg = getSegmentControlPoints(curve, i);
     if (!seg) continue;
 
@@ -41,9 +43,8 @@ export function sampleCurve(
 
       const timeBeat = pt.x;
 
-      // Volume: sample the independent volume parameter lane at this beat.
-      const volCurve = curve.parameters?.volume;
-      const volume = volCurve ? evaluateParamAtBeat(volCurve, timeBeat) : DEFAULT_VOLUME;
+      // Volume: sample the independent volume lane at this beat.
+      const volume = volumeLane ? evaluateLaneAtBeat(volumeLane, timeBeat) : DEFAULT_VOLUME;
 
       // Filter to requested range
       if (startBeat !== undefined && timeBeat < startBeat) continue;
@@ -68,16 +69,17 @@ export function evaluateCurveAtBeat(
   curve: BezierCurve,
   beat: number,
 ): { noteNumber: number; volume: number } | null {
-  if (curve.points.length < 2) return null;
+  const points = pitchPoints(curve);
+  if (points.length < 2) return null;
 
-  const first = curve.points[0]!.position.x;
-  const last = curve.points[curve.points.length - 1]!.position.x;
+  const first = points[0]!.position.x;
+  const last = points[points.length - 1]!.position.x;
   if (beat < first || beat > last) return null;
 
   // Find the segment that spans this beat
-  for (let i = 0; i < curve.points.length - 1; i++) {
-    const ptA = curve.points[i]!;
-    const ptB = curve.points[i + 1]!;
+  for (let i = 0; i < points.length - 1; i++) {
+    const ptA = points[i]!;
+    const ptB = points[i + 1]!;
     if (beat < ptA.position.x || beat > ptB.position.x) continue;
 
     const seg = getSegmentControlPoints(curve, i);
@@ -98,8 +100,8 @@ export function evaluateCurveAtBeat(
 
     const t = (lo + hi) / 2;
     const pt = evaluateCubic(seg.p0, seg.p1, seg.p2, seg.p3, t);
-    const volCurve = curve.parameters?.volume;
-    const volume = volCurve ? evaluateParamAtBeat(volCurve, pt.x) : DEFAULT_VOLUME;
+    const volumeLane = getLane(curve, 'volume');
+    const volume = volumeLane ? evaluateLaneAtBeat(volumeLane, pt.x) : DEFAULT_VOLUME;
     return { noteNumber: pt.y, volume };
   }
 
@@ -110,9 +112,10 @@ export function evaluateCurveAtBeat(
  * Get the time range (in beats) of a curve.
  */
 export function getCurveTimeRange(curve: BezierCurve): { start: number; end: number } | null {
-  if (curve.points.length === 0) return null;
+  const points = pitchPoints(curve);
+  if (points.length === 0) return null;
   return {
-    start: curve.points[0]!.position.x,
-    end: curve.points[curve.points.length - 1]!.position.x,
+    start: points[0]!.position.x,
+    end: points[points.length - 1]!.position.x,
   };
 }

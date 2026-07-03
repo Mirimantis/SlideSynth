@@ -2,6 +2,7 @@ import { store } from '../state/store';
 import { history } from '../state/history';
 import { noteNumberToName } from '../constants';
 import { getMovableSelection } from '../model/curve-groups';
+import { pitchPoints } from '../model/curve';
 import { openTonePicker } from './tone-picker';
 
 /**
@@ -162,7 +163,7 @@ export function renderPropertyPanel(container: HTMLElement): void {
     return;
   }
 
-  const point = curve.points[state.selectedPointIndex];
+  const point = pitchPoints(curve)[state.selectedPointIndex];
   if (!point) {
     container.innerHTML = '<p class="placeholder-text">Invalid selection</p>';
     return;
@@ -174,7 +175,7 @@ export function renderPropertyPanel(container: HTMLElement): void {
 
   container.innerHTML = `
     <div class="prop-section">
-      <div class="prop-label">Point ${state.selectedPointIndex + 1} of ${curve.points.length}</div>
+      <div class="prop-label">Point ${state.selectedPointIndex + 1} of ${pitchPoints(curve).length}</div>
     </div>
     <div class="prop-section">
       <div class="prop-label">Time (beats)</div>

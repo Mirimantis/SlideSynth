@@ -7,7 +7,7 @@
 
 import type { BezierCurve } from '../types';
 import type { Viewport } from './viewport';
-import { getSegmentControlPoints } from '../model/curve';
+import { getSegmentControlPoints, pitchPoints } from '../model/curve';
 import { evaluateCurveAtBeat } from '../audio/curve-sampler';
 import { chordOffsets, type ChordSpec } from '../utils/harmonics';
 import { MIN_NOTE, MAX_NOTE } from '../constants';
@@ -48,7 +48,7 @@ export function renderProjection(
   canvasWidth: number,
   canvasHeight: number,
 ): void {
-  if (sourceCurve.points.length < 2) return;
+  if (pitchPoints(sourceCurve).length < 2) return;
   const octaves = Math.max(0, Math.min(3, Math.round(octaveRange)));
   const offsets = chordOffsets(chordSpec);
   if (offsets.length === 0) return;
@@ -56,7 +56,7 @@ export function renderProjection(
   // Source Y extent — used for offscreen culling per echo.
   let minSourceY = Infinity;
   let maxSourceY = -Infinity;
-  for (const pt of sourceCurve.points) {
+  for (const pt of pitchPoints(sourceCurve)) {
     if (pt.position.y < minSourceY) minSourceY = pt.position.y;
     if (pt.position.y > maxSourceY) maxSourceY = pt.position.y;
   }
@@ -93,11 +93,11 @@ function drawEcho(
   _canvasWidth: number,
 ): void {
   ctx.beginPath();
-  const first = curve.points[0]!;
+  const first = pitchPoints(curve)[0]!;
   const firstScreen = vp.worldToScreen(first.position.x, first.position.y + yShift);
   ctx.moveTo(firstScreen.sx, firstScreen.sy);
 
-  for (let i = 0; i < curve.points.length - 1; i++) {
+  for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
     const seg = getSegmentControlPoints(curve, i);
     if (!seg) continue;
     const p1 = vp.worldToScreen(seg.p1.x, seg.p1.y + yShift);
@@ -118,11 +118,11 @@ export function renderProjectionSourceHighlight(
   vp: Viewport,
   curve: BezierCurve,
 ): void {
-  if (curve.points.length < 2) return;
+  if (pitchPoints(curve).length < 2) return;
 
   // Build a linear gradient spanning the curve's screen-space X extent.
-  const firstWX = curve.points[0]!.position.x;
-  const lastWX = curve.points[curve.points.length - 1]!.position.x;
+  const firstWX = pitchPoints(curve)[0]!.position.x;
+  const lastWX = pitchPoints(curve)[pitchPoints(curve).length - 1]!.position.x;
   const x0 = vp.worldToScreen(firstWX, 0).sx;
   const x1 = vp.worldToScreen(lastWX, 0).sx;
   // If the curve spans no screen width (extreme zoom-out), fall back to a
@@ -143,10 +143,10 @@ export function renderProjectionSourceHighlight(
   ctx.globalAlpha = 0.85;
   ctx.beginPath();
 
-  const first = curve.points[0]!;
+  const first = pitchPoints(curve)[0]!;
   const firstScreen = vp.worldToScreen(first.position.x, first.position.y);
   ctx.moveTo(firstScreen.sx, firstScreen.sy);
-  for (let i = 0; i < curve.points.length - 1; i++) {
+  for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
     const seg = getSegmentControlPoints(curve, i);
     if (!seg) continue;
     const p1 = vp.worldToScreen(seg.p1.x, seg.p1.y);

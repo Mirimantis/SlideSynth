@@ -1,7 +1,7 @@
-import type { ParamCurve } from '../types';
+import type { Lane } from '../types';
 import type { Viewport } from './viewport';
 import type { ParamViewport } from './param-viewport';
-import { getParamSegmentControlPoints } from '../model/param-curve';
+import { getLaneSegmentControlPoints } from '../model/lane';
 
 const POINT_RADIUS = 4;
 const HANDLE_RADIUS = 3;
@@ -23,7 +23,7 @@ export function renderParamGraph(
   main: Viewport,
   width: number,
   height: number,
-  lane: ParamCurve | null,
+  lane: Lane | null,
   color: string,
   selectedIdx: number | null,
   playheadBeat: number | null,
@@ -101,7 +101,7 @@ export function renderParamGraph(
   ctx.moveTo(startX, firstS.sy);
   ctx.lineTo(firstS.sx, firstS.sy);
   for (let i = 0; i < lane.points.length - 1; i++) {
-    const seg = getParamSegmentControlPoints(lane, i);
+    const seg = getLaneSegmentControlPoints(lane, i);
     if (!seg) continue;
     const p1 = pvp.worldToScreen(seg.p1.x, seg.p1.y);
     const p2 = pvp.worldToScreen(seg.p2.x, seg.p2.y);

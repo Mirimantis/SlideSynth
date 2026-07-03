@@ -6,6 +6,7 @@ import {
 } from '../constants';
 import { createDefaultToneLibrary } from './tone';
 import { createTrack } from './track';
+import { pitchPoints } from './lane';
 
 /** Default snap settings for a new composition. Also the migration target for v1 files. */
 export function createDefaultSnapSettings(): SnapSettings {
@@ -49,7 +50,7 @@ export function getCompositionLength(comp: Composition): number {
   let max = 0;
   for (const t of comp.tracks) {
     for (const c of t.curves) {
-      for (const p of c.points) {
+      for (const p of pitchPoints(c)) {
         if (p.position.x > max) max = p.position.x;
       }
     }

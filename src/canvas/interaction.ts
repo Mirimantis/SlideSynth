@@ -2,8 +2,8 @@ import type { Vec2, BezierCurve, ControlPoint, Track, TransformBoxState } from '
 import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
-import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, computePointSubsetBBox, deepCopyPoints, applyTransformToCurve, splitCurveAtSegment, splitCurveAtPoint, applyAutoSmoothHandles, reclampHandlesAround } from '../model/curve';
-import { deepCopyParameters, ensureVolumeParam } from '../model/param-curve';
+import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, computePointSubsetBBox, deepCopyPoints, applyTransformToCurve, splitCurveAtSegment, splitCurveAtPoint, applyAutoSmoothHandles, reclampHandlesAround, pitchPoints } from '../model/curve';
+import { deepCopyLanes, ensureLane } from '../model/lane';
 import { pointKeysByCurve } from '../model/point-selection';
 import { snapToGrid, getAdaptiveSubdivisions } from '../utils/snap';
 import type { SnapConfig } from '../utils/snap';
@@ -117,7 +117,7 @@ export function createInteraction(
     let bestDistPx = 8; // within 8 screen pixels
     for (const track of comp.tracks) {
       for (const curve of track.curves) {
-        for (const pt of curve.points) {
+        for (const pt of pitchPoints(curve)) {
           const distPx = Math.abs(pt.position.x - worldX) * zoomX;
           if (distPx < bestDistPx) {
             bestDistPx = distPx;
@@ -239,8 +239,8 @@ export function createInteraction(
         for (const idx of indices) {
           const origPos = orig.get(`${cid}:${idx}`);
           if (!origPos) continue;
-          const prev = curve.points[idx - 1];
-          const next = curve.points[idx + 1];
+          const prev = pitchPoints(curve)[idx - 1];
+          const next = pitchPoints(curve)[idx + 1];
           if (prev && !indices.has(idx - 1)) {
             // Unselected left neighbor pins the lower bound for this point.
             minDx = Math.max(minDx, prev.position.x + SAFE_GAP - origPos.x);
@@ -260,7 +260,7 @@ export function createInteraction(
             if (!c) continue;
             for (const idx of indices) {
               const origPos = orig.get(`${cid}:${idx}`);
-              const pt = c.points[idx];
+              const pt = pitchPoints(c)[idx];
               if (origPos && pt) {
                 pt.position.x = origPos.x + dx;
                 pt.position.y = origPos.y + dy;
@@ -289,12 +289,12 @@ export function createInteraction(
               const curve = track.curves.find(c => c.id === curveId);
               const origPts = tb.originalPointsMap.get(curveId);
               if (curve && origPts) {
-                for (let i = 0; i < curve.points.length; i++) {
+                for (let i = 0; i < pitchPoints(curve).length; i++) {
                   const orig = origPts[i]!;
-                  curve.points[i]!.position.x = orig.position.x;
-                  curve.points[i]!.position.y = orig.position.y;
-                  curve.points[i]!.handleIn = orig.handleIn ? { ...orig.handleIn } : null;
-                  curve.points[i]!.handleOut = orig.handleOut ? { ...orig.handleOut } : null;
+                  pitchPoints(curve)[i]!.position.x = orig.position.x;
+                  pitchPoints(curve)[i]!.position.y = orig.position.y;
+                  pitchPoints(curve)[i]!.handleIn = orig.handleIn ? { ...orig.handleIn } : null;
+                  pitchPoints(curve)[i]!.handleOut = orig.handleOut ? { ...orig.handleOut } : null;
                 }
               }
             }
@@ -309,16 +309,14 @@ export function createInteraction(
           store.mutate(() => {
             for (const curveId of tb.curveIds) {
               const original = track.curves.find(c => c.id === curveId);
-              if (!original || original.points.length === 0) continue;
+              if (!original || pitchPoints(original).length === 0) continue;
               const dup = createCurve();
-              dup.points = deepCopyPoints(original.points);
-              const dupParams = deepCopyParameters(original.parameters);
-              if (dupParams) dup.parameters = dupParams;
+              dup.lanes = deepCopyLanes(original.lanes);
               dup.groupId = original.groupId ?? null;
               if (original.voiceIndex !== undefined) dup.voiceIndex = original.voiceIndex;
               track.curves.push(dup);
               newIds.push(dup.id);
-              newOrigMap.set(dup.id, deepCopyPoints(dup.points));
+              newOrigMap.set(dup.id, deepCopyPoints(pitchPoints(dup)));
               created.push(dup);
             }
             remapGroupIds(created);
@@ -463,10 +461,10 @@ export function createInteraction(
                 const subset = subsetMap?.get(curveId);
                 if (subset && subset.size > 0) {
                   for (const idx of subset) {
-                    if (curve.points[idx]) curve.points[idx]!.position.y += shift;
+                    if (pitchPoints(curve)[idx]) pitchPoints(curve)[idx]!.position.y += shift;
                   }
                 } else {
-                  for (const pt of curve.points) pt.position.y += shift;
+                  for (const pt of pitchPoints(curve)) pt.position.y += shift;
                 }
               }
             });
@@ -504,7 +502,7 @@ export function createInteraction(
           const map = new Map<string, ControlPoint[]>();
           for (const curveId of tb.curveIds) {
             const curve = track.curves.find(c => c.id === curveId);
-            if (curve) map.set(curveId, deepCopyPoints(curve.points));
+            if (curve) map.set(curveId, deepCopyPoints(pitchPoints(curve)));
           }
           tb.originalPointsMap = map;
           return;
@@ -563,8 +561,8 @@ export function createInteraction(
       const newKeys = new Set<string>();
       if (track) {
         for (const curve of track.curves) {
-          for (let i = 0; i < curve.points.length; i++) {
-            const p = curve.points[i]!;
+          for (let i = 0; i < pitchPoints(curve).length; i++) {
+            const p = pitchPoints(curve)[i]!;
             if (p.position.x >= minX && p.position.x <= maxX
                 && p.position.y >= minY && p.position.y <= maxY) {
               newKeys.add(`${curve.id}:${i}`);
@@ -734,8 +732,8 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
     const hitRadiusY = 8 / vp.state.zoomY;
     const hitRadius = Math.max(hitRadiusX, hitRadiusY);
 
-    for (let i = 0; i < targetCurve.points.length; i++) {
-      const pt = targetCurve.points[i]!;
+    for (let i = 0; i < pitchPoints(targetCurve).length; i++) {
+      const pt = pitchPoints(targetCurve)[i]!;
       if (distToPoint(worldPt, pt.position) < hitRadius) {
         // Hit an existing point — clear handles and set up for handle drag.
         // If the user releases without dragging, handles stay null (sharp point).
@@ -840,8 +838,8 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
   // Phase 1: anchor points. Anchors override handles when overlapping.
   for (const t of candidateTracks) {
     for (const curve of t.curves) {
-      for (let i = 0; i < curve.points.length; i++) {
-        const pt = curve.points[i]!;
+      for (let i = 0; i < pitchPoints(curve).length; i++) {
+        const pt = pitchPoints(curve)[i]!;
         if (distToPoint(worldPt, pt.position) < hitRadius) {
           if (shiftKey) {
             // Shift+click on an anchor: toggle the *individual point* in the
@@ -872,8 +870,8 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
                 if (!Number.isFinite(pidx)) continue;
                 for (const tt of comp2.tracks) {
                   const cc = tt.curves.find(c => c.id === cid);
-                  if (cc && cc.points[pidx]) {
-                    positions.set(key, { x: cc.points[pidx]!.position.x, y: cc.points[pidx]!.position.y });
+                  if (cc && pitchPoints(cc)[pidx]) {
+                    positions.set(key, { x: pitchPoints(cc)[pidx]!.position.x, y: pitchPoints(cc)[pidx]!.position.y });
                     break;
                   }
                 }
@@ -916,8 +914,8 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
   if (singleCurveId && !shiftKey) {
     const curve = activeTrack.curves.find(c => c.id === singleCurveId);
     if (curve) {
-      for (let i = 0; i < curve.points.length; i++) {
-        const pt = curve.points[i]!;
+      for (let i = 0; i < pitchPoints(curve).length; i++) {
+        const pt = pitchPoints(curve)[i]!;
         if (pt.handleIn) {
           const habs: Vec2 = { x: pt.position.x + pt.handleIn.x, y: pt.position.y + pt.handleIn.y };
           if (distToPoint(worldPt, habs) < hitRadius) {
@@ -949,8 +947,8 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
   // Phase 3: curve segments (click on the line between points).
   for (const t of candidateTracks) {
     for (const curve of t.curves) {
-      if (curve.points.length < 2) continue;
-      for (let i = 0; i < curve.points.length - 1; i++) {
+      if (pitchPoints(curve).length < 2) continue;
+      for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
         const seg = getSegmentControlPoints(curve, i);
         if (!seg) continue;
         const nearest = nearestPointOnCubic(seg.p0, seg.p1, seg.p2, seg.p3, worldPt);
@@ -1014,7 +1012,7 @@ export function rebuildTransformBox(istate: InteractionState, track: Track): voi
   }
   const map = new Map<string, ControlPoint[]>();
   for (const curve of curves) {
-    map.set(curve.id, deepCopyPoints(curve.points));
+    map.set(curve.id, deepCopyPoints(pitchPoints(curve)));
   }
   const bbox = pointMode && pointIndicesPerCurve
     ? computePointSubsetBBox(curves, pointIndicesPerCurve)
@@ -1038,8 +1036,8 @@ function handleDeleteClick(worldPt: Vec2, vp: Viewport): void {
   const hitRadius = Math.max(hitRadiusX, hitRadiusY);
 
   for (const curve of track.curves) {
-    for (let i = 0; i < curve.points.length; i++) {
-      const pt = curve.points[i]!;
+    for (let i = 0; i < pitchPoints(curve).length; i++) {
+      const pt = pitchPoints(curve)[i]!;
       if (distToPoint(worldPt, pt.position) < hitRadius) {
         history.snapshot();
         // Group-aware: deleting any point on a grouped curve removes the entire
@@ -1054,9 +1052,9 @@ function handleDeleteClick(worldPt: Vec2, vp: Viewport): void {
           return;
         }
         store.mutate(() => {
-          curve.points.splice(i, 1);
+          pitchPoints(curve).splice(i, 1);
           // Remove curve if empty
-          if (curve.points.length === 0) {
+          if (pitchPoints(curve).length === 0) {
             const idx = track.curves.indexOf(curve);
             if (idx >= 0) track.curves.splice(idx, 1);
           }
@@ -1089,10 +1087,10 @@ function findScissorsCut(worldPt: Vec2, vp: Viewport): {
 
   // First pass: snap to interior control points
   for (const curve of track.curves) {
-    if (curve.points.length < 3) continue;
-    for (let i = 1; i < curve.points.length - 1; i++) {
-      if (screenDist(worldPt, curve.points[i]!.position, vp) < SCISSORS_HIT_PX) {
-        return { curve, segmentIndex: -1, t: 0, point: { ...curve.points[i]!.position }, atPoint: true };
+    if (pitchPoints(curve).length < 3) continue;
+    for (let i = 1; i < pitchPoints(curve).length - 1; i++) {
+      if (screenDist(worldPt, pitchPoints(curve)[i]!.position, vp) < SCISSORS_HIT_PX) {
+        return { curve, segmentIndex: -1, t: 0, point: { ...pitchPoints(curve)[i]!.position }, atPoint: true };
       }
     }
   }
@@ -1100,8 +1098,8 @@ function findScissorsCut(worldPt: Vec2, vp: Viewport): {
   // Second pass: cut on curve segments (screen-space distance)
   const snap = buildSnapConfig(vp.state.zoomX);
   for (const curve of track.curves) {
-    if (curve.points.length < 2) continue;
-    for (let i = 0; i < curve.points.length - 1; i++) {
+    if (pitchPoints(curve).length < 2) continue;
+    for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
       const seg = getSegmentControlPoints(curve, i);
       if (!seg) continue;
       const nearest = nearestPointOnCubicScaled(
@@ -1140,8 +1138,9 @@ function handleScissorsClick(worldPt: Vec2, vp: Viewport): void {
   history.snapshot();
   if (cut.atPoint) {
     // Split at existing control point
-    const pointIdx = cut.curve.points.findIndex(p => p.position.x === cut.point.x && p.position.y === cut.point.y);
-    if (pointIdx < 1 || pointIdx >= cut.curve.points.length - 1) return;
+    const cutPts = pitchPoints(cut.curve);
+    const pointIdx = cutPts.findIndex(p => p.position.x === cut.point.x && p.position.y === cut.point.y);
+    if (pointIdx < 1 || pointIdx >= cutPts.length - 1) return;
     const { left, right } = splitCurveAtPoint(cut.curve, pointIdx);
     const track = getSelectedTrack()!;
     store.mutate(() => {
@@ -1284,7 +1283,7 @@ function handleDrag(istate: InteractionState, snapped: { wx: number; wy: number 
       // Re-clamp neighboring handles so they don't extend past the moved point.
       reclampHandlesAround(curve, istate.dragPointIndex);
     } else if (istate.dragging === 'handleOut' || istate.dragging === 'handleIn') {
-      const pt = curve.points[istate.dragPointIndex];
+      const pt = pitchPoints(curve)[istate.dragPointIndex];
       if (!pt) return;
       const rel: Vec2 = {
         x: snapped.wx - pt.position.x,
@@ -1302,7 +1301,7 @@ function handleDrag(istate: InteractionState, snapped: { wx: number; wy: number 
       // at the same point index so all voices share the same shape.
       if (propagateToSiblings) {
         for (const sib of siblings) {
-          if (istate.dragPointIndex >= sib.points.length) continue;
+          if (istate.dragPointIndex >= pitchPoints(sib).length) continue;
           setHandle(sib, istate.dragPointIndex, which, rel);
           setHandle(sib, istate.dragPointIndex, opposite, mirrorRel);
         }
@@ -1316,7 +1315,7 @@ function finishDrawing(istate: InteractionState): void {
   // so it's immediately editable in the Parameters Graph. No-op for < 2 points
   // or if a lane already exists; the default value matches the sampler fallback
   // so audio is unchanged.
-  if (istate.drawingCurve) ensureVolumeParam(istate.drawingCurve);
+  if (istate.drawingCurve) ensureLane(istate.drawingCurve, 'volume');
   istate.drawingCurve = null;
   istate.dragging = null;
   store.setSelectedCurve(null);
@@ -1332,15 +1331,15 @@ function findCurveAt(worldPt: Vec2, vp: Viewport, track: Track): BezierCurve | n
 
   // Check anchor points
   for (const curve of track.curves) {
-    for (const pt of curve.points) {
+    for (const pt of pitchPoints(curve)) {
       if (distToPoint(worldPt, pt.position) < hitRadius) return curve;
     }
   }
 
   // Check curve segments
   for (const curve of track.curves) {
-    if (curve.points.length < 2) continue;
-    for (let i = 0; i < curve.points.length - 1; i++) {
+    if (pitchPoints(curve).length < 2) continue;
+    for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
       const seg = getSegmentControlPoints(curve, i);
       if (!seg) continue;
       const nearest = nearestPointOnCubic(seg.p0, seg.p1, seg.p2, seg.p3, worldPt);

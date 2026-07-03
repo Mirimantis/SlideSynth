@@ -1,13 +1,12 @@
-import type { ControlPoint, CurveParameters } from '../types';
+import type { Lane } from '../types';
 import { store } from './store';
 import { history } from './history';
-import { createCurve, deepCopyPoints } from '../model/curve';
-import { deepCopyParameters, offsetParametersX } from '../model/param-curve';
+import { createCurve, pitchPoints } from '../model/curve';
+import { deepCopyLanes, offsetLanesX } from '../model/lane';
 import { expandSelectionToGroups, remapGroupIds, createGroupId } from '../model/curve-groups';
 
 interface ClipboardEntry {
-  points: ControlPoint[];
-  parameters: CurveParameters | undefined; // parameter envelopes (volume, …) at copy time
+  lanes: Lane[];              // full lane set (pitch + envelopes) at copy time
   groupId: string | null;     // group membership at copy time (so paste can preserve cluster identity within the paste)
   voiceIndex: number | null;  // chord-cluster voice index, if any
 }
@@ -37,14 +36,13 @@ export function copySelectedCurves(): boolean {
 
   for (const curveId of expandedIds) {
     const curve = track.curves.find(c => c.id === curveId);
-    if (!curve || curve.points.length === 0) continue;
+    if (!curve || pitchPoints(curve).length === 0) continue;
     entries.push({
-      points: deepCopyPoints(curve.points),
-      parameters: deepCopyParameters(curve.parameters),
+      lanes: deepCopyLanes(curve.lanes),
       groupId: curve.groupId ?? null,
       voiceIndex: curve.voiceIndex ?? null,
     });
-    for (const pt of curve.points) {
+    for (const pt of pitchPoints(curve)) {
       if (pt.position.x < originX) originX = pt.position.x;
     }
   }
@@ -100,13 +98,8 @@ export function pasteCurves(atBeat: number): string[] | null {
     const created: { curve: ReturnType<typeof createCurve>; groupId: string | null }[] = [];
     for (const entry of clipboard!.curves) {
       const curve = createCurve();
-      curve.points = deepCopyPoints(entry.points);
-      for (const pt of curve.points) {
-        pt.position.x += offsetX;
-      }
-      const params = deepCopyParameters(entry.parameters);
-      offsetParametersX(params, offsetX);
-      if (params) curve.parameters = params;
+      curve.lanes = deepCopyLanes(entry.lanes);
+      offsetLanesX(curve, offsetX);
       curve.groupId = entry.groupId;
       if (entry.voiceIndex !== null) curve.voiceIndex = entry.voiceIndex;
       track.curves.push(curve);
@@ -143,7 +136,7 @@ export function duplicateCurves(): string[] | null {
   for (const curveId of expandedIds) {
     const curve = track.curves.find(c => c.id === curveId);
     if (!curve) continue;
-    for (const pt of curve.points) {
+    for (const pt of pitchPoints(curve)) {
       if (pt.position.x < minX) minX = pt.position.x;
       if (pt.position.x > maxX) maxX = pt.position.x;
     }
@@ -161,15 +154,10 @@ export function duplicateCurves(): string[] | null {
     const created: ReturnType<typeof createCurve>[] = [];
     for (const curveId of expandedIds) {
       const original = t.curves.find(c => c.id === curveId);
-      if (!original || original.points.length === 0) continue;
+      if (!original || pitchPoints(original).length === 0) continue;
       const curve = createCurve();
-      curve.points = deepCopyPoints(original.points);
-      for (const pt of curve.points) {
-        pt.position.x += offsetX;
-      }
-      const params = deepCopyParameters(original.parameters);
-      offsetParametersX(params, offsetX);
-      if (params) curve.parameters = params;
+      curve.lanes = deepCopyLanes(original.lanes);
+      offsetLanesX(curve, offsetX);
       curve.groupId = original.groupId ?? null;
       if (original.voiceIndex !== undefined) curve.voiceIndex = original.voiceIndex;
       t.curves.push(curve);
@@ -212,22 +200,22 @@ export function continueCurves(): string[] | null {
 
     for (const curveId of expandedIds) {
       const original = t.curves.find(c => c.id === curveId);
-      if (!original || original.points.length === 0) continue;
+      if (!original) continue;
+      const originalPts = pitchPoints(original);
+      if (originalPts.length === 0) continue;
 
-      const firstPt = original.points[0]!;
-      const lastPt = original.points[original.points.length - 1]!;
+      const firstPt = originalPts[0]!;
+      const lastPt = originalPts[originalPts.length - 1]!;
       const offsetX = lastPt.position.x - firstPt.position.x;
       const offsetY = lastPt.position.y - firstPt.position.y;
 
       const curve = createCurve();
-      curve.points = deepCopyPoints(original.points);
-      for (const pt of curve.points) {
-        pt.position.x += offsetX;
+      curve.lanes = deepCopyLanes(original.lanes);
+      offsetLanesX(curve, offsetX);
+      // Pitch continues from where the original ended; envelope Y stays put.
+      for (const pt of pitchPoints(curve)) {
         pt.position.y += offsetY;
       }
-      const params = deepCopyParameters(original.parameters);
-      offsetParametersX(params, offsetX);
-      if (params) curve.parameters = params;
       if (original.groupId) {
         let g = oldToNewGroup.get(original.groupId);
         if (!g) {

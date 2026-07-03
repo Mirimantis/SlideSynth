@@ -1,7 +1,8 @@
-import type { Composition, ParamCurve, ToneDefinition } from '../types';
+import type { Composition, Lane, LanePoint, ToneDefinition } from '../types';
 import { createDefaultSnapSettings } from '../model/composition';
+import { LANE_SPECS } from '../model/lane';
 
-export const COMPOSITION_VERSION = 3;
+export const COMPOSITION_VERSION = 4;
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
@@ -40,26 +41,30 @@ export function deserializeComposition(json: string): Composition {
   }
 
   // v2 → v3: per-point `volume` migrates to an independent `parameters.volume`
-  // ParamCurve. The new lane mirrors each pitch point's beat with that point's
-  // old volume, using straight segments (null handles) so the piecewise-linear
+  // envelope. The lane mirrors each pitch point's beat with that point's old
+  // volume, using straight segments (null handles) so the piecewise-linear
   // sampling is byte-identical to the old per-point interpolation. v3 curves
-  // (already carrying a volume lane) pass through untouched.
+  // (already carrying a volume envelope) pass through untouched. v4+ curves
+  // (lanes model, no `points` array) skip this step entirely.
   for (const track of data.tracks) {
-    for (const curve of track.curves as Array<{
-      points: Array<{ position: { x: number; y: number }; volume?: number }>;
-      parameters?: { volume?: ParamCurve };
+    for (const curve of track.curves as unknown as Array<{
+      points?: Array<{ position: { x: number; y: number }; volume?: number }>;
+      parameters?: { volume?: { points: LanePoint[] } };
     }>) {
+      if (!curve.points) continue;
       const needsMigration = !curve.parameters?.volume &&
         curve.points.some(p => typeof p.volume === 'number');
       if (needsMigration) {
-        const lane: ParamCurve = {
-          points: curve.points.map(p => ({
-            position: { x: p.position.x, y: clamp01(p.volume ?? 0.8) },
-            handleIn: null,
-            handleOut: null,
-          })),
+        curve.parameters = {
+          ...curve.parameters,
+          volume: {
+            points: curve.points.map(p => ({
+              position: { x: p.position.x, y: clamp01(p.volume ?? 0.8) },
+              handleIn: null,
+              handleOut: null,
+            })),
+          },
         };
-        curve.parameters = { ...curve.parameters, volume: lane };
       }
       // Drop the obsolete per-point field regardless (keeps re-saved files clean).
       for (const p of curve.points) delete p.volume;
@@ -84,10 +89,47 @@ export function deserializeComposition(json: string): Composition {
     data.tuningOffsetCents = 0;
   }
 
+  // v3 → v4: unified lanes model. `points` becomes the mandatory pitch lane
+  // (lanes[0]); `parameters.volume` becomes the volume lane. Curves already
+  // carrying `lanes` pass through untouched.
+  migrateV3ToV4(data);
+
   // All migrations applied — the in-memory composition is now current-version.
   data.version = COMPOSITION_VERSION;
 
   return data;
+}
+
+/** Convert v3 curves (points + parameters) to the v4 lanes model, in place. */
+function migrateV3ToV4(data: Composition): void {
+  const pitchSpec = LANE_SPECS.pitch;
+  const volumeSpec = LANE_SPECS.volume;
+  for (const track of data.tracks) {
+    for (const curve of track.curves as unknown as Array<{
+      lanes?: Lane[];
+      points?: LanePoint[];
+      parameters?: { volume?: { points: LanePoint[] } };
+    }>) {
+      if (Array.isArray(curve.lanes)) continue; // already v4
+      const lanes: Lane[] = [{
+        type: 'pitch',
+        unit: pitchSpec.unit,
+        range: [pitchSpec.range[0], pitchSpec.range[1]],
+        points: curve.points ?? [],
+      }];
+      if (curve.parameters?.volume) {
+        lanes.push({
+          type: 'volume',
+          unit: volumeSpec.unit,
+          range: [volumeSpec.range[0], volumeSpec.range[1]],
+          points: curve.parameters.volume.points,
+        });
+      }
+      curve.lanes = lanes;
+      delete curve.points;
+      delete curve.parameters;
+    }
+  }
 }
 
 /**
