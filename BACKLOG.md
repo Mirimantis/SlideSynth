@@ -198,8 +198,27 @@ Items that came up while building Phase 6 but are independent features. Each bec
 
 ---
 
+## Phase 9 — Performance & architecture (from full-codebase review)
+
+Surfaced during a full-repo architecture/performance review done alongside the cents + lanes refactor (PR #60). These are the items that refactor unblocked but didn't itself implement — mostly prep work for the jam/looper direction in [.claude/plans/performance-jam-looper-plan.md](.claude/plans/performance-jam-looper-plan.md).
+
+- [ ] **9.1 Voice-pool playback engine + loop restart reuse** *(L, perf, own planning session)*
+  `createTrackSynths` in [src/audio/playback.ts](src/audio/playback.ts) allocates one always-running oscillator+gain `ToneSynth` per curve at play start — a composition with hundreds of short notes runs hundreds of concurrent (mostly silent) voice chains. Every loop wrap tears the whole pool down and rebuilds it (`stop(); play(...)` in `scheduleAhead`), which is an allocation spike at exactly the moment a live looper can least afford one. Needs a voice pool sized to max simultaneous overlap (derivable from curve time ranges), with curves checked in/out as the playhead reaches them and loop restarts that reuse the pool instead of rebuilding it. This is the looper's foundation — sequence before jam/loop UI work.
+
+- [ ] **9.2 fgDirty flag + Path2D curve caching** *(M, perf)*
+  `render()` in [src/main.ts](src/main.ts) clears and repaints the entire foreground canvas (every curve, every frame) even when nothing changed — the background layer already has a `bgDirty` flag, the foreground has nothing. Add a mirrored `fgDirty` set by store notifications / interaction / playback so idle CPU drops to near zero. During active playback almost everything *is* dirty every frame regardless, so also cache each curve's tessellated shape as a `Path2D` keyed by curve identity (invalidated on edit) so steady-state cost is a transform instead of re-evaluating every cubic segment.
+
+- [ ] **9.3 History: externalize raw-take blobs before raw-take retention lands** *(M, perf — coordinate with raw-take-retention design)*
+  `cloneComposition` in [src/state/history.ts](src/state/history.ts) deep-clones the whole composition via `JSON.parse(JSON.stringify(...))` on every snapshot, keeping up to 50. Fine today (compositions are small); not fine once the plan's raw-take retention (~1 MB/voice at 100–200 Hz) lands — 50 multi-MB clones is GC-visible garbage churned mid-jam, which is the worst possible time for a pause. Settle this *before* raw-take retention is built, not after: keep raw-take blobs outside the snapshotted composition (referenced by id in a separate immutable pool) or move history to structural-sharing / patch-based snapshots. Also the natural place to decide the plan's open "undo last layer vs. edit-undo — one stack or two?" question.
+
+- [ ] **9.4 MIDI velocity: live input → recorded volume, then MIDI export** *(M–L, feature)*
+  MIDI file import already threads velocity into the volume lane ([src/export/midi-import.ts](src/export/midi-import.ts)); live MIDI input still discards it (`void velocity;` at [src/main.ts:1082](src/main.ts)) — wiring it into the recording's volume lane is the small first step and stands up the plan's "dynamics bus: MIDI" item. No MIDI export exists yet ([src/export](src/export) has only JSON and WAV); now that pitch is canonical in cents (¢÷100 = MIDI note + bend fraction), export is mechanical: sample each curve, emit note-on at the nearest semitone plus a pitch-bend stream for the continuous deviation (one channel per simultaneous curve ≈ MPE), volume-lane value at note-on → velocity, continuous volume → CC11/channel pressure. [src/export/midi-import.test.ts](src/export/midi-import.test.ts) gives a round-trip test harness for free (export → import → compare).
+
+---
+
 ## Housekeeping reminders
 
 - Update [help.html](help.html) in the same PR as each feature.
 - User testing pass in the dev server before PRing each item (ship-after-review).
 - Dev server for this worktree: `npm run dev` → port 5187.
+- Extract pieces of [src/main.ts](src/main.ts) (3,700+ lines) opportunistically as Phase 9 items touch its regions — the render loop, the compose/perform/record state machine, and transport + MIDI-input wiring are the natural first cuts. Not a standalone backlog item and not a big-bang rewrite: peel off a module each time surrounding work already has you in that code.
