@@ -6,6 +6,14 @@ export interface ToneSynth {
   setFrequency(hz: number, time?: number): void;
   /** Set volume 0–1. Ramps linearly to avoid clicks. */
   setVolume(v: number, time?: number): void;
+  /**
+   * Hard-reset to silence: cancels any stale scheduled automation (frequency
+   * and gain) at/after `time` and forces gain to 0 immediately, rather than
+   * ramping from whatever's already queued. Used when a voice is about to be
+   * reused across a loop restart, so leftover automation from the previous
+   * iteration can't bleed into the new one.
+   */
+  silence(time?: number): void;
   /** Connect output to a destination node. */
   connect(dest: AudioNode): void;
   /** Start all oscillators. Call once. */
@@ -105,6 +113,15 @@ export function createToneSynth(tone: ToneDefinition): ToneSynth {
     setVolume(v: number, time?: number) {
       const t = time ?? ctx.currentTime;
       outputGain.gain.linearRampToValueAtTime(Math.max(0, Math.min(1, v)), t);
+    },
+
+    silence(time?: number) {
+      const t = time ?? ctx.currentTime;
+      outputGain.gain.cancelScheduledValues(t);
+      outputGain.gain.setValueAtTime(0, t);
+      for (const osc of oscillators) {
+        osc.frequency.cancelScheduledValues(t);
+      }
     },
 
     connect(dest: AudioNode) {
