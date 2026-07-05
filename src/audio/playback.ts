@@ -2,13 +2,18 @@ import type { Composition } from '../types';
 import { getAudioContext, getMasterGain, ensureResumed } from './engine';
 import { createToneSynth, type ToneSynth } from './tone-synth';
 import { sampleCurve, getCurveTimeRange } from './curve-sampler';
+import { computeVoiceAssignment } from './voice-allocation';
 import { SCHEDULER_INTERVAL_MS, SCHEDULER_LOOKAHEAD_S } from '../constants';
 import { getCompositionLength } from '../model/composition';
 
 interface TrackPlayback {
   trackId: string;
+  toneId: string;
   trackGain: GainNode;
-  curveSynths: Map<string, ToneSynth>;
+  /** Voice pool, sized to the track's max simultaneous curve overlap. */
+  voices: ToneSynth[];
+  /** curve id -> voice index, recomputed each reconcile. */
+  assignment: Map<string, number>;
   lastScheduledTime: number;
 }
 
@@ -49,7 +54,6 @@ export function createPlaybackEngine(
   let loopEnabled = false;
   let playStartBeat = 0;
   let playEndBeat = 0;
-  let restartingLoop = false;
   let schedulerHook: ((fromBeat: number, toBeat: number, composition: Composition, beatToAudioTime: (beat: number) => number) => void) | null = null;
   /** Earliest beat not yet covered by the scheduler hook (tracks the shared
    *  scheduling window so downstream consumers like the metronome can advance
@@ -94,9 +98,10 @@ export function createPlaybackEngine(
       const fromBeat = startBeatOffset + (tp.lastScheduledTime - startAudioTime) / beatsToSec;
       const toBeat = startBeatOffset + (scheduleUntil - startAudioTime) / beatsToSec;
 
-      // Schedule each curve on its own synth
+      // Schedule each curve on its assigned pool voice
       for (const curve of track.curves) {
-        const synth = tp.curveSynths.get(curve.id);
+        const voiceIndex = tp.assignment.get(curve.id);
+        const synth = voiceIndex !== undefined ? tp.voices[voiceIndex] : undefined;
         if (!synth) continue;
 
         const range = getCurveTimeRange(curve);
@@ -155,12 +160,9 @@ export function createPlaybackEngine(
         const comp = currentComposition;
         const loopStart = playStartBeat;
         const loopEnd = playEndBeat;
-        // Suppress the transient onPositionUpdate(0) from stop() so the host UI
-        // doesn't see a fake "auto-stopped" blip between loop iterations.
-        restartingLoop = true;
-        stop();
+        // Reuses the voice pool instead of tearing it down — see
+        // reconcileTrackPools/silenceAllVoices in play().
         play(comp, loopStart, loopEnd, loopStart);
-        restartingLoop = false;
         onPositionUpdate(loopStart);
       } else {
         stop();
@@ -168,61 +170,87 @@ export function createPlaybackEngine(
     }
   }
 
-  function createTrackSynths(composition: Composition): void {
-    disposeTrackSynths();
+  function disposePool(tp: TrackPlayback): void {
+    for (const synth of tp.voices) {
+      try {
+        synth.setVolume(0);
+        synth.stop();
+      } catch {
+        // Oscillator may already be stopped
+      }
+    }
+    tp.voices = [];
+    tp.trackGain.disconnect();
+  }
+
+  function disposeTrackSynths(): void {
+    for (const tp of trackPlaybacks) disposePool(tp);
+    trackPlaybacks = [];
+  }
+
+  /**
+   * Build/update the per-track voice pools from the current composition,
+   * reusing pools across calls instead of tearing them down — used for both
+   * a fresh play() and loop restarts. Pools are sized to each track's max
+   * simultaneous curve overlap (computeVoiceAssignment) and only ever grow.
+   */
+  function reconcileTrackPools(composition: Composition): void {
     const ctx = getAudioContext();
+    const existingById = new Map(trackPlaybacks.map(tp => [tp.trackId, tp]));
+    const next: TrackPlayback[] = [];
 
     for (const track of composition.tracks) {
       const tone = composition.toneLibrary.find(t => t.id === track.toneId);
       if (!tone) continue;
 
-      // Per-track gain node carries track volume and mute/solo
-      const trackGain = ctx.createGain();
-      trackGain.gain.value = track.volume;
-      trackGain.connect(getMasterGain());
+      let tp = existingById.get(track.id);
+      existingById.delete(track.id);
 
-      // One synth per curve
-      const curveSynths = new Map<string, ToneSynth>();
-      for (const curve of track.curves) {
+      if (tp && tp.toneId !== track.toneId) {
+        disposePool(tp);
+        tp = undefined;
+      }
+
+      if (!tp) {
+        const trackGain = ctx.createGain();
+        trackGain.gain.value = track.volume;
+        trackGain.connect(getMasterGain());
+        tp = { trackId: track.id, toneId: track.toneId, trackGain, voices: [], assignment: new Map(), lastScheduledTime: 0 };
+      }
+
+      const { assignment, voiceCount } = computeVoiceAssignment(track.curves);
+      while (tp.voices.length < voiceCount) {
         const synth = createToneSynth(tone);
-        synth.connect(trackGain);
+        synth.connect(tp.trackGain);
         synth.setVolume(0);
         synth.start();
-        curveSynths.set(curve.id, synth);
+        tp.voices.push(synth);
       }
+      tp.assignment = assignment;
 
-      trackPlaybacks.push({
-        trackId: track.id,
-        trackGain,
-        curveSynths,
-        lastScheduledTime: 0,
-      });
+      next.push(tp);
     }
+
+    // Tracks no longer present in the composition (deleted mid-session).
+    for (const stale of existingById.values()) disposePool(stale);
+
+    trackPlaybacks = next;
   }
 
-  function disposeTrackSynths(): void {
+  /** Hard-silence every pooled voice, wiping stale future automation left
+   *  over from the previous loop iteration before scheduling resumes. */
+  function silenceAllVoices(atTime: number): void {
     for (const tp of trackPlaybacks) {
-      for (const synth of tp.curveSynths.values()) {
-        try {
-          synth.setVolume(0);
-          synth.stop();
-        } catch {
-          // Oscillator may already be stopped
-        }
-      }
-      tp.curveSynths.clear();
-      tp.trackGain.disconnect();
+      for (const voice of tp.voices) voice.silence(atTime);
     }
-    trackPlaybacks = [];
   }
 
   function play(composition: Composition, startBeat: number, endBeat?: number, loopStart?: number): void {
-    if (playing) stop();
-
     // Nothing to play in an empty composition — unless the caller explicitly asked for a
     // range (e.g. Glissandograph recording, which needs to scroll/record into an empty canvas).
     const compLength = getCompositionLength(composition);
     if (compLength <= 0 && endBeat === undefined) {
+      if (playing) stop();
       onPositionUpdate(0);
       return;
     }
@@ -230,12 +258,18 @@ export function createPlaybackEngine(
     const resolvedEnd = endBeat ?? compLength;
     const resolvedLoopStart = loopStart ?? 0;
     if (resolvedEnd <= startBeat) {
+      if (playing) stop();
       onPositionUpdate(startBeat);
       return;
     }
 
     ensureResumed();
     const ctx = getAudioContext();
+
+    if (schedulerInterval) {
+      clearInterval(schedulerInterval);
+      schedulerInterval = null;
+    }
 
     currentComposition = composition;
     currentBpm = composition.bpm;
@@ -245,7 +279,11 @@ export function createPlaybackEngine(
     playEndBeat = resolvedEnd;
     playing = true;
 
-    createTrackSynths(composition);
+    // Reuses existing pools where possible (same track id + tone), growing
+    // them as needed rather than tearing everything down — this is what
+    // makes loop restarts (and same-composition re-play/scrub) cheap.
+    reconcileTrackPools(composition);
+    silenceAllVoices(startAudioTime);
 
     // Set initial lastScheduledTime
     for (const tp of trackPlaybacks) {
@@ -279,7 +317,7 @@ export function createPlaybackEngine(
       schedulerInterval = null;
     }
     disposeTrackSynths();
-    if (!restartingLoop) onPositionUpdate(0);
+    onPositionUpdate(0);
   }
 
   return {
