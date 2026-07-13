@@ -5,7 +5,7 @@ import {
   createLane, createLanePoint, pitchLane, pitchPoints, getLane,
   setLaneHandle, addLanePoint, segmentControlPointsOf,
   deepCopyLanePoints, deepCopyLanes, splitLanesAtBeat, concatNonPitchLanes,
-  smoothLaneHandles, sharpenLaneHandles,
+  smoothLaneHandles, sharpenLaneHandles, repositionLaneX,
 } from './lane';
 import { AUTO_SMOOTH_X_RATIO } from '../constants';
 
@@ -464,11 +464,16 @@ export function deepCopyPoints(points: LanePoint[]): LanePoint[] {
 
 /**
  * Apply a transform to all pitch points based on the original snapshot.
- * Mutates the pitch lane in place. Non-pitch lanes are untouched (their X
- * alignment is the caller's concern, matching historical behavior).
+ * Mutates the pitch lane in place. Non-pitch lanes (e.g. volume) are kept
+ * time-locked with the pitch lane: their X moves/scales in lockstep (via
+ * `originalNonPitchLanes`, a snapshot taken alongside `originalPoints`), but
+ * their Y is never touched since its domain (0..1 for volume) is unrelated
+ * to the pitch lane's.
  *
- * If `pointIndices` is provided, only points whose index is in the set are
- * transformed; the rest stay at their snapshot positions.
+ * If `pointIndices` is provided, only pitch points whose index is in the set
+ * are transformed; the rest stay at their snapshot positions. Non-pitch
+ * lanes have no equivalent per-point subset (they don't share the pitch
+ * lane's point indices), so they always follow the full transform.
  */
 export function applyTransformToCurve(
   curve: BezierCurve,
@@ -478,11 +483,21 @@ export function applyTransformToCurve(
   dragStart: Vec2,
   dragCurrent: Vec2,
   pointIndices?: Set<number> | null,
+  originalNonPitchLanes?: Lane[] | null,
 ): void {
   const points = pitchPoints(curve);
   const dx = dragCurrent.x - dragStart.x;
   const dy = dragCurrent.y - dragStart.y;
   const filtered = pointIndices && pointIndices.size > 0;
+
+  const repositionNonPitchLanes = (anchorX: number, scaleX: number, offsetX: number) => {
+    if (!originalNonPitchLanes) return;
+    for (const lane of curve.lanes) {
+      if (lane.type === 'pitch') continue;
+      const orig = originalNonPitchLanes.find(l => l.type === lane.type);
+      if (orig) repositionLaneX(lane, orig.points, anchorX, scaleX, offsetX);
+    }
+  };
 
   if (handle === 'translate') {
     for (let i = 0; i < points.length; i++) {
@@ -498,6 +513,7 @@ export function applyTransformToCurve(
       pt.position.y = orig.position.y + dy;
       // Handles are relative — unchanged during translation
     }
+    repositionNonPitchLanes(0, 1, dx);
     return;
   }
 
@@ -547,6 +563,7 @@ export function applyTransformToCurve(
       pt.handleOut = { x: orig.handleOut.x * scaleX, y: orig.handleOut.y * scaleY };
     }
   }
+  repositionNonPitchLanes(anchorX, scaleX, 0);
 }
 
 // getLane re-export spares consumers a second import for the common
