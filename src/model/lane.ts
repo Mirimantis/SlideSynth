@@ -318,6 +318,25 @@ export function offsetLaneX(lane: Lane, dx: number): void {
   for (const p of lane.points) p.position.x += dx;
 }
 
+/**
+ * Reposition a lane's points along X only (Y untouched) from an original
+ * per-point snapshot, unifying translate and scale into one formula:
+ * `newX = anchorX + (origX - anchorX) * scaleX + dx`. Pass scaleX=1 for a
+ * pure translate, or dx=0 for a pure scale about anchorX. Used to keep
+ * non-pitch lanes (e.g. volume) time-locked with the pitch lane through a
+ * transform-box move/scale.
+ */
+export function repositionLaneX(lane: Lane, original: LanePoint[], anchorX: number, scaleX: number, dx: number): void {
+  for (let i = 0; i < lane.points.length; i++) {
+    const orig = original[i];
+    if (!orig) continue;
+    const pt = lane.points[i]!;
+    pt.position.x = anchorX + (orig.position.x - anchorX) * scaleX + dx;
+    if (orig.handleIn) pt.handleIn = { x: orig.handleIn.x * scaleX, y: orig.handleIn.y };
+    if (orig.handleOut) pt.handleOut = { x: orig.handleOut.x * scaleX, y: orig.handleOut.y };
+  }
+}
+
 /** Shift every lane of a curve in time (paste/duplicate/alt-drag). */
 export function offsetLanesX(curve: BezierCurve, dx: number): void {
   for (const lane of curve.lanes) offsetLaneX(lane, dx);

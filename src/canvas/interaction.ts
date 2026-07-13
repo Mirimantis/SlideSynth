@@ -1,4 +1,4 @@
-import type { Vec2, BezierCurve, LanePoint, Track, TransformBoxState } from '../types';
+import type { Vec2, BezierCurve, Lane, LanePoint, Track, TransformBoxState } from '../types';
 import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
@@ -20,6 +20,30 @@ import { hitTestGuides } from './guides';
 export const SECONDS_RULER_HEIGHT = 16;
 export const BEAT_RULER_HEIGHT = 24;
 export const RULER_HEIGHT = SECONDS_RULER_HEIGHT + BEAT_RULER_HEIGHT;
+
+/** A curve's lanes other than the mandatory pitch lane (e.g. volume) —
+ *  the transform box keeps these time-locked with the pitch lane. */
+function nonPitchLanesOf(curve: BezierCurve): Lane[] {
+  return curve.lanes.filter(l => l.type !== 'pitch');
+}
+
+/** Reset a curve's non-pitch lanes back to a snapshot taken at drag start
+ *  (mirrors the pitch-lane restore done before an alt-drag duplicate). */
+function restoreNonPitchLanes(curve: BezierCurve, original: Lane[]): void {
+  for (const lane of curve.lanes) {
+    if (lane.type === 'pitch') continue;
+    const orig = original.find(l => l.type === lane.type);
+    if (!orig) continue;
+    for (let i = 0; i < lane.points.length; i++) {
+      const origPt = orig.points[i];
+      if (!origPt) continue;
+      lane.points[i]!.position.x = origPt.position.x;
+      lane.points[i]!.position.y = origPt.position.y;
+      lane.points[i]!.handleIn = origPt.handleIn ? { ...origPt.handleIn } : null;
+      lane.points[i]!.handleOut = origPt.handleOut ? { ...origPt.handleOut } : null;
+    }
+  }
+}
 
 export interface InteractionCallbacks {
   onPlayheadScrub?(beats: number, phase: 'start' | 'move' | 'end'): void;
@@ -296,6 +320,8 @@ export function createInteraction(
                   pitchPoints(curve)[i]!.handleIn = orig.handleIn ? { ...orig.handleIn } : null;
                   pitchPoints(curve)[i]!.handleOut = orig.handleOut ? { ...orig.handleOut } : null;
                 }
+                const origNonPitch = tb.originalNonPitchLanesMap.get(curveId);
+                if (origNonPitch) restoreNonPitchLanes(curve, origNonPitch);
               }
             }
           });
@@ -305,6 +331,7 @@ export function createInteraction(
           // collide with the source).
           const newIds: string[] = [];
           const newOrigMap = new Map<string, LanePoint[]>();
+          const newNonPitchMap = new Map<string, Lane[]>();
           const created: BezierCurve[] = [];
           store.mutate(() => {
             for (const curveId of tb.curveIds) {
@@ -317,12 +344,14 @@ export function createInteraction(
               track.curves.push(dup);
               newIds.push(dup.id);
               newOrigMap.set(dup.id, deepCopyPoints(pitchPoints(dup)));
+              newNonPitchMap.set(dup.id, deepCopyLanes(nonPitchLanesOf(dup)));
               created.push(dup);
             }
             remapGroupIds(created);
           });
           tb.curveIds = newIds;
           tb.originalPointsMap = newOrigMap;
+          tb.originalNonPitchLanesMap = newNonPitchMap;
           store.setSelectedCurves(newIds);
         }
 
@@ -332,7 +361,8 @@ export function createInteraction(
             const origPts = tb.originalPointsMap.get(curveId);
             if (curve && origPts) {
               const subset = tb.pointIndicesPerCurve?.get(curveId) ?? null;
-              applyTransformToCurve(curve, origPts, tb.bbox, tb.activeHandle!, tb.dragStart!, { x: eff.wx, y: eff.wy }, subset);
+              const origNonPitch = tb.originalNonPitchLanesMap.get(curveId) ?? null;
+              applyTransformToCurve(curve, origPts, tb.bbox, tb.activeHandle!, tb.dragStart!, { x: eff.wx, y: eff.wy }, subset, origNonPitch);
             }
           }
         });
@@ -500,11 +530,16 @@ export function createInteraction(
           tb.activeHandle = hit;
           tb.dragStart = { ...snappedPt };
           const map = new Map<string, LanePoint[]>();
+          const nonPitchMap = new Map<string, Lane[]>();
           for (const curveId of tb.curveIds) {
             const curve = track.curves.find(c => c.id === curveId);
-            if (curve) map.set(curveId, deepCopyPoints(pitchPoints(curve)));
+            if (curve) {
+              map.set(curveId, deepCopyPoints(pitchPoints(curve)));
+              nonPitchMap.set(curveId, deepCopyLanes(nonPitchLanesOf(curve)));
+            }
           }
           tb.originalPointsMap = map;
+          tb.originalNonPitchLanesMap = nonPitchMap;
           return;
         }
         // Click outside the box dismisses it
@@ -1006,8 +1041,10 @@ export function rebuildTransformBox(istate: InteractionState, track: Track): voi
     return;
   }
   const map = new Map<string, LanePoint[]>();
+  const nonPitchMap = new Map<string, Lane[]>();
   for (const curve of curves) {
     map.set(curve.id, deepCopyPoints(pitchPoints(curve)));
+    nonPitchMap.set(curve.id, deepCopyLanes(nonPitchLanesOf(curve)));
   }
   const bbox = pointMode && pointIndicesPerCurve
     ? computePointSubsetBBox(curves, pointIndicesPerCurve)
@@ -1015,6 +1052,7 @@ export function rebuildTransformBox(istate: InteractionState, track: Track): voi
   istate.transformBox = {
     curveIds: selectedIds,
     originalPointsMap: map,
+    originalNonPitchLanesMap: nonPitchMap,
     bbox,
     activeHandle: null,
     dragStart: null,

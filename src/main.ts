@@ -2,7 +2,7 @@ import { createViewport } from './canvas/viewport';
 import { createParamViewport } from './canvas/param-viewport';
 import { renderParamGraph } from './canvas/param-graph-renderer';
 import { createParamInteraction } from './canvas/param-interaction';
-import { ensureLane, getLane } from './model/lane';
+import { ensureLane, getLane, deepCopyLanes } from './model/lane';
 import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
@@ -62,7 +62,7 @@ import iconPlay from './assets/icons/play.svg?raw';
 import iconPause from './assets/icons/pause.svg?raw';
 import iconStop from './assets/icons/stop.svg?raw';
 import iconRecord from './assets/icons/record.svg?raw';
-import type { AppState, ToolMode, LanePoint, BezierCurve } from './types';
+import type { AppState, ToolMode, Lane, LanePoint, BezierCurve } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -2271,12 +2271,15 @@ function renderTrackList() {
         store.setSelectedCurves(curveIds);
         // Build transform box around all curves
         const map = new Map<string, LanePoint[]>();
+        const nonPitchMap = new Map<string, Lane[]>();
         for (const c of track.curves) {
           map.set(c.id, deepCopyPoints(pitchPoints(c)));
+          nonPitchMap.set(c.id, deepCopyLanes(c.lanes.filter(l => l.type !== 'pitch')));
         }
         interaction.transformBox = {
           curveIds,
           originalPointsMap: map,
+          originalNonPitchLanesMap: nonPitchMap,
           bbox: computeMultiCurveBBox(track.curves),
           activeHandle: null,
           dragStart: null,

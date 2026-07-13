@@ -265,6 +265,10 @@ export interface BoundingBox {
 export interface TransformBoxState {
   curveIds: string[];
   originalPointsMap: Map<string, LanePoint[]>;
+  /** Snapshot of each curve's non-pitch lanes (e.g. volume) taken alongside
+   *  originalPointsMap, so their X can be kept time-locked with the pitch
+   *  lane through a move/scale. */
+  originalNonPitchLanesMap: Map<string, Lane[]>;
   bbox: BoundingBox;
   activeHandle: TransformHandle | null;
   dragStart: Vec2 | null;
