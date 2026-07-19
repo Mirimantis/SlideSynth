@@ -3,7 +3,7 @@ import { createParamViewport } from './canvas/param-viewport';
 import { renderParamGraph } from './canvas/param-graph-renderer';
 import { createParamInteraction } from './canvas/param-interaction';
 import { ensureLane, getLane, deepCopyLanes } from './model/lane';
-import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
@@ -62,6 +62,7 @@ import iconPlay from './assets/icons/play.svg?raw';
 import iconPause from './assets/icons/pause.svg?raw';
 import iconStop from './assets/icons/stop.svg?raw';
 import iconRecord from './assets/icons/record.svg?raw';
+import iconJam from './assets/icons/jam.svg?raw';
 import type { AppState, ToolMode, Lane, LanePoint, BezierCurve } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -88,6 +89,7 @@ app.innerHTML = `
         <button id="btn-pause" title="Pause" disabled></button>
         <button id="btn-stop" title="Stop"></button>
         <button id="btn-record" class="record-btn" title="Record (R) — captures curves onto the selected track" hidden></button>
+        <button id="btn-jam" class="jam-btn" title="Jam (J) — free-running clock: sound on, nothing recorded"></button>
       </div>
       <label class="toggle-switch" title="Toggle snap (S)">
         <span class="toggle-switch-track">
@@ -523,10 +525,10 @@ function activateSpacePreview() {
   }
 }
 
-/** Short-tap action: stop recording if armed, else toggle play/pause. */
+/** Short-tap action: stop recording/jam if active, else toggle play/pause. */
 function handleSpaceTap() {
   const state = store.getState();
-  if (state.performance.recordArmed) {
+  if (state.performance.recordArmed || state.performance.jamActive) {
     composePerformStop();
     store.setPlaybackState('stopped');
     return;
@@ -706,6 +708,7 @@ setIcon(document.getElementById('btn-play')!, iconPlay);
 setIcon(document.getElementById('btn-pause')!, iconPause);
 setIcon(document.getElementById('btn-stop')!, iconStop);
 setIcon(document.getElementById('btn-record')!, iconRecord);
+setIcon(document.getElementById('btn-jam')!, iconJam);
 
 // ── Tool panel (Tools drawer) ──────────────────────────────────
 const toolPanelContainer = document.getElementById('tool-panel')!;
@@ -740,6 +743,7 @@ const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
 const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
 const btnRecord = document.getElementById('btn-record') as HTMLButtonElement;
+const btnJam = document.getElementById('btn-jam') as HTMLButtonElement;
 const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
 const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
 const lockRailToggle = document.getElementById('lock-rail-toggle') as HTMLInputElement;
@@ -809,10 +813,11 @@ const afkWarningCountdown = document.getElementById('afk-warning-countdown') as 
  *  pauses. */
 const AFK_WARNING_LEAD_MS = 30_000;
 
-/** Scroll Canvas effective value — forced on while recording (Perform with capture). */
+/** Scroll Canvas effective value — forced on while recording (Perform with capture)
+ *  and while jamming (the free-running clock is a scrolling-view experience). */
 function effectiveScrollCanvas(): boolean {
   const st = store.getState();
-  return st.scrollCanvasEnabled || st.performance.recordArmed;
+  return st.scrollCanvasEnabled || st.performance.recordArmed || st.performance.jamActive;
 }
 /** Minimum offsetX for clamping — negative when Scroll Canvas is on so beat 0 can
  * reach the rail at canvas centre. */
@@ -839,6 +844,10 @@ function updateRecordButtonVisuals() {
   btnRecord.classList.toggle('armed', g.recordArmed && g.phase !== 'playing');
   btnRecord.classList.toggle('recording', g.recordArmed && g.phase === 'playing');
   btnRecord.disabled = st.selectedTrackId === null;
+
+  btnJam.classList.toggle('jamming', g.jamActive);
+  // A record session owns the transport; jam can't start (or stop) under it.
+  btnJam.disabled = g.recordArmed || g.phase === 'countdown';
 
   lockRailToggle.checked = st.scrollCanvasEnabled;
 
@@ -907,8 +916,10 @@ btnPlay.addEventListener('click', () => {
 
 btnPause.addEventListener('click', () => {
   // During recording, pause means "end the recording session" —
-  // otherwise the record would silently continue on next play.
-  if (store.getState().performance.recordArmed) {
+  // otherwise the record would silently continue on next play. Same for jam:
+  // a free-running clock has no meaningful paused state to resume into.
+  const g = store.getState().performance;
+  if (g.recordArmed || g.jamActive) {
     composePerformStop();
     return;
   }
@@ -933,6 +944,11 @@ btnStop.addEventListener('click', () => {
 btnRecord.addEventListener('click', () => {
   if (store.getState().selectedTrackId === null) return; // no track to record onto
   composeToggleArmed();
+  updateRecordButtonVisuals();
+});
+
+btnJam.addEventListener('click', () => {
+  jamToggle();
   updateRecordButtonVisuals();
 });
 
@@ -1840,9 +1856,16 @@ window.addEventListener('keydown', (e) => {
     composeToggleArmed();
     return;
   }
+  if (e.key.toLowerCase() === 'j' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    if (e.repeat) return;
+    jamToggle();
+    updateRecordButtonVisuals();
+    return;
+  }
   if (e.key === 'Escape') {
     const g = store.getState().performance;
-    if (g.phase === 'countdown' || g.recordArmed) {
+    if (g.phase === 'countdown' || g.recordArmed || g.jamActive) {
       e.preventDefault();
       composePerformStop();
       store.setPlaybackState('stopped');
@@ -2403,6 +2426,24 @@ const composeEngine = createPerformanceEngine({
 
 const magneticState = createMagneticState();
 
+// ── Magnetic perform-clock (BACKLOG 10.1) ──────────────────────
+// Monotonic beat-time for the magnetic integrator, derived from the wall clock
+// rather than the playback position. Physics only needs dt, and wall-clock dt
+// equals playback dt (both real time), so one clock covers every case — including
+// transport-stopped hover (record-armed idle, countdown), where the playback
+// position is frozen and the old time base starved the physics of dt.
+// MAX_DT_BEATS inside updateMagnetic absorbs long gaps (tab throttling, pauses).
+let magneticClockLastMs = 0;
+let magneticClockBeats = 0;
+function magneticNowBeats(): number {
+  const now = performance.now();
+  if (magneticClockLastMs !== 0) {
+    magneticClockBeats += ((now - magneticClockLastMs) / 1000) * (store.getComposition().bpm / 60);
+  }
+  magneticClockLastMs = now;
+  return magneticClockBeats;
+}
+
 /** Last known compose-mode cursor screen Y. Cached so the per-frame pitch-mode
  *  tick can keep advancing the planchette pitch even when the mouse isn't moving. */
 let lastComposeSy: number | null = null;
@@ -2445,18 +2486,23 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
   const snappedWy = snapEngaged ? adaptive.target! : wy;
   const snapTarget = snapEngaged ? adaptive.target : null;
 
-  const performing = composeEngine.isLmbDown();
-  const nowBeats = playback.getPositionBeats();
+  // Perform context = the rail planchette is (or is about to be) the sounding
+  // instrument: scroll-canvas playback (jam / perform / record) or an armed
+  // session hovering before playback starts (idle-armed, countdown). Edit
+  // tools and the free-planchette draw preview keep instant snap.
+  const performContext = isComposePerformActive() || st.performance.recordArmed;
 
   // Magnetic mode: spring-mass physics. The attractor only acts when the
   // cursor is inside its well; outside, the particle falls back to
   // spring-tracks-cursor (smooth, no snap force). State stays continuous
-  // across well boundaries, so wells hand off without a kick.
-  if (st.snapEnabled && performing && st.magneticEnabled) {
+  // across well boundaries, so wells hand off without a kick. Runs on the
+  // wall-clock perform-clock, so gravity settles even at rest (transport
+  // stopped) — LMB is not required; hover feels the pull too.
+  if (st.snapEnabled && performContext && st.magneticEnabled) {
     const attractor = adaptive.target !== null && adaptive.captured
       ? { target: adaptive.target, radius: adaptive.radius }
       : null;
-    const magneticPitch = updateMagnetic(magneticState, wy, nowBeats, st.magneticStrength, st.magneticSpringK, st.magneticDamping, attractor);
+    const magneticPitch = updateMagnetic(magneticState, wy, magneticNowBeats(), st.magneticStrength, st.magneticSpringK, st.magneticDamping, attractor);
     return { cursorWorldY: wy, snappedWorldY: magneticPitch, snapTarget };
   }
 
@@ -2862,12 +2908,18 @@ function tickComposePerform() {
     }
   }
 
+  // Idle-window selection: armed recording keeps the short AFK timeout; an
+  // un-armed jam gets the long jam timeout; anything else never auto-stops.
+  const idleTimeoutMs = anyArmed
+    ? composeEngine.getAfkTimeoutMs()
+    : (g.jamActive ? JAM_IDLE_TIMEOUT_MS : Infinity);
+
   composeEngine.tick({
     now: performance.now(),
     audioNow: getAudioContext().currentTime,
     isPlaying: playback.isPlaying(),
     phase: g.phase,
-    recordArmed: anyArmed,
+    idleTimeoutMs,
     countdownStartedAt: g.countdownStartedAt,
     playbackBeat,
     onCountdownElapsed: startComposePerformPlayback,
@@ -2888,7 +2940,6 @@ function tickComposePerform() {
 function startComposePerformPlayback() {
   const st = store.getState();
   const comp = st.composition;
-  const compLength = getCompositionLength(comp);
   // Record forces Scroll Canvas on, so the rail is visible. Start from whichever beat
   // the user sees under the rail right now rather than the stored position.
   const r = canvasContainer.getBoundingClientRect();
@@ -2905,7 +2956,7 @@ function startComposePerformPlayback() {
     endBeat = lEnd;
     loopStart = lStart;
   } else {
-    endBeat = Math.max(compLength, startBeat) + 10_000;
+    endBeat = OPEN_END_BEAT;
   }
   playback.play(comp, startBeat, endBeat, loopStart);
   store.setPlaybackState('playing');
@@ -2945,9 +2996,7 @@ function composeToggleArmed() {
     store.setPerformPhase('playing');
     composeEngine.startSession(performance.now());
     if (!playback.isLoopEnabled()) {
-      const pos = playback.getPositionBeats();
-      const comp = store.getComposition();
-      playback.setPlayRange(0, Math.max(getCompositionLength(comp), pos) + 10_000);
+      playback.setPlayRange(0, OPEN_END_BEAT);
     }
     return;
   }
@@ -2957,6 +3006,53 @@ function composeToggleArmed() {
   store.setPerformArmed(true);
   store.setPerformCountdownStartedAt(getAudioContext().currentTime);
   store.setPerformPhase('countdown');
+  composeEngine.startSession(performance.now());
+}
+
+/** Toggle the free-running jam clock (BACKLOG 10.1). Starts instantly — no
+ *  countdown, nothing armed: the transport rolls open-ended (or around the
+ *  loop range when Loop is on), LMB perform sounds tones, magnetic snap is
+ *  live, and nothing is recorded until the user arms Record mid-jam. */
+function jamToggle() {
+  const g = store.getState().performance;
+  if (g.jamActive) {
+    composePerformStop();
+    store.setPlaybackState('stopped');
+    return;
+  }
+  // A record session owns the transport — don't fight it.
+  if (g.recordArmed || g.phase === 'countdown') return;
+
+  ensureResumed();
+  store.setJamActive(true);
+  if (playback.isPlaying()) {
+    // Convert running playback into a jam: open the end (Loop off) and keep rolling.
+    if (!playback.isLoopEnabled()) playback.setPlayRange(0, OPEN_END_BEAT);
+  } else {
+    const comp = store.getComposition();
+    const r = canvasContainer.getBoundingClientRect();
+    // Jam forces the scrolling view (effectiveScrollCanvas), so start from the
+    // beat the user sees under the rail — same convention as Record.
+    let startBeat = Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
+    let endBeat = OPEN_END_BEAT;
+    let loopStart = 0;
+    if (playback.isLoopEnabled()) {
+      const lStart = comp.loopStartBeats;
+      const lEnd = comp.loopEndBeats;
+      if (startBeat < lStart || startBeat >= lEnd) startBeat = lStart;
+      endBeat = lEnd;
+      loopStart = lStart;
+    }
+    playback.play(comp, startBeat, endBeat, loopStart);
+    store.setPlaybackState('playing');
+    updatePlayState(true);
+    // Snap viewport immediately to avoid first-frame flash.
+    scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
+    bgDirty = true;
+  }
+  // Phase 'playing' turns on the engine tick's loop-wrap detection (planchette
+  // flash when jamming over a loop) and the idle-timeout check.
+  store.setPerformPhase('playing');
   composeEngine.startSession(performance.now());
 }
 
@@ -2976,6 +3072,7 @@ function composePerformStop() {
   composeEngine.stopSession();
   store.setPerformPhase('idle');
   store.setPerformArmed(false);
+  store.setJamActive(false);
   store.setPerformCountdownStartedAt(0);
   store.setPerformLmbSounding(false);
   updatePlayState(false);
@@ -3001,6 +3098,9 @@ fgCanvas.addEventListener('mousemove', (e) => {
   const rect = fgCanvas.getBoundingClientRect();
   const sy = e.clientY - rect.top;
   composeUpdatePlanchette(sy);
+  // Cursor movement counts as presence for the idle auto-stop — an un-armed
+  // jam has no captureSample activity marks, so this is its heartbeat.
+  if (isComposePerformActive()) composeEngine.markActivity(performance.now());
   if (composeEngine.isLmbDown()) {
     const p = store.getState().performance.planchettes[0];
     if (p?.snappedWorldY != null) updateComposePerformPitch(p.snappedWorldY);
@@ -3073,6 +3173,7 @@ window.addEventListener('mousemove', (e) => {
       && e.clientY >= rect.top && e.clientY <= rect.bottom) return;
   const sy = e.clientY - rect.top;
   composeUpdatePlanchette(sy);
+  composeEngine.markActivity(performance.now());
   const p = store.getState().performance.planchettes[0];
   if (p?.snappedWorldY != null) updateComposePerformPitch(p.snappedWorldY);
 });
@@ -3136,13 +3237,15 @@ function updateCountdownOverlayDom(state: AppState) {
 function updateAfkWarningDom(state: AppState) {
   const g = state.performance;
   const armed = g.recordArmed || state.midiArmedTrackId !== null;
-  const shouldShow = armed && g.phase === 'playing' && playback.isPlaying();
+  const shouldShow = (armed || g.jamActive) && g.phase === 'playing' && playback.isPlaying();
   if (!shouldShow) {
     if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
     return;
   }
   const idleMs = composeEngine.getIdleMs(performance.now());
-  const timeoutMs = composeEngine.getAfkTimeoutMs();
+  // Mirror the timeout selection in tickComposePerform so the popup countdown
+  // races the same window the engine will actually fire on.
+  const timeoutMs = armed ? composeEngine.getAfkTimeoutMs() : JAM_IDLE_TIMEOUT_MS;
   const remainingMs = timeoutMs - idleMs;
   if (remainingMs > AFK_WARNING_LEAD_MS) {
     if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');

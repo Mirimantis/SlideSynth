@@ -293,9 +293,18 @@
     <li>With the Scroll switch on <strong>Planchette</strong>, Playback stays classic — the playhead moves across a fixed canvas and LMB runs the active XY tool as usual.</li>
   </ul>
 
+  <h3>Jamming</h3>
+  <ul>
+    <li><strong>J</strong> or the blue <strong>Jam</strong> button starts a <strong>free-running clock</strong>: the canvas scrolls at the composition's BPM with no fixed end, nothing armed, and nothing recorded. Hold LMB to play the selected track's tone — pure noodling, no countdown.</li>
+    <li>Jam forces the Scroll switch to <strong>Canvas</strong> and starts from the rail's current beat. With <strong>Loop</strong> on, the jam cycles the loop range instead of running open-ended.</li>
+    <li>Magnetic snap is fully live while jamming — and pitch gravity now settles even when the transport is stopped (e.g. hovering while armed, before the countdown ends).</li>
+    <li>Press <kbd>J</kbd> again, <kbd>Space</kbd>, <kbd>Escape</kbd>, Pause, or Stop to end the jam. You can arm <strong>Record</strong> (<kbd>R</kbd>) mid-jam to start capturing without stopping the clock.</li>
+    <li>An un-armed jam auto-stops after <strong>10 minutes</strong> of inactivity (the warning popup appears 30 seconds before). Moving the mouse over the canvas counts as activity.</li>
+  </ul>
+
   <h3>Recording</h3>
   <ul>
-    <li><strong>R</strong> or the red <strong>Record</strong> button arms recording. From Idle it runs a 3-second countdown then starts Playback. If Playback is already running, it arms immediately with no countdown. Recording forces the Scroll switch to <strong>Canvas</strong>.</li>
+    <li><strong>R</strong> or the red <strong>Record</strong> button arms recording. From Idle it runs a 3-second countdown then starts Playback. If Playback is already running (including a jam), it arms immediately with no countdown. Recording forces the Scroll switch to <strong>Canvas</strong>.</li>
     <li>While recording, each LMB press/release captures a curve onto the selected track. The curve is simplified and auto-smoothed on release, so the result is fully editable afterward. A live trail follows the planchette as you record, showing the path being captured; on release it's replaced by the simplified curve.</li>
     <li><strong>Escape</strong> during the countdown or recording stops and returns to Idle.</li>
     <li>Recording continues past the composition end so you can extend phrases or capture silence; an AFK timeout stops it after 1 minute of inactivity (a warning popup appears at 30s with a countdown to the stop). The timeout is suppressed while <strong>Loop</strong> is on, while the playhead hasn't yet reached the rightmost control point (there's still existing content to record over), and while MIDI keys are being played.</li>
@@ -947,6 +956,7 @@
     <tr><th>Key</th><th>Action</th></tr>
     <tr><td><kbd>Space</kbd></td><td>Play / Pause (hold for live preview in Draw mode / while scrubbing)</td></tr>
     <tr><td><kbd>R</kbd></td><td>Arm / disarm Record</td></tr>
+    <tr><td><kbd>J</kbd></td><td>Start / stop Jam (free-running clock, nothing recorded)</td></tr>
     <tr><td><kbd>Escape</kbd></td><td>Cancel countdown / stop recording</td></tr>
     <tr><td><kbd>L</kbd></td><td>Toggle loop</td></tr>
     <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>

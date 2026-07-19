@@ -118,6 +118,15 @@ export const DEFAULT_MAGNETIC_DAMPING = 3;
 export const MIN_CANVAS_EXTENT = 32;    // empty composition still has a usable grid
 export const SCROLL_BUFFER = 64;        // generous open space past the last point
 export const MAX_CANVAS_EXTENT = 10000; // memory cap (~83 min at 120 BPM)
+/** End of the "open-ended" play range used by jam mode and loop-off recording.
+ *  Tied to MAX_CANVAS_EXTENT so the free-running clock stops exactly where the
+ *  viewport (and memory budget) ends — the practical "endless" ceiling. */
+export const OPEN_END_BEAT = MAX_CANVAS_EXTENT;
+
+// ── Jam mode ────────────────────────────────────────────────────
+/** Idle auto-stop for an un-armed jam session (no recording at stake, so much
+ *  longer than the armed-recording AFK timeout). 10 minutes. */
+export const JAM_IDLE_TIMEOUT_MS = 600_000;
 
 // ── Viewport defaults ───────────────────────────────────────────
 export const DEFAULT_ZOOM_X = 120;   // pixels per beat
