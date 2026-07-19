@@ -200,19 +200,80 @@ Items that came up while building Phase 6 but are independent features. Each bec
 
 ## Phase 9 — Performance & architecture (from full-codebase review)
 
-Surfaced during a full-repo architecture/performance review done alongside the cents + lanes refactor (PR #60). These are the items that refactor unblocked but didn't itself implement — mostly prep work for the jam/looper direction in [.claude/plans/performance-jam-looper-plan.md](.claude/plans/performance-jam-looper-plan.md).
+Surfaced during a full-repo architecture/performance review done alongside the cents + lanes refactor (PR #60). These are the items that refactor unblocked but didn't itself implement — mostly prep work for the jam/looper direction in [performance-jam-looper-plan.md](performance-jam-looper-plan.md).
 
-- [ ] **9.1 Voice-pool playback engine + loop restart reuse** *(L, perf, own planning session)*
+- [x] **9.1 Voice-pool playback engine + loop restart reuse** *(L, perf, PR #61)*
+  *(Shipped — the text below describes the pre-refactor design; `createTrackSynths` is now `reconcileTrackPools` in [src/audio/playback.ts](src/audio/playback.ts), pools sized via `computeVoiceAssignment`, loop restarts reuse the pool.)*
   `createTrackSynths` in [src/audio/playback.ts](src/audio/playback.ts) allocates one always-running oscillator+gain `ToneSynth` per curve at play start — a composition with hundreds of short notes runs hundreds of concurrent (mostly silent) voice chains. Every loop wrap tears the whole pool down and rebuilds it (`stop(); play(...)` in `scheduleAhead`), which is an allocation spike at exactly the moment a live looper can least afford one. Needs a voice pool sized to max simultaneous overlap (derivable from curve time ranges), with curves checked in/out as the playhead reaches them and loop restarts that reuse the pool instead of rebuilding it. This is the looper's foundation — sequence before jam/loop UI work.
 
 - [ ] **9.2 fgDirty flag + Path2D curve caching** *(M, perf)*
   `render()` in [src/main.ts](src/main.ts) clears and repaints the entire foreground canvas (every curve, every frame) even when nothing changed — the background layer already has a `bgDirty` flag, the foreground has nothing. Add a mirrored `fgDirty` set by store notifications / interaction / playback so idle CPU drops to near zero. During active playback almost everything *is* dirty every frame regardless, so also cache each curve's tessellated shape as a `Path2D` keyed by curve identity (invalidated on edit) so steady-state cost is a transform instead of re-evaluating every cubic segment.
 
 - [ ] **9.3 History: externalize raw-take blobs before raw-take retention lands** *(M, perf — coordinate with raw-take-retention design)*
-  `cloneComposition` in [src/state/history.ts](src/state/history.ts) deep-clones the whole composition via `JSON.parse(JSON.stringify(...))` on every snapshot, keeping up to 50. Fine today (compositions are small); not fine once the plan's raw-take retention (~1 MB/voice at 100–200 Hz) lands — 50 multi-MB clones is GC-visible garbage churned mid-jam, which is the worst possible time for a pause. Settle this *before* raw-take retention is built, not after: keep raw-take blobs outside the snapshotted composition (referenced by id in a separate immutable pool) or move history to structural-sharing / patch-based snapshots. Also the natural place to decide the plan's open "undo last layer vs. edit-undo — one stack or two?" question.
+  `cloneComposition` in [src/state/history.ts](src/state/history.ts) deep-clones the whole composition via `JSON.parse(JSON.stringify(...))` on every snapshot, keeping up to 50. Fine today (compositions are small); not fine once the plan's raw-take retention (~1 MB/voice at 100–200 Hz) lands — 50 multi-MB clones is GC-visible garbage churned mid-jam, which is the worst possible time for a pause. Settle this *before* raw-take retention is built, not after: keep raw-take blobs outside the snapshotted composition (referenced by id in a separate immutable pool) or move history to structural-sharing / patch-based snapshots. The plan's open "undo last layer vs. edit-undo" question is **decided (2026-07-19): one stack, semantic key** — each kept loop pass is exactly one undo entry, and "undo last layer" (10.4) is a targeted undo of the most recent kept pass; the design session inherits this.
 
 - [ ] **9.4 MIDI velocity: live input → recorded volume, then MIDI export** *(M–L, feature)*
-  MIDI file import already threads velocity into the volume lane ([src/export/midi-import.ts](src/export/midi-import.ts)); live MIDI input still discards it (`void velocity;` at [src/main.ts:1082](src/main.ts)) — wiring it into the recording's volume lane is the small first step and stands up the plan's "dynamics bus: MIDI" item. No MIDI export exists yet ([src/export](src/export) has only JSON and WAV); now that pitch is canonical in cents (¢÷100 = MIDI note + bend fraction), export is mechanical: sample each curve, emit note-on at the nearest semitone plus a pitch-bend stream for the continuous deviation (one channel per simultaneous curve ≈ MPE), volume-lane value at note-on → velocity, continuous volume → CC11/channel pressure. [src/export/midi-import.test.ts](src/export/midi-import.test.ts) gives a round-trip test harness for free (export → import → compare).
+  MIDI file import already threads velocity into the volume lane ([src/export/midi-import.ts](src/export/midi-import.ts)); live MIDI input still discards it (`void velocity;` at [src/main.ts:1082](src/main.ts)) — wiring it into the recording's volume lane is the small first step and stands up the plan's "dynamics bus: MIDI" item. No MIDI export exists yet ([src/export](src/export) has only JSON and WAV); now that pitch is canonical in cents (¢÷100 = MIDI note + bend fraction), export is mechanical: sample each curve, emit note-on at the nearest semitone plus a pitch-bend stream for the continuous deviation (one channel per simultaneous curve ≈ MPE), volume-lane value at note-on → velocity, continuous volume → CC11/channel pressure. [src/export/midi-import.test.ts](src/export/midi-import.test.ts) gives a round-trip test harness for free (export → import → compare). *Note: the live-velocity first step is sequenced as 11.2 (rides the dynamics bus); MIDI/MPE export stays here.*
+
+---
+
+## Phase 10 — Jam mode & live looper
+
+First slice of [performance-jam-looper-plan.md](performance-jam-looper-plan.md) (decisions recorded there, 2026-07-19). Sequenced: 10.1 is the foundation; 10.2–10.6 build on it. Jam-mode defaults: time-axis beat-snap **off** (toggle available), clock tempo = composition BPM.
+
+- [ ] **10.1 Free-running jam clock** *(M–L)*
+  Formalize jam/perform mode: the clock free-runs with nothing armed — canvas scrolls, sound on, no fixed composition length. Replace the `endBeat = compLength + 10_000` hack in `startComposePerformPlayback` ([src/main.ts](src/main.ts)) with a real open-ended play range. Give magnetic snap a time base independent of active perform (today the physics ticks off `playback.getPositionBeats()` and only runs during LMB perform in `computeComposeCursorPitch` — use wall-clock dt when the transport is idle) so pitch gravity is live at rest. X beat-snap defaults off in jam mode.
+
+- [ ] **10.2 Rolling buffer + "keep that" retrospective capture** *(L, own planning session)*
+  ~30s (tunable) rolling gesture buffer in musical time, running continuously during jam. A "keep that" key commits the just-played phrase into a curve after the fact. Phrases crossing the loop seam reuse the 8.21 loop-wrap split (two contiguous curves). Session inputs: key bindings, "first take defines loop region" alternative to preset in/out, buffer retention policy.
+
+- [ ] **10.3 Layer-per-pass looping** *(M)*
+  Each kept/recorded pass becomes its own track (inheriting tone + volume; mute/solo per layer via the existing track panel — layers = tracks per the plan doc). Leans on 8.23's non-active-track dimming for visual layering; remaining visual-distinguishability polish (color assignment, layer list affordances) scoped inside this item.
+
+- [ ] **10.4 Undo last layer** *(S–M)*
+  Semantic key on the single existing undo stack ([src/state/history.ts](src/state/history.ts)): each kept pass = exactly one snapshot; the key performs a targeted undo of the most recent kept pass. No separate layer history, no mode-dependent undo (decided 2026-07-19).
+
+- [ ] **10.5 Deliberate "record next full pass"** *(M)*
+  Arm to record exactly one loop-length pass, auto-committing at the wrap — the structured-material capture style (drones, harmony beds), complementing 10.2's serendipitous leads.
+
+- [ ] **10.6 Live loop in/out taps, bar-quantized** *(S–M)*
+  Set loop points mid-jam by key; quantize taps to the nearest bar (absorbs reaction delay). Optional classic-looper behavior: a late tap reads as the previous boundary and snaps the playhead back. Dragged ruler markers keep today's fine-grid snapping (`snapBeatForMarker` in [src/canvas/interaction.ts](src/canvas/interaction.ts)) — bar-quantize applies to taps only (decided 2026-07-19).
+
+---
+
+## Phase 11 — Dynamics bus
+
+The plan doc's dynamics-axis direction: one shared normalized channel that drives live synth amplitude and records into the currently-recording voice's volume lane; every input device is then a thin adapter. Build order per the plan: swell → MIDI → pen → gamepad.
+
+- [ ] **11.1 Dynamics bus + key-held swell** *(M)*
+  Stand up the bus: keydown ramps up, keyup decays. Replaces the hardcoded `volume: 0.8` in `captureComposeRecordingSample` ([src/main.ts](src/main.ts)) / flat 2-point volume lane in `curveFromRecording` ([src/model/curve.ts](src/model/curve.ts)) with continuous bus samples. Per-voice on capture, not global.
+
+- [ ] **11.2 MIDI velocity + CC/expression + MIDI-learn** *(M)*
+  Stop discarding live velocity (`void velocity;` at [src/main.ts:1082](src/main.ts)) — the first half of 9.4. Add CC + channel-pressure decode in [src/audio/midi-input.ts](src/audio/midi-input.ts) (currently note-on/off + pitch bend only) feeding the bus, plus MIDI-learn so any controller/pedal maps. Optional, never a prerequisite.
+
+- [ ] **11.3 Pointer Events migration + pen pressure/tilt** *(M)*
+  Migrate [src/canvas/interaction.ts](src/canvas/interaction.ts) from legacy mouse events to Pointer Events; pen pressure feeds the bus; capture tilt now even though its use (vibrato/timbre) is decided later. Pen-vs-mouse detection + adjustable sensitivity curve.
+
+- [ ] **11.4 Gamepad analog input** *(S–M)*
+  Poll the Gamepad API in the existing frame loop; analog trigger/stick feeds the bus; "pick your control" mapping step for hardware variance.
+
+---
+
+## Phase 12 — Harmony & format guardrails
+
+Unification and portability items from the plan doc. 12.1 is sequenced after Phase 10 (needs real beds to snap to); 12.2–12.3 can land any time; 12.4 waits on 9.3.
+
+- [ ] **12.1 Snap-target composition + snap-to-sounding-harmony** *(L, own planning session, after Phase 10)*
+  First define how gravity sources combine into one target set — today Prism projection targets *replace* scale/chromatic/guides while active, guides are additive, scale vs. chromatic are exclusive ([src/utils/snap.ts](src/utils/snap.ts)). Then let the currently sounding bed (drone or Prism chord) become the magnetic target so the lead snaps to the live harmony. Session also owns: dense-bed resolution (nearest/weighted/limited targets), current-temperament vs. pure-JI against the drone.
+
+- [ ] **12.2 `.glisskit` + Import-settings verb** *(M)*
+  Per the settled two-extensions/two-verbs design in the plan doc: same envelope schema; extension picks the default verb (`.gliss` → Open, `.glisskit` → Import settings); a **File ▸ Import settings…** action reads only `tuning`/`snap` from any conforming file. `kind` becomes advisory. Touch [src/export/json-export.ts](src/export/json-export.ts) + file-open wiring in [src/main.ts](src/main.ts).
+
+- [ ] **12.3 Round-trip preservation of unknown top-level envelope sections** *(S)*
+  `serializeComposition` ([src/export/json-export.ts](src/export/json-export.ts)) rebuilds the envelope from a fixed key set, so unknown top-level sections (e.g. a future `hostSettings`) are dropped on load→save; unknown keys nested in `composition` already survive. Carry unknown envelope keys through verbatim — this is the cross-runtime round-trip rule the plan doc depends on.
+
+- [ ] **12.4 Raw-take retention** *(L, own planning session, after 9.3)*
+  Keep the high-res capture stream alongside the fitted Bezier (RAW vs. JPEG framing in the plan doc). Session inputs: authority policy (raw = immutable original, edited Bezier wins playback), kept-takes-only retention, persist rate (100–200 Hz) + encoding (delta + fixed-point + gzip), inline arrays vs. zip-style container, pre- vs. post-snap capture. Must follow 9.3 (history externalization) so multi-MB blobs never enter the undo clone path.
 
 ---
 

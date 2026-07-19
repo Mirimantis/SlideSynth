@@ -6,7 +6,28 @@ Glissandograph is a browser-based music composition app where users draw Bezier 
 
 ## Core Concept
 
-Traditional music notation uses discrete note symbols. Glissandograph replaces this with **vector curves**: the user draws Bezier paths across a chromatic staff using a pen tool (similar to Illustrator). The vertical position of the curve controls pitch continuously, enabling smooth glides between notes. Each control point also carries a volume value, allowing fade-in/fade-out dynamics.
+Traditional music notation uses discrete note symbols. Glissandograph replaces this with **vector curves**: the user draws Bezier paths across a chromatic staff using a pen tool (similar to Illustrator). The vertical position of the curve controls pitch continuously, enabling smooth glides between notes. Each curve also carries a **volume lane** — an independent Bezier envelope for fade/swell dynamics (see Data Models).
+
+## North Star & Product Architecture
+
+> **Pitch is a continuous field. "Notes" are optional landmarks within it — gravity wells you can lean on or ignore.**
+
+Magnetic snap is this inversion made tangible: adjustable gravity, not a mandatory grid. Scale lines, just-intonation targets, and (future) snap-to-sounding-harmony are all gravity-well configurations over the same field. The instrument's ancestor is **the voice**, not the keyboard — pitch *and* volume shaped continuously through one sustained tone; loop layers assemble a choir.
+
+**The browser app is the studio.** Planned future ports are *players/performers* consuming the same files, not second editors (none are being built yet — full thinking in [performance-jam-looper-plan.md](performance-jam-looper-plan.md)):
+
+- **VST plugin** — an MPE / note-expression *generator* driving downstream synths.
+- **VCV Rack module** — a CV source (pitch → 1V/oct via `V = (cents − 6000)/1200`; lanes → CV outs; poly cables give a natural 16-track ceiling), with player-performer scope.
+- **Motorized-fader hardware** — the gravity wells rendered as force (magnetic strength = motor force), talking a snap-target-map protocol over Web Serial.
+
+**Guardrails honored now** so those ports stay cheap to start:
+
+1. **Frozen cents anchor:** canonical pitch is cents from C-1 (MIDI 0 ≈ 8.1758 Hz); the anchor never changes. Concert pitch (Tune A4) rides on top and never rewrites stored curves.
+2. **Musical time in beats**, never seconds.
+3. **Generic lanes:** every automatable variable is the same lane primitive; the reserved per-lane `gravity` field round-trips verbatim.
+4. **Round-trip rule:** re-saving a file must preserve unknown sections verbatim so files survive crossing runtimes (top-level envelope gap tracked as BACKLOG 12.3).
+5. **The `tuning` + `snap` envelope sections are the portable "gravity map"** — the same payload the hardware protocol and plugin ports will consume.
+6. **Timbre is browser-only.** The shared contract is gesture + gravity map + structure; host-specific settings belong in namespaced advisory blocks.
 
 ## Tech Stack
 
@@ -21,7 +42,7 @@ Traditional music notation uses discrete note symbols. Glissandograph replaces t
 
 **Why no React/Vue/Svelte?** The UI is ~90% canvas. The only DOM elements are the toolbar, tone builder dialog, tone picker popup, and track/property panels. These are simple enough that vanilla DOM manipulation is cleaner than a framework fighting with imperative canvas code.
 
-**Note on MIDI:** MIDI *export* was considered but deferred. MIDI's note-based model doesn't naturally support the continuous pitch modulation that is Glissandograph's core feature. Approximation via pitch bend events is possible but lossy. WAV export provides exact reproduction and is the recommended output format. MIDI *import* is supported — MIDI notes are converted to Bezier curves (one curve per note, with pitch bends applied).
+**Note on MIDI:** MIDI *export* doesn't exist yet, but the cents canon makes it near-mechanical (¢ ÷ 100 = MIDI note + bend fraction) — planned as an MPE-style export (BACKLOG 9.4). WAV export remains the exact-reproduction output. MIDI *import* is supported (notes → Bezier curves, pitch bend folded in), and *live MIDI input* records to curves, including the pitch-bend wheel.
 
 ## Architecture Decisions
 
@@ -33,9 +54,9 @@ Two `<canvas>` elements stacked via CSS absolute positioning:
 
 This avoids the main performance bottleneck: redrawing hundreds of grid lines 60 times per second when only the curves or playhead change.
 
-### 2. Persistent Oscillator per Track
+### 2. Voice-Pool Playback per Track
 
-Rather than creating/destroying OscillatorNodes per note (which causes audio clicks), each track maintains a **single OscillatorNode** for the duration of playback. Pitch and volume are controlled entirely through `AudioParam` scheduling. Gain ramps to zero in gaps between curves. This produces the smooth continuous sound that is the core value of Glissandograph.
+Rather than creating/destroying OscillatorNodes per note (which causes audio clicks), each track maintains a **pool of persistent synth voices** sized to its maximum simultaneous curve overlap (`reconcileTrackPools` + `computeVoiceAssignment` in [src/audio/playback.ts](src/audio/playback.ts)). Curves are assigned to voice slots; pitch and volume are controlled entirely through `AudioParam` scheduling, with gain ramped to zero between curves. Loop restarts **reuse** the pool instead of tearing it down — no allocation spike at the wrap, which matters for live looping. This produces the smooth continuous sound that is the core value of Glissandograph.
 
 ### 3. Lookahead Audio Scheduler
 
@@ -71,14 +92,14 @@ Each tone defines a synthesizer voice that can be modulated to any pitch:
 
 Four preset tones are included: Pure Sine, Bright Square, Warm Pad, and Buzzy Saw.
 
-### ControlPoint
-Each point on a Bezier curve carries:
-- **Position:** `(x, y)` where x = time in beats, y = continuous MIDI note number (60.0 = C4, 60.5 = quarter-tone)
-- **Handles:** Incoming and outgoing control handles (relative to position) defining curve shape
-- **Volume:** 0.0–1.0 at this point, interpolated along the curve
+### Lane & LanePoint
+Every automatable variable is the same primitive — a Bezier graph-editor curve — differing only in its Y value-domain:
+- **Lane:** `type` (`'pitch' | 'volume'`, more reserved), `unit` (`'cents' | 'normalized'`), `range` (Y-domain clamp), ordered `points`, and an optional `gravity` field reserved for per-lane gravity-well maps (round-trips verbatim).
+- **LanePoint:** `position` `(x, y)` where x = time in beats and y = the lane's value, plus incoming/outgoing handles (relative) defining curve shape.
+- **Pitch canon:** the pitch lane's y is **cents from a frozen anchor at C-1** (MIDI 0 ≈ 8.1758 Hz): 100 ¢ = semitone, ¢ ÷ 100 = MIDI note number, A4=440 sits at 6900 ¢. Concert pitch (Tune A4, stored as `tuningOffsetCents`) rides on top without changing stored curves.
 
 ### BezierCurve
-An ordered list of ControlPoints with increasing X. Between consecutive points P[i] and P[i+1], a cubic Bezier segment is defined by:
+A `lanes[]` array where `lanes[0]` is always the pitch lane (constructor-enforced), plus an optional `groupId` for chord groups (Harmonic Prism). Within a lane, between consecutive points P[i] and P[i+1], a cubic Bezier segment is defined by:
 - P0 = P[i].position
 - P1 = P[i].position + P[i].handleOut
 - P2 = P[i+1].position + P[i+1].handleIn
@@ -93,7 +114,8 @@ Top-level document: BPM, beats per measure, total length in beats, array of trac
 ## Staff Configuration
 
 - **Note range:** C0–C9 (9 octaves, 108 chromatic note lines)
-- **Grid snap:** Each note line (Y) and each 1/16 beat (X) is a snap position
+- **Grid snap:** Adaptive subdivisions on X; on Y, snap targets come from the selected scale (~27 scales incl. microtonal/24-TET), chromatic fallback, user-placed guides (additive), or Harmonic Prism projection echoes (exclusive while active)
+- **Magnetic snap:** an alternative spring-physics mode — elastic cursor coupling plus proximity attraction toward snap lines, with user-tunable strength/spring/damping; enables on-pitch vibrato against a gravity well
 - **Free placement:** Press **S** to toggle snap on/off (shown as a toolbar button)
 - **Zoom:** Independent X (time) and Y (pitch) zoom via scroll wheel (Ctrl+wheel for Y)
 
@@ -179,8 +201,8 @@ Context-sensitive right panel:
 
 ## Export
 
-### JSON (Save/Load)
-Compositions are serialized as versioned JSON files. The format preserves the complete composition structure including all tracks, curves, control points, and the tone library. Load replaces the current composition entirely.
+### `.gliss` (Save/Load)
+Compositions are serialized as a versioned JSON envelope saved with the `.gliss` extension: `{ app: "glissandograph", formatVersion, kind, meta?, tuning?, snap?, composition }`. `tuning` and `snap` live at the top level so preset tooling and galleries can read them without parsing the whole piece — they are also the portable "gravity map" (see North Star guardrails). A migration chain upgrades older saves (v1 flat JSON → … → v4 unified lanes + cents canon); legacy `.json` files are still accepted on open. Load replaces the current composition entirely.
 
 ### WAV Export
 Uses `OfflineAudioContext` to render the full composition offline at 44100Hz stereo. The same synthesis code path (tone synth + curve sampler + scheduling) is used for both real-time playback and WAV export, guaranteeing identical output. The result is encoded as a standard 16-bit PCM WAV file.
@@ -189,6 +211,8 @@ Uses `OfflineAudioContext` to render the full composition offline at 44100Hz ste
 MIDI files (`.mid`, `.midi`) can be imported via the toolbar button. Each MIDI channel maps to a track, and each note event is converted to a two-point Bezier curve (note-on to note-off). Pitch bend events are applied to adjust the curve's Y position. Tracks are auto-assigned tones from the default library in round-robin fashion. Composition BPM and total length are derived from the MIDI file's tempo and duration.
 
 ## Implementation Status
+
+Original build phases below (all complete). Ongoing work is tracked in [BACKLOG.md](BACKLOG.md); the long-range performance/jam/looper and ports direction lives in [performance-jam-looper-plan.md](performance-jam-looper-plan.md).
 
 | Phase | Focus | Status |
 |-------|-------|--------|
@@ -205,6 +229,8 @@ MIDI files (`.mid`, `.midi`) can be imported via the toolbar button. Each MIDI c
 | 11 | UX Polish (extended range, snap toggle, shortcuts) | Complete |
 
 ## File Structure
+
+Snapshot from the original build phases — the tree has since grown (lane model, magnetic snap, loop markers, MIDI input, Harmonic Prism panel, etc.); see `src/` for the current module list.
 
 ```
 Glissandograph/
