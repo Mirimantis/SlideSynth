@@ -308,4 +308,4 @@ Implementation may begin on the transferred items (BACKLOG Phases 10–12) once 
 - [x] Open questions above resolved or explicitly deferred *(2026-07-19: interview — remaining ones assigned to per-item planning sessions or the THINKING sections)*.
 - [x] Parking-lot features triaged (parking lot currently empty).
 - [x] Broken into sequenced, sized items and moved to `BACKLOG.md` *(Phases 10–12; hardware / VST / VCV / business sections intentionally not transferred — still THINKING)*.
-- [ ] A dedicated build plan exists for the first item (10.1) — next step when build starts.
+- [x] A dedicated build plan exists for the first item (10.1) — [.claude/plans/10.1-free-running-jam-clock.md](.claude/plans/10.1-free-running-jam-clock.md) (2026-07-19). **Build may begin with 10.1.**
