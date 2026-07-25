@@ -37,3 +37,55 @@ export function computeVoiceAssignment(curves: BezierCurve[]): VoiceAssignment {
 
   return { assignment, voiceCount: voiceFreeAt.length };
 }
+
+/** Do two time ranges overlap? Touching endpoints don't count as overlap. */
+function overlaps(a: { start: number; end: number }, b: { start: number; end: number }): boolean {
+  return a.start < b.end && b.start < a.end;
+}
+
+/**
+ * Place curves that have no slot yet WITHOUT disturbing existing assignments.
+ *
+ * Used when curves appear mid-playback (a recorded take, a retrospective keep,
+ * a curve drawn while the transport runs). Re-running computeVoiceAssignment
+ * would be wrong here: it reassigns from scratch, so a curve that is currently
+ * sounding could be moved to a different pool voice mid-note, cutting its
+ * scheduled automation and glitching. Existing entries are therefore copied
+ * through untouched, and each new curve takes the first slot whose already-
+ * assigned curves don't overlap it, growing the pool only when none is free.
+ */
+export function assignNewCurves(
+  curves: BezierCurve[],
+  existing: Map<string, number>,
+  existingVoiceCount: number,
+): VoiceAssignment {
+  const assignment = new Map(existing);
+  const slots: Array<Array<{ start: number; end: number }>> = [];
+  for (let i = 0; i < existingVoiceCount; i++) slots.push([]);
+
+  const pending: Array<{ curve: BezierCurve; range: { start: number; end: number } }> = [];
+  for (const curve of curves) {
+    const range = getCurveTimeRange(curve);
+    if (!range) continue;
+    const slot = assignment.get(curve.id);
+    if (slot === undefined) {
+      pending.push({ curve, range });
+    } else {
+      while (slots.length <= slot) slots.push([]);
+      slots[slot]!.push(range);
+    }
+  }
+
+  pending.sort((a, b) => a.range.start - b.range.start);
+  for (const { curve, range } of pending) {
+    let placed = slots.findIndex(occupied => !occupied.some(o => overlaps(o, range)));
+    if (placed === -1) {
+      placed = slots.length;
+      slots.push([]);
+    }
+    slots[placed]!.push(range);
+    assignment.set(curve.id, placed);
+  }
+
+  return { assignment, voiceCount: slots.length };
+}
