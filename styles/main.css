@@ -930,6 +930,18 @@ body {
   background: #e53935;
 }
 
+/* Jam button — free-running clock (BACKLOG 10.1) */
+.jam-btn {
+  background: var(--surface);
+  color: #64b5f6;
+  border: 1px solid #335;
+}
+
+.jam-btn.jamming {
+  color: #fff;
+  background: #1976d2;
+}
+
 @keyframes recordPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }

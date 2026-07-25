@@ -13,7 +13,10 @@ export interface TickArgs {
   audioNow: number;             // audio context currentTime
   isPlaying: boolean;
   phase: PerformancePhase;
-  recordArmed: boolean;
+  /** Idle window before onAfkTimeout fires. The caller picks the timeout for
+   *  the current session kind (armed recording vs. un-armed jam); pass
+   *  Infinity to disable the idle auto-stop entirely. */
+  idleTimeoutMs: number;
   countdownStartedAt: number;
   playbackBeat: number;
   onCountdownElapsed: () => void;
@@ -156,7 +159,7 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
         }
         lastTickBeat = beat;
 
-        if (args.recordArmed && args.now - lastActivityAt > config.afkTimeoutMs) {
+        if (Number.isFinite(args.idleTimeoutMs) && args.now - lastActivityAt > args.idleTimeoutMs) {
           args.onAfkTimeout();
         }
       }

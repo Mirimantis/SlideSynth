@@ -146,6 +146,7 @@ function createInitialState(): AppState {
     performance: {
       phase: 'idle',
       recordArmed: false,
+      jamActive: false,
       countdownStartedAt: 0,
       lmbSounding: false,
       planchettes: [createInitialPrimaryPlanchette(null)],
@@ -395,6 +396,14 @@ class Store {
 
   setPerformArmed(on: boolean) {
     this.state.performance.recordArmed = on;
+    this.notify();
+  }
+
+  /** Toggle the free-running jam clock (BACKLOG 10.1). Distinct from
+   *  setPerformArmed — jam rolls the transport without capturing. */
+  setJamActive(on: boolean) {
+    if (this.state.performance.jamActive === on) return;
+    this.state.performance.jamActive = on;
     this.notify();
   }
 
