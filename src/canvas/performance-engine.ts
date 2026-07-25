@@ -82,10 +82,13 @@ export interface PerformanceEngine {
    */
   finalizeCurve(voiceId: VoiceId, onFirstCommit: () => void): BezierCurve | null;
   /**
-   * Retrospective capture (BACKLOG 10.2): convert the newest *closed* uncommitted
-   * phrase → curve and mark it committed. Unlike finalizeCurve this never takes an
-   * in-progress phrase, and it fires no history callback — the caller snapshots
-   * once per keep so each kept pass is exactly one undo entry.
+   * Retrospective capture (BACKLOG 10.2): convert the newest uncommitted phrase
+   * → curve and mark it committed, walking backward on repeat calls. Takes an
+   * in-progress phrase too, splitting it so the still-sounding gesture keeps
+   * capturing into a fresh phrase — required for lines held across a loop wrap,
+   * where the post-wrap half is still open when the player reaches for Keep.
+   * Fires no history callback: the caller snapshots once per keep so each kept
+   * pass is exactly one undo entry.
    */
   keepCurve(voiceId: VoiceId): BezierCurve | null;
   /** Voices holding a phrase that "keep that" could commit right now. */
@@ -158,10 +161,12 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
     open.closedAtMs = now;
   }
 
-  /** A phrase worth keeping: closed, uncommitted, and long enough to survive
-   *  curveFromRecording's minimum-duration guard. */
+  /** A phrase worth keeping: uncommitted and long enough to fit a curve.
+   *  In-progress phrases count — a gesture held across a loop wrap (or any
+   *  long sustained line) must be keepable without releasing first, or the
+   *  part you are still playing is unreachable. */
   function isKeepable(p: RecordedPhrase): boolean {
-    return !p.open && !p.committed && p.samples.length >= 2;
+    return !p.committed && p.samples.length >= 2;
   }
 
   /** Drop committed and aged-out phrases. Open phrases are never evicted. */
@@ -258,7 +263,41 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
     },
 
     keepCurve(voiceId) {
-      return takeCurve(newestUncommitted(voiceId, true));
+      const list = phrases.get(voiceId);
+      if (!list) return null;
+      // Walk newest → oldest. Phrases too short to fit are stepped over rather
+      // than silently swallowed, so one press always lands on real material.
+      for (let i = list.length - 1; i >= 0; i--) {
+        const p = list[i]!;
+        if (p.committed) continue;
+        if (p.samples.length < 2) continue;
+        const samples = p.samples.slice();
+        const curve = curveFromRecording(samples);
+        if (!curve) {
+          // Real samples but below the minimum gesture duration — consume it so
+          // a repeat press walks past instead of retrying the same scrap.
+          p.committed = true;
+          continue;
+        }
+        p.committed = true;
+        if (p.open) {
+          // The voice is still sounding: seal what we just kept and continue
+          // capturing into a fresh phrase, seeded with the last sample so the
+          // next curve picks up exactly where this one ended (and the monotonic
+          // guard has a baseline). Without this the rest of a held gesture
+          // would be written into an already-committed phrase and lost.
+          p.open = false;
+          p.closedAtMs = performance.now();
+          list.push({
+            samples: [samples[samples.length - 1]!],
+            open: true,
+            committed: false,
+            closedAtMs: 0,
+          });
+        }
+        return curve;
+      }
+      return null;
     },
 
     getKeepableVoiceIds() {

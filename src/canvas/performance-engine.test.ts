@@ -96,17 +96,65 @@ describe('performance engine — retrospective keep', () => {
     expect(engine.getKeepablePhraseCount()).toBe(0);
   });
 
-  it('never keeps an in-progress phrase', () => {
+  it('keeps an in-progress phrase and splits it so capture continues', () => {
     const engine = createPerformanceEngine(CONFIG);
     engine.beginPhrase('primary', 0);
     for (let i = 0; i <= 4; i++) {
       engine.captureSample('primary', { beat: i * 0.25, note: 6000 + i * 50, volume: 0.8 });
     }
-    // Still held — nothing to keep yet.
-    expect(engine.getKeepablePhraseCount()).toBe(0);
-    expect(engine.keepCurve('primary')).toBeNull();
+    // Held gestures are keepable without releasing first.
+    expect(engine.getKeepablePhraseCount()).toBe(1);
+    const kept = engine.keepCurve('primary');
+    expect(kept).not.toBeNull();
+
+    // The gesture is still sounding: further samples land in a fresh phrase,
+    // seeded so the continuation starts where the kept curve ended.
+    const trail = engine.getRecordingBuffers().get('primary');
+    expect(trail?.length).toBe(1);
+    expect(trail![0]!.beat).toBeCloseTo(1);
+    for (let i = 1; i <= 4; i++) {
+      engine.captureSample('primary', { beat: 1 + i * 0.25, note: 6200 + i * 50, volume: 0.8 });
+    }
     engine.closePhrase('primary', 500);
-    expect(engine.keepCurve('primary')).not.toBeNull();
+    const rest = engine.keepCurve('primary');
+    expect(rest).not.toBeNull();
+    // Continuation picks up where the kept part ended — nothing dropped.
+    expect(rest!.lanes[0]!.points[0]!.position.x).toBeCloseTo(1);
+  });
+
+  it('a line held across a loop wrap keeps both halves, newest first', () => {
+    // The reported bug: holding LMB through the loop point left the post-wrap
+    // half open, so Keep skipped it and took the sealed pre-wrap half instead.
+    const engine = createPerformanceEngine(CONFIG);
+    engine.beginPhrase('primary', 0);
+    for (let i = 0; i <= 4; i++) {
+      engine.captureSample('primary', { beat: 6 + i * 0.25, note: 6000 + i * 40, volume: 0.8 });
+    }
+    engine.closePhrase('primary', 1000);           // loop wrap seals the pre-wrap half
+    for (let i = 0; i <= 4; i++) {                 // still held; capture resumes at loop-in
+      engine.captureSample('primary', { beat: i * 0.25, note: 6300 + i * 40, volume: 0.8 });
+    }
+    expect(engine.getKeepablePhraseCount()).toBe(2);
+
+    const postWrap = engine.keepCurve('primary');  // in-progress half — newest
+    expect(postWrap).not.toBeNull();
+    expect(postWrap!.lanes[0]!.points[0]!.position.x).toBeCloseTo(0);
+
+    const preWrap = engine.keepCurve('primary');   // sealed half
+    expect(preWrap).not.toBeNull();
+    expect(preWrap!.lanes[0]!.points[0]!.position.x).toBeCloseTo(6);
+  });
+
+  it('steps over scraps too short to fit and lands on real material', () => {
+    const engine = createPerformanceEngine(CONFIG);
+    playPhrase(engine, 'primary', 0, 1000);        // real phrase
+    engine.beginPhrase('primary', 1100);           // scrap: two samples, ~0 beats long
+    engine.captureSample('primary', { beat: 9, note: 6000, volume: 0.8 });
+    engine.captureSample('primary', { beat: 9.001, note: 6001, volume: 0.8 });
+    engine.closePhrase('primary', 1200);
+    const kept = engine.keepCurve('primary');
+    expect(kept).not.toBeNull();
+    expect(kept!.lanes[0]!.points[0]!.position.x).toBeCloseTo(0);
   });
 
   it('a kept phrase is not keepable again', () => {

@@ -311,9 +311,10 @@
   <ul>
     <li><strong>K</strong> or the <strong>Keep</strong> button commits the phrase you most recently finished onto the selected track, at the beats where you actually played it. Nothing is quantized — the running clock already placed it in musical time.</li>
     <li>A <em>phrase</em> is one sounding span: LMB press to release. Pressing <kbd>K</kbd> repeatedly walks backward, keeping the phrase before that, and so on.</li>
-    <li>The Keep button <strong>lights up whenever there's something keepable</strong>, and stays lit after you stop the clock — so you can stop, realise the last bit was good, and still keep it.</li>
+    <li>The Keep button <strong>lights up whenever there's something keepable</strong> — including while you're still playing — and stays lit after you stop the clock, so you can stop, realise the last bit was good, and still keep it.</li>
     <li>Phrases stay keepable for <strong>30 seconds</strong> after they end, then age out of the buffer (the button goes dark).</li>
-    <li>Keep targets the phrase you just <em>finished</em>. If you press <kbd>K</kbd> while still holding LMB, it keeps the previous phrase; the one in progress becomes keepable when you release.</li>
+    <li>You don't have to let go first. Pressing <kbd>K</kbd> mid-gesture keeps what you've played so far and carries on capturing, so a long sustained line can be kept in pieces without breaking the note.</li>
+    <li>A line held across the <strong>loop point</strong> is split at the seam into two curves — one ending at loop-out, one starting at loop-in. Press <kbd>K</kbd> once for the part after the loop-back, again for the part before it.</li>
     <li>A Harmonic Prism chord cluster played as one gesture keeps as one group, exactly like an armed recording.</li>
     <li>Each keep is a single <strong>undo</strong> step — <kbd>Ctrl+Z</kbd> removes one kept phrase at a time.</li>
     <li>While Record is armed, gestures are already committed on release, so there's nothing left for Keep to find.</li>
