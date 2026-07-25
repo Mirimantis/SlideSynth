@@ -6,6 +6,33 @@ export interface PerformanceEngineConfig {
   afkTimeoutMs: number;
   recordingBufferMax: number;
   loopWrapThresholdBeats: number;
+  /** Retention window for closed phrases in the rolling capture buffer
+   *  (BACKLOG 10.2). Measured in wall-clock ms, not beats: a loop wrap runs
+   *  the beat counter backwards, so beat-based ageing would misbehave at
+   *  exactly the moment a looper is busiest. */
+  keepBufferMs: number;
+}
+
+/** Hard cap on retained phrases per voice — a backstop beside time-based
+ *  eviction so a pathological session can't grow the buffer without bound. */
+const MAX_PHRASES_PER_VOICE = 32;
+
+/**
+ * One sounding span of a single voice: LMB press → release, MIDI noteOn →
+ * noteOff, or either side of a loop-wrap split. Phrases are the unit both
+ * capture paths operate on — armed release finalizes the phrase it just
+ * closed, and retrospective "keep that" finalizes the newest closed phrase
+ * that hasn't been committed yet.
+ */
+export interface RecordedPhrase {
+  samples: RecordedSample[];
+  /** Still capturing (the voice is currently sounding). */
+  open: boolean;
+  /** Already turned into a curve — keep skips these, which is what makes
+   *  repeat keeps walk backward and armed recording a natural no-op. */
+  committed: boolean;
+  /** Wall clock at close; 0 while open. Drives eviction. */
+  closedAtMs: number;
 }
 
 export interface TickArgs {
@@ -31,22 +58,47 @@ export interface PerformanceEngine {
 
   markActivity(now: number): void;
 
-  /** Reset per-session flags (sessionHistorySnapshotted, lastTickBeat). Called on arm / re-arm. */
+  /** Reset per-session flags (sessionHistorySnapshotted, lastTickBeat). Called on arm / re-arm.
+   *  Deliberately does NOT drop captured phrases: arming mid-jam is a re-arm, and wiping
+   *  what the player just performed at that moment would defeat retrospective capture.
+   *  Time-based eviction ages the buffer out instead; clearAllPhrases() handles the hard
+   *  resets (composition load). */
   startSession(now: number): void;
-  /** Full teardown: clear buffers, drop lmbDown, reset session flags. Called on stop. */
+  /** Full teardown: close open phrases, drop lmbDown, reset session flags. Called on stop.
+   *  Retained phrases survive so "keep that" still works just after stopping. */
   stopSession(): void;
 
+  /** Open a capture phrase for a voice (LMB down, MIDI noteOn, loop-wrap reopen). */
+  beginPhrase(voiceId: VoiceId, now: number): void;
+  /** Close a voice's open phrase (LMB up, noteOff, loop wrap, stop). No-op if none open. */
+  closePhrase(voiceId: VoiceId, now: number): void;
   captureSample(voiceId: VoiceId, sample: RecordedSample): void;
   /**
-   * Convert buffered samples → curve, clear the buffer, return the curve for the caller
-   * to push onto a track. Fires `onFirstCommit` once per session before returning the
-   * first non-null curve (so the caller can snapshot history exactly once).
-   * Returns null if the gesture was too short or there are < 2 samples.
+   * Convert the newest uncommitted phrase → curve, mark it committed, and return
+   * the curve for the caller to push onto a track. Fires `onFirstCommit` once per
+   * session before returning the first non-null curve (so the caller can snapshot
+   * history exactly once). Used by the armed-release path, which takes the phrase
+   * it just closed. Returns null if the gesture was too short or has < 2 samples.
    */
   finalizeCurve(voiceId: VoiceId, onFirstCommit: () => void): BezierCurve | null;
+  /**
+   * Retrospective capture (BACKLOG 10.2): convert the newest *closed* uncommitted
+   * phrase → curve and mark it committed. Unlike finalizeCurve this never takes an
+   * in-progress phrase, and it fires no history callback — the caller snapshots
+   * once per keep so each kept pass is exactly one undo entry.
+   */
+  keepCurve(voiceId: VoiceId): BezierCurve | null;
+  /** Voices holding a phrase that "keep that" could commit right now. */
+  getKeepableVoiceIds(): VoiceId[];
+  /** Total keepable phrases across all voices — drives the Keep button's lit state. */
+  getKeepablePhraseCount(): number;
   clearBuffer(voiceId: VoiceId): void;
-  /** Read-only view of the per-voice in-flight sample buffers. Used by the
-   *  renderer to draw a live trail behind the planchette during recording. */
+  /** Drop every retained phrase for every voice (composition load / hard reset). */
+  clearAllPhrases(): void;
+  /** Read-only view of each voice's in-flight (open) phrase samples. Used by the
+   *  renderer to draw a live trail behind the planchette while sounding. Closed
+   *  phrases are excluded so the trail still vanishes on release, even though the
+   *  samples stick around for retrospective capture. */
   getRecordingBuffers(): ReadonlyMap<VoiceId, readonly RecordedSample[]>;
 
   tick(args: TickArgs): void;
@@ -63,20 +115,77 @@ export interface PerformanceEngine {
 }
 
 export function createPerformanceEngine(config: PerformanceEngineConfig): PerformanceEngine {
-  const recordingBuffers = new Map<VoiceId, RecordedSample[]>();
+  const phrases = new Map<VoiceId, RecordedPhrase[]>();
   let sessionHistorySnapshotted = false;
   let lastTickBeat: number | null = null;
   let lastLoopWrapAt = 0;
   let lmbDown = false;
   let lastActivityAt = 0;
 
-  function getBuffer(voiceId: VoiceId): RecordedSample[] {
-    let buf = recordingBuffers.get(voiceId);
-    if (!buf) {
-      buf = [];
-      recordingBuffers.set(voiceId, buf);
+  function getPhrases(voiceId: VoiceId): RecordedPhrase[] {
+    let list = phrases.get(voiceId);
+    if (!list) {
+      list = [];
+      phrases.set(voiceId, list);
     }
-    return buf;
+    return list;
+  }
+
+  function openPhraseOf(voiceId: VoiceId): RecordedPhrase | null {
+    const list = phrases.get(voiceId);
+    if (!list) return null;
+    const last = list[list.length - 1];
+    return last && last.open ? last : null;
+  }
+
+  /** Newest uncommitted phrase for a voice, optionally requiring it to be closed. */
+  function newestUncommitted(voiceId: VoiceId, requireClosed: boolean): RecordedPhrase | null {
+    const list = phrases.get(voiceId);
+    if (!list) return null;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const p = list[i]!;
+      if (p.committed) continue;
+      if (requireClosed && p.open) continue;
+      return p;
+    }
+    return null;
+  }
+
+  function closeOpenPhrase(voiceId: VoiceId, now: number): void {
+    const open = openPhraseOf(voiceId);
+    if (!open) return;
+    open.open = false;
+    open.closedAtMs = now;
+  }
+
+  /** A phrase worth keeping: closed, uncommitted, and long enough to survive
+   *  curveFromRecording's minimum-duration guard. */
+  function isKeepable(p: RecordedPhrase): boolean {
+    return !p.open && !p.committed && p.samples.length >= 2;
+  }
+
+  /** Drop committed and aged-out phrases. Open phrases are never evicted. */
+  function evictPhrases(nowMs: number): void {
+    for (const [voiceId, list] of phrases) {
+      if (list.length === 0) continue;
+      let next = list.filter(p =>
+        p.open || (!p.committed && nowMs - p.closedAtMs <= config.keepBufferMs),
+      );
+      if (next.length > MAX_PHRASES_PER_VOICE) {
+        next = next.slice(next.length - MAX_PHRASES_PER_VOICE);
+      }
+      if (next.length === list.length) continue;
+      if (next.length === 0) phrases.delete(voiceId);
+      else phrases.set(voiceId, next);
+    }
+  }
+
+  function takeCurve(p: RecordedPhrase | null): BezierCurve | null {
+    if (!p) return null;
+    const samples = p.samples.slice();
+    p.committed = true;
+    if (samples.length < 2) return null;
+    return curveFromRecording(samples);
   }
 
   return {
@@ -104,14 +213,33 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
     },
 
     stopSession() {
-      recordingBuffers.clear();
+      const now = performance.now();
+      for (const voiceId of phrases.keys()) closeOpenPhrase(voiceId, now);
       sessionHistorySnapshotted = false;
       lastTickBeat = null;
       lmbDown = false;
     },
 
+    beginPhrase(voiceId, now) {
+      // Defensive: a stray begin without a matching close shouldn't leave two
+      // open phrases on one voice.
+      closeOpenPhrase(voiceId, now);
+      getPhrases(voiceId).push({ samples: [], open: true, committed: false, closedAtMs: 0 });
+    },
+
+    closePhrase(voiceId, now) {
+      closeOpenPhrase(voiceId, now);
+    },
+
     captureSample(voiceId, sample) {
-      const buf = getBuffer(voiceId);
+      let open = openPhraseOf(voiceId);
+      if (!open) {
+        // Capture without an explicit begin (defensive) — start a phrase so the
+        // samples aren't dropped on the floor.
+        open = { samples: [], open: true, committed: false, closedAtMs: 0 };
+        getPhrases(voiceId).push(open);
+      }
+      const buf = open.samples;
       const last = buf[buf.length - 1];
       if (last && sample.beat <= last.beat) return;
       buf.push(sample);
@@ -120,11 +248,7 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
     },
 
     finalizeCurve(voiceId, onFirstCommit) {
-      const buf = getBuffer(voiceId);
-      const samples = buf.slice();
-      buf.length = 0;
-      if (samples.length < 2) return null;
-      const curve = curveFromRecording(samples);
+      const curve = takeCurve(newestUncommitted(voiceId, false));
       if (!curve) return null;
       if (!sessionHistorySnapshotted) {
         onFirstCommit();
@@ -133,13 +257,41 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
       return curve;
     },
 
+    keepCurve(voiceId) {
+      return takeCurve(newestUncommitted(voiceId, true));
+    },
+
+    getKeepableVoiceIds() {
+      const out: VoiceId[] = [];
+      for (const [voiceId, list] of phrases) {
+        if (list.some(isKeepable)) out.push(voiceId);
+      }
+      return out;
+    },
+
+    getKeepablePhraseCount() {
+      let count = 0;
+      for (const list of phrases.values()) {
+        for (const p of list) if (isKeepable(p)) count++;
+      }
+      return count;
+    },
+
     clearBuffer(voiceId) {
-      const buf = recordingBuffers.get(voiceId);
-      if (buf) buf.length = 0;
+      phrases.delete(voiceId);
+    },
+
+    clearAllPhrases() {
+      phrases.clear();
     },
 
     getRecordingBuffers() {
-      return recordingBuffers;
+      const view = new Map<VoiceId, readonly RecordedSample[]>();
+      for (const [voiceId, list] of phrases) {
+        const last = list[list.length - 1];
+        if (last && last.open) view.set(voiceId, last.samples);
+      }
+      return view;
     },
 
     tick(args) {
@@ -150,6 +302,10 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
         }
         return;
       }
+
+      // Age the rolling buffer even when idle, so the Keep indicator goes dark
+      // on schedule after a session stops.
+      evictPhrases(args.now);
 
       if (args.phase === 'playing' && args.isPlaying) {
         const beat = args.playbackBeat;

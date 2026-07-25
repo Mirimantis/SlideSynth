@@ -302,6 +302,23 @@
     <li>An un-armed jam auto-stops after <strong>10 minutes</strong> of inactivity (the warning popup appears 30 seconds before). Moving the mouse over the canvas counts as activity.</li>
   </ul>
 
+  <h3>Keep that (retrospective capture)</h3>
+  <p>
+    You don't have to arm recording in advance to keep a good phrase. While you're
+    performing, a rolling buffer quietly captures everything you sound — press
+    <kbd>K</kbd> afterwards to commit what you just played.
+  </p>
+  <ul>
+    <li><strong>K</strong> or the <strong>Keep</strong> button commits the phrase you most recently finished onto the selected track, at the beats where you actually played it. Nothing is quantized — the running clock already placed it in musical time.</li>
+    <li>A <em>phrase</em> is one sounding span: LMB press to release. Pressing <kbd>K</kbd> repeatedly walks backward, keeping the phrase before that, and so on.</li>
+    <li>The Keep button <strong>lights up whenever there's something keepable</strong>, and stays lit after you stop the clock — so you can stop, realise the last bit was good, and still keep it.</li>
+    <li>Phrases stay keepable for <strong>30 seconds</strong> after they end, then age out of the buffer (the button goes dark).</li>
+    <li>Keep targets the phrase you just <em>finished</em>. If you press <kbd>K</kbd> while still holding LMB, it keeps the previous phrase; the one in progress becomes keepable when you release.</li>
+    <li>A Harmonic Prism chord cluster played as one gesture keeps as one group, exactly like an armed recording.</li>
+    <li>Each keep is a single <strong>undo</strong> step — <kbd>Ctrl+Z</kbd> removes one kept phrase at a time.</li>
+    <li>While Record is armed, gestures are already committed on release, so there's nothing left for Keep to find.</li>
+  </ul>
+
   <h3>Recording</h3>
   <ul>
     <li><strong>R</strong> or the red <strong>Record</strong> button arms recording. From Idle it runs a 3-second countdown then starts Playback. If Playback is already running (including a jam), it arms immediately with no countdown. Recording forces the Scroll switch to <strong>Canvas</strong>.</li>
@@ -957,6 +974,7 @@
     <tr><td><kbd>Space</kbd></td><td>Play / Pause (hold for live preview in Draw mode / while scrubbing)</td></tr>
     <tr><td><kbd>R</kbd></td><td>Arm / disarm Record</td></tr>
     <tr><td><kbd>J</kbd></td><td>Start / stop Jam (free-running clock, nothing recorded)</td></tr>
+    <tr><td><kbd>K</kbd></td><td>Keep that — commit the phrase you just played</td></tr>
     <tr><td><kbd>Escape</kbd></td><td>Cancel countdown / stop recording</td></tr>
     <tr><td><kbd>L</kbd></td><td>Toggle loop</td></tr>
     <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>

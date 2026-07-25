@@ -127,6 +127,9 @@ export const OPEN_END_BEAT = MAX_CANVAS_EXTENT;
 /** Idle auto-stop for an un-armed jam session (no recording at stake, so much
  *  longer than the armed-recording AFK timeout). 10 minutes. */
 export const JAM_IDLE_TIMEOUT_MS = 600_000;
+/** How long a finished phrase stays keepable by retrospective capture
+ *  (BACKLOG 10.2). Wall-clock, so loop wraps don't disturb it. */
+export const KEEP_BUFFER_MS = 30_000;
 
 // ── Viewport defaults ───────────────────────────────────────────
 export const DEFAULT_ZOOM_X = 120;   // pixels per beat
