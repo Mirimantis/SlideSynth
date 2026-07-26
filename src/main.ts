@@ -3,7 +3,7 @@ import { createParamViewport } from './canvas/param-viewport';
 import { renderParamGraph } from './canvas/param-graph-renderer';
 import { createParamInteraction } from './canvas/param-interaction';
 import { ensureLane, getLane, deepCopyLanes } from './model/lane';
-import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, KEEP_BUFFER_MS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
@@ -63,6 +63,7 @@ import iconPause from './assets/icons/pause.svg?raw';
 import iconStop from './assets/icons/stop.svg?raw';
 import iconRecord from './assets/icons/record.svg?raw';
 import iconJam from './assets/icons/jam.svg?raw';
+import iconKeep from './assets/icons/keep.svg?raw';
 import type { AppState, ToolMode, Lane, LanePoint, BezierCurve } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -90,6 +91,7 @@ app.innerHTML = `
         <button id="btn-stop" title="Stop"></button>
         <button id="btn-record" class="record-btn" title="Record (R) — captures curves onto the selected track" hidden></button>
         <button id="btn-jam" class="jam-btn" title="Jam (J) — free-running clock: sound on, nothing recorded"></button>
+        <button id="btn-keep" class="keep-btn" title="Keep that (K) — commit the phrase you just played" disabled></button>
       </div>
       <label class="toggle-switch" title="Toggle snap (S)">
         <span class="toggle-switch-track">
@@ -709,6 +711,7 @@ setIcon(document.getElementById('btn-pause')!, iconPause);
 setIcon(document.getElementById('btn-stop')!, iconStop);
 setIcon(document.getElementById('btn-record')!, iconRecord);
 setIcon(document.getElementById('btn-jam')!, iconJam);
+setIcon(document.getElementById('btn-keep')!, iconKeep);
 
 // ── Tool panel (Tools drawer) ──────────────────────────────────
 const toolPanelContainer = document.getElementById('tool-panel')!;
@@ -744,6 +747,7 @@ const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
 const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
 const btnRecord = document.getElementById('btn-record') as HTMLButtonElement;
 const btnJam = document.getElementById('btn-jam') as HTMLButtonElement;
+const btnKeep = document.getElementById('btn-keep') as HTMLButtonElement;
 const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
 const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
 const lockRailToggle = document.getElementById('lock-rail-toggle') as HTMLInputElement;
@@ -855,6 +859,28 @@ function updateRecordButtonVisuals() {
   loopToggle.disabled = g.recordArmed && g.phase === 'playing';
 }
 
+/** Keep button doubles as the "keepable material pending" indicator (BACKLOG
+ *  10.2): it lights whenever the rolling buffer holds a committable phrase,
+ *  and stays lit after the session stops until the phrase ages out.
+ *
+ *  Polled per frame rather than from the store subscription, because the two
+ *  events that change keepability — sealing a phrase on release, and
+ *  time-based eviction — are pure engine state and never notify the store.
+ *  Cached so the common case writes no DOM. */
+let lastKeepDomKey = '';
+function updateKeepButtonDom() {
+  const keepable = composeEngine.getKeepablePhraseCount();
+  const noTrack = store.getState().selectedTrackId === null;
+  const key = `${keepable}:${noTrack}`;
+  if (key === lastKeepDomKey) return;
+  lastKeepDomKey = key;
+  btnKeep.disabled = keepable === 0 || noTrack;
+  btnKeep.classList.toggle('keepable', keepable > 0);
+  btnKeep.title = keepable > 0
+    ? `Keep that (K) — commit the phrase you just played (${keepable} keepable)`
+    : 'Keep that (K) — commit the phrase you just played';
+}
+
 /** Format a length in beats + BPM as "M:SS" for the toolbar title display. */
 function formatLengthMMSS(lengthBeats: number, bpm: number): string {
   const seconds = bpm > 0 ? lengthBeats * 60 / bpm : 0;
@@ -949,6 +975,11 @@ btnRecord.addEventListener('click', () => {
 
 btnJam.addEventListener('click', () => {
   jamToggle();
+  updateRecordButtonVisuals();
+});
+
+btnKeep.addEventListener('click', () => {
+  keepLastPhrase();
   updateRecordButtonVisuals();
 });
 
@@ -1863,6 +1894,13 @@ window.addEventListener('keydown', (e) => {
     updateRecordButtonVisuals();
     return;
   }
+  if (e.key.toLowerCase() === 'k' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    if (e.repeat) return;
+    keepLastPhrase();
+    updateRecordButtonVisuals();
+    return;
+  }
   if (e.key === 'Escape') {
     const g = store.getState().performance;
     if (g.phase === 'countdown' || g.recordArmed || g.jamActive) {
@@ -2422,6 +2460,7 @@ const composeEngine = createPerformanceEngine({
   afkTimeoutMs: 60_000,
   recordingBufferMax: 3600,
   loopWrapThresholdBeats: 0.5,
+  keepBufferMs: KEEP_BUFFER_MS,
 });
 
 const magneticState = createMagneticState();
@@ -2782,9 +2821,14 @@ function updatePrismDrawPreview(snappedBaseY: number) {
 function captureComposeRecordingSample() {
   const st = store.getState();
   const g = st.performance;
-  if (g.phase !== 'playing') return;
-  const lmbActive = g.recordArmed && composeEngine.isLmbDown();
-  const midiActive = st.midiArmedTrackId !== null;
+  // Capture runs whenever a voice is actually SOUNDING in a perform context —
+  // not just while armed (BACKLOG 10.2). That is what fills the rolling buffer
+  // during an un-armed jam so "keep that" has something to commit. isLmbDown()
+  // can only be true inside isComposePerformActive(), so it already implies the
+  // perform context and a running transport. Silent cursor movement is never
+  // captured: "what was just played" means what was heard.
+  const lmbActive = composeEngine.isLmbDown();
+  const midiActive = st.midiArmedTrackId !== null && g.phase === 'playing';
   if (!lmbActive && !midiActive) return;
   const beat = playback.getPositionBeats();
   // Capture every active voice (primary + any chord-cluster harmonies + every
@@ -2819,6 +2863,9 @@ function finalizeMidiVoice(
   if (!planchettePresent) return;
   const trackId = st.midiArmedTrackId;
   const track = trackId ? st.composition.tracks.find(t => t.id === trackId) : null;
+  // Seal the note's phrase before claiming it, so the buffer never carries an
+  // open phrase for a voice that has stopped sounding.
+  composeEngine.closePhrase(voiceId, performance.now());
   const curve = composeEngine.finalizeCurve(voiceId, () => history.snapshot());
   if (curve && track) {
     store.mutate(() => { track.curves.push(curve); });
@@ -2853,9 +2900,7 @@ function finalizeComposeRecordedCurves() {
   // (finalizeMidiVoice / finalizeAllInFlightMidiVoices). Without this filter
   // an LMB release that lands on the same beat as a MIDI noteOff would push
   // the MIDI curve onto the LMB track.
-  const voiceIds = st.performance.planchettes
-    .map(p => p.voiceId)
-    .filter(v => !v.startsWith('midi-'));
+  const voiceIds = lmbVoiceIds();
   if (!track) {
     for (const v of voiceIds) composeEngine.clearBuffer(v);
     return;
@@ -2873,8 +2918,32 @@ function finalizeComposeRecordedCurves() {
   // If multi-voice, stamp the finalized curves as a chord cluster so they
   // behave like a Phase-2 Draw-mode placement (group selection, group delete,
   // group transform). Single-voice (no harmonies) records ungrouped as today.
-  const isCluster = finalized.length > 1;
-  const groupId = isCluster ? createGroupId() : null;
+  commitFinalizedCurves(finalized, track);
+}
+
+/** Voice ids the LMB session owns (primary + harmonies), excluding MIDI voices
+ *  which have their own finalize path. */
+function lmbVoiceIds(): string[] {
+  return store.getState().performance.planchettes
+    .map(p => p.voiceId)
+    .filter(v => !v.startsWith('midi-'));
+}
+
+/** Seal every LMB-owned phrase. Called on release, stop, and loop wrap — after
+ *  this the phrase is committable by either the armed path or "keep that". */
+function closeLmbPhrases() {
+  const now = performance.now();
+  for (const voiceId of lmbVoiceIds()) composeEngine.closePhrase(voiceId, now);
+}
+
+/** Push finalized curves onto a track, stamping a chord-cluster group when the
+ *  gesture had multiple voices. Shared by the armed-release path and
+ *  retrospective keep so both commit identically. */
+function commitFinalizedCurves(
+  finalized: Array<{ voiceId: string; curve: import('./types').BezierCurve }>,
+  track: import('./types').Track,
+) {
+  const groupId = finalized.length > 1 ? createGroupId() : null;
   store.mutate(() => {
     for (let i = 0; i < finalized.length; i++) {
       const { curve, voiceId } = finalized[i]!;
@@ -2886,6 +2955,65 @@ function finalizeComposeRecordedCurves() {
       store.setPerformCurrentCurve(voiceId, curve.id);
     }
   });
+}
+
+/**
+ * Retrospective capture (BACKLOG 10.2): commit the newest *closed* uncommitted
+ * phrase into a curve, after the fact. Pressing repeatedly walks backward
+ * through the rolling buffer, since each keep marks its phrase committed.
+ * Multi-voice gestures (Prism clusters) commit as one group.
+ */
+function keepLastPhrase() {
+  const st = store.getState();
+  const trackId = st.selectedTrackId;
+  const track = trackId ? st.composition.tracks.find(t => t.id === trackId) : null;
+  if (!track) {
+    showToast('Select a track to keep onto', 2500);
+    return;
+  }
+  if (composeEngine.getKeepablePhraseCount() === 0) {
+    showToast('Nothing to keep', 2000);
+    return;
+  }
+
+  // Build curves BEFORE snapshotting: curveFromRecording produces detached
+  // curves without touching the composition, so if every candidate turns out
+  // too short to fit we bail without having pushed a bogus undo entry.
+  // Keep every voice that has a keepable phrase, so a chord cluster played as
+  // one gesture commits as one group. MIDI voices are excluded — they belong to
+  // the MIDI-armed track and commit on noteOff.
+  const finalized: Array<{ voiceId: string; curve: import('./types').BezierCurve }> = [];
+  for (const voiceId of composeEngine.getKeepableVoiceIds()) {
+    if (voiceId.startsWith('midi-')) continue;
+    const curve = composeEngine.keepCurve(voiceId);
+    if (curve) finalized.push({ voiceId, curve });
+  }
+  if (finalized.length === 0) {
+    showToast('Nothing to keep', 2000);
+    return;
+  }
+
+  // Snapshot once per keep — each kept pass is exactly one undo entry
+  // (the 10.4 decision). The engine's once-per-session debounce used by the
+  // armed path deliberately doesn't apply here, or repeat keeps would collapse
+  // into a single undo step.
+  history.snapshot();
+  commitFinalizedCurves(finalized, track);
+  const beats = curveDurationBeats(finalized[0]!.curve);
+  showToast(
+    finalized.length > 1
+      ? `Kept ${finalized.length}-voice phrase (${beats.toFixed(1)} beats)`
+      : `Kept phrase (${beats.toFixed(1)} beats)`,
+    2000,
+  );
+  bgDirty = true;
+}
+
+/** Duration of a curve's pitch lane in beats — for the keep confirmation toast. */
+function curveDurationBeats(curve: import('./types').BezierCurve): number {
+  const pts = pitchPoints(curve);
+  if (pts.length < 2) return 0;
+  return pts[pts.length - 1]!.position.x - pts[0]!.position.x;
 }
 
 function tickComposePerform() {
@@ -2924,6 +3052,13 @@ function tickComposePerform() {
     playbackBeat,
     onCountdownElapsed: startComposePerformPlayback,
     onLoopWrap: () => {
+      // Seal phrases at the seam so none ever spans the loop boundary — a
+      // phrase containing the wrap would carry a backwards beat jump and
+      // couldn't be fitted. Held voices resume into a fresh phrase on the
+      // loop-in side (captureSample opens one on the next sample), so a
+      // gesture across the seam keeps as two contiguous curves. This is the
+      // un-armed mirror of the armed 8.21 behaviour below.
+      closeLmbPhrases();
       if (g.recordArmed && composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
       // Loop wrap during sustained MIDI notes splits the curves at the wrap so
       // recordings don't cross the loop boundary as a single curve. Keep the
@@ -3058,6 +3193,9 @@ function jamToggle() {
 
 function composePerformStop() {
   const g = store.getState().performance;
+  // Seal in-flight phrases before teardown so a gesture interrupted by Stop
+  // stays keepable (the buffer survives the session — BACKLOG 10.2).
+  closeLmbPhrases();
   if (g.phase === 'playing' && g.recordArmed && composeEngine.isLmbDown()) {
     finalizeComposeRecordedCurves();
   }
@@ -3186,15 +3324,14 @@ window.addEventListener('mouseup', (e) => {
   // (and therefore the voiceIds we finalize) still contains every active voice.
   // syncHarmonyPlanchettes only removes harmonies when playback ends or drawMode
   // toggles off, neither of which happens at LMB-up — so the array is stable here.
+  // Close first: the phrase must be sealed before either path claims it.
+  closeLmbPhrases();
   if (store.getState().performance.recordArmed) {
     finalizeComposeRecordedCurves();
-  } else {
-    // Clear every voice's buffer (not just primary), since perform without
-    // recording still ran captures into N buffers in Prism mode.
-    for (const p of store.getState().performance.planchettes) {
-      composeEngine.clearBuffer(p.voiceId);
-    }
   }
+  // Un-armed perform no longer discards the buffer — the closed phrase stays
+  // keepable for KEEP_BUFFER_MS so retrospective capture can commit it
+  // after the fact (BACKLOG 10.2). Eviction ages it out.
   stopComposePerformSounding();
 });
 
@@ -3318,6 +3455,7 @@ function render() {
 
   // Per-frame sync for Compose UI affordances
   toolPanel.setDisabled(isComposePerformActive());
+  updateKeepButtonDom();
   updatePitchHudDom(state);
   updateCountdownOverlayDom(state);
   updateAfkWarningDom(state);
@@ -3695,7 +3833,13 @@ function syncCompositionDerived() {
 
 if (import.meta.env.DEV) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).__debug = { store, interaction, viewport };
+  // composeEngine + the perform entry points let the harness drive a capture
+  // session headlessly — the render loop (and therefore frame-driven sample
+  // capture) is throttled to zero in a backgrounded tab.
+  (window as any).__debug = {
+    store, interaction, viewport, composeEngine,
+    keepLastPhrase, captureComposeRecordingSample, closeLmbPhrases,
+  };
 }
 
 // ── Store subscription ──────────────────────────────────────────

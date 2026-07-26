@@ -942,6 +942,19 @@ body {
   background: #1976d2;
 }
 
+/* Keep button — lights when the rolling buffer holds a keepable phrase (10.2) */
+.keep-btn {
+  background: var(--surface);
+  color: #8899aa;
+  border: 1px solid #335;
+}
+
+.keep-btn.keepable:not(:disabled) {
+  color: #1b2430;
+  background: #ffca28;
+  border-color: #ffca28;
+}
+
 @keyframes recordPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }

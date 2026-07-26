@@ -2,7 +2,7 @@ import type { Composition } from '../types';
 import { getAudioContext, getMasterGain, ensureResumed } from './engine';
 import { createToneSynth, type ToneSynth } from './tone-synth';
 import { sampleCurve, getCurveTimeRange } from './curve-sampler';
-import { computeVoiceAssignment } from './voice-allocation';
+import { computeVoiceAssignment, assignNewCurves } from './voice-allocation';
 import { SCHEDULER_INTERVAL_MS, SCHEDULER_LOOKAHEAD_S } from '../constants';
 import { getCompositionLength } from '../model/composition';
 
@@ -67,8 +67,58 @@ export function createPlaybackEngine(
     return startBeatOffset + elapsedSec * (currentBpm / 60);
   }
 
+  /**
+   * Give a voice to any curve that appeared since the last reconcile, so
+   * material added mid-playback (a recorded take, a retrospective keep, a curve
+   * drawn while the transport runs) sounds on this pass instead of staying
+   * silent until the next loop restart rebuilds the pools.
+   *
+   * Runs every scheduler tick, but the common case is just one Map.has per
+   * curve; the allocator only runs when something new actually turned up.
+   * Assignments are added incrementally (see assignNewCurves) so a currently
+   * sounding curve is never moved to another voice mid-note.
+   */
+  function adoptNewCurves(): void {
+    if (!currentComposition) return;
+    const ctx = getAudioContext();
+
+    for (const track of currentComposition.tracks) {
+      const tone = currentComposition.toneLibrary.find(t => t.id === track.toneId);
+      if (!tone) continue;
+
+      let tp = trackPlaybacks.find(t => t.trackId === track.id);
+      if (!tp) {
+        // Track created mid-playback — nothing in flight for it, so a plain
+        // allocation is safe.
+        const trackGain = ctx.createGain();
+        trackGain.gain.value = track.volume;
+        trackGain.connect(getMasterGain());
+        tp = {
+          trackId: track.id, toneId: track.toneId, trackGain,
+          voices: [], assignment: new Map(), lastScheduledTime: ctx.currentTime,
+        };
+        trackPlaybacks.push(tp);
+      } else if (!track.curves.some(c => !tp!.assignment.has(c.id))) {
+        continue;
+      }
+
+      const { assignment, voiceCount } = assignNewCurves(
+        track.curves, tp.assignment, tp.voices.length,
+      );
+      tp.assignment = assignment;
+      while (tp.voices.length < voiceCount) {
+        const synth = createToneSynth(tone);
+        synth.connect(tp.trackGain);
+        synth.setVolume(0);
+        synth.start();
+        tp.voices.push(synth);
+      }
+    }
+  }
+
   function scheduleAhead(): void {
     if (!playing || !currentComposition) return;
+    adoptNewCurves();
     const ctx = getAudioContext();
     const now = ctx.currentTime;
     const scheduleUntil = now + SCHEDULER_LOOKAHEAD_S;
