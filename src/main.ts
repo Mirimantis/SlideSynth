@@ -64,6 +64,8 @@ import iconStop from './assets/icons/stop.svg?raw';
 import iconRecord from './assets/icons/record.svg?raw';
 import iconJam from './assets/icons/jam.svg?raw';
 import iconKeep from './assets/icons/keep.svg?raw';
+import { canOpenLayer, createLayerTrack, newestLayerTrack, LAYER_TRACK_LIMIT } from './model/layer';
+import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import type { AppState, ToolMode, Lane, LanePoint, BezierCurve } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -121,6 +123,13 @@ app.innerHTML = `
                 <span class="toggle-switch-thumb"></span>
               </span>
               <span class="toggle-switch-label">Loop</span>
+            </label>
+            <label class="toggle-switch" title="Layer mode — each loop pass becomes its own track">
+              <span class="toggle-switch-track">
+                <input type="checkbox" id="layer-toggle" />
+                <span class="toggle-switch-thumb"></span>
+              </span>
+              <span class="toggle-switch-label">Layer</span>
             </label>
           </div>
           <div class="transport-row">
@@ -750,6 +759,12 @@ const btnJam = document.getElementById('btn-jam') as HTMLButtonElement;
 const btnKeep = document.getElementById('btn-keep') as HTMLButtonElement;
 const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
 const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
+const layerToggle = document.getElementById('layer-toggle') as HTMLInputElement;
+layerToggle.checked = store.getState().layerModeEnabled;
+layerToggle.addEventListener('change', () => {
+  store.setLayerMode(layerToggle.checked);
+  layerToggle.blur();
+});
 const lockRailToggle = document.getElementById('lock-rail-toggle') as HTMLInputElement;
 // "Lock Rail" semantics (non-inverted): checked = rail locked at canvas centre =
 // the canvas scrolls during playback = scrollCanvasEnabled true. Unchecked =
@@ -854,6 +869,7 @@ function updateRecordButtonVisuals() {
   btnJam.disabled = g.recordArmed || g.phase === 'countdown';
 
   lockRailToggle.checked = st.scrollCanvasEnabled;
+  layerToggle.checked = st.layerModeEnabled;
 
   // Lock loop toggle while recording.
   loopToggle.disabled = g.recordArmed && g.phase === 'playing';
@@ -1901,6 +1917,12 @@ window.addEventListener('keydown', (e) => {
     updateRecordButtonVisuals();
     return;
   }
+  if (e.key.toLowerCase() === 'u' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    if (e.repeat) return;
+    dropLastPass();
+    return;
+  }
   if (e.key === 'Escape') {
     const g = store.getState().performance;
     if (g.phase === 'countdown' || g.recordArmed || g.jamActive) {
@@ -2276,6 +2298,7 @@ function renderTrackList() {
         <button class="track-solo ${track.solo ? 'active' : ''}" title="Solo">S</button>
         <button class="track-midi-arm ${midiArmClass}" title="${midiArmTitle}">I</button>
         <button class="track-edit-tone" title="Edit tone">T</button>
+        <button class="track-delete" title="Delete track (undoable)">X</button>
       </div>
     `;
 
@@ -2289,6 +2312,18 @@ function renderTrackList() {
       if (target.classList.contains('track-solo')) {
         history.snapshot();
         store.mutate(() => { track.solo = !track.solo; });
+        return;
+      }
+      if (target.classList.contains('track-delete')) {
+        // In-flight MIDI voices on this track would otherwise keep capturing
+        // into a track that no longer exists.
+        if (store.getState().midiArmedTrackId === track.id) finalizeAllInFlightMidiVoices();
+        history.snapshot();
+        // If the current layer lived here, clear it so the next pass opens a new one.
+        if (currentLayerTrackId === track.id) currentLayerTrackId = null;
+        store.removeTrack(track.id);
+        showToast(`Deleted ${track.name} — Ctrl+Z to restore`, 2500);
+        bgDirty = true;
         return;
       }
       if (target.classList.contains('track-midi-arm')) {
@@ -2936,15 +2971,74 @@ function closeLmbPhrases() {
   for (const voiceId of lmbVoiceIds()) composeEngine.closePhrase(voiceId, now);
 }
 
+// ── Layer-per-pass looping (BACKLOG 10.3) ──────────────────────
+/** Track the current pass is committing onto while Layer mode is on. Runtime
+ *  only. Cleared at every loop wrap, which is what makes "one pass = one
+ *  layer" true, and on session start/stop. */
+let currentLayerTrackId: string | null = null;
+/** One-shot so the track-cap toast doesn't fire on every commit. */
+let layerCapToastShown = false;
+
+/** Reset per-session layer state. Called on jam/record start and on stop. */
+function resetLayerSession() {
+  currentLayerTrackId = null;
+  layerCapToastShown = false;
+}
+
+/**
+ * Where should this pass's curves land? With Layer mode off, the source track,
+ * exactly as before. With it on, the layer this pass belongs to — opened lazily
+ * on the first commit after a loop wrap, so a pass where nothing was played
+ * leaves no empty track behind.
+ *
+ * Mutates `comp` when it opens a layer, so it must be called inside store.mutate.
+ */
+function resolveCommitTrack(
+  source: import('./types').Track,
+  comp: import('./types').Composition,
+): { track: import('./types').Track; createdTrack: boolean } {
+  if (!store.getState().layerModeEnabled) return { track: source, createdTrack: false };
+
+  if (currentLayerTrackId !== null) {
+    const existing = comp.tracks.find(t => t.id === currentLayerTrackId);
+    if (existing) return { track: existing, createdTrack: false };
+    currentLayerTrackId = null;   // layer was deleted (e.g. dropped) — open a new one
+  }
+
+  if (!canOpenLayer(comp.tracks)) {
+    // At the ceiling: keep performing into the newest layer rather than
+    // silently dropping the pass or exceeding the export-safe track count.
+    if (!layerCapToastShown) {
+      showToast(`Layer limit reached (${LAYER_TRACK_LIMIT} tracks) — adding to the last layer`, 3500);
+      layerCapToastShown = true;
+    }
+    const newest = newestLayerTrack(comp.tracks);
+    return { track: newest ?? source, createdTrack: false };
+  }
+
+  const layer = createLayerTrack(source, comp.tracks);
+  comp.tracks.push(layer);
+  currentLayerTrackId = layer.id;
+  return { track: layer, createdTrack: true };
+}
+
+/** Log of performed passes, newest last. Append-only — see pass-log.ts for why
+ *  droppability is derived rather than tracked. */
+const passLog: CommittedPass[] = [];
+
 /** Push finalized curves onto a track, stamping a chord-cluster group when the
  *  gesture had multiple voices. Shared by the armed-release path and
- *  retrospective keep so both commit identically. */
+ *  retrospective keep so both commit identically — and therefore the one place
+ *  layer routing (10.3) and pass registration (10.4) need to hook. */
 function commitFinalizedCurves(
   finalized: Array<{ voiceId: string; curve: import('./types').BezierCurve }>,
-  track: import('./types').Track,
+  source: import('./types').Track,
 ) {
   const groupId = finalized.length > 1 ? createGroupId() : null;
-  store.mutate(() => {
+  store.mutate((comp) => {
+    // Resolved inside the mutation so opening a layer shares the caller's
+    // history snapshot: creating the track and filling it are one undo step.
+    const { track, createdTrack } = resolveCommitTrack(source, comp);
     for (let i = 0; i < finalized.length; i++) {
       const { curve, voiceId } = finalized[i]!;
       if (groupId) {
@@ -2954,7 +3048,56 @@ function commitFinalizedCurves(
       track.curves.push(curve);
       store.setPerformCurrentCurve(voiceId, curve.id);
     }
+    passLog.push({
+      trackId: track.id,
+      curveIds: finalized.map(f => f.curve.id),
+      createdTrack,
+    });
   });
+}
+
+/**
+ * Drop the most recent performed pass (BACKLOG 10.4) — the live-looper's "undo
+ * last layer". A forward, undoable delete rather than a history rewind: the
+ * undo stack is linear whole-composition snapshots, so once you have edited
+ * after performing, no rewind can remove just that pass. Ctrl+Z restores what
+ * this drops, which is the looper's "redo layer".
+ */
+function dropLastPass() {
+  const comp = store.getComposition();
+  const droppable = findDroppablePass(passLog, comp);
+  if (!droppable) {
+    showToast('No performed pass to drop', 2000);
+    return;
+  }
+
+  history.snapshot();
+  let removedTrackName: string | null = null;
+  let curvesRemoved = 0;
+  let trackToRemove: string | null = null;
+  store.mutate((c) => {
+    const result = dropPassCurves(c, droppable.pass, droppable.surviving);
+    if (!result) return;
+    curvesRemoved = result.curvesRemoved;
+    if (result.shouldRemoveTrack) {
+      trackToRemove = result.track.id;
+      removedTrackName = result.track.name;
+    }
+  });
+  // Track removal is a separate store call: it sweeps selection, MIDI arm,
+  // projection source and planchettes, which doesn't belong inside a mutate.
+  if (trackToRemove !== null) {
+    if (currentLayerTrackId === trackToRemove) currentLayerTrackId = null;
+    store.removeTrack(trackToRemove);
+  }
+
+  showToast(
+    removedTrackName !== null
+      ? `Dropped ${removedTrackName}`
+      : `Dropped last pass (${curvesRemoved} curve${curvesRemoved === 1 ? '' : 's'})`,
+    2000,
+  );
+  bgDirty = true;
 }
 
 /**
@@ -3059,6 +3202,10 @@ function tickComposePerform() {
       // gesture across the seam keeps as two contiguous curves. This is the
       // un-armed mirror of the armed 8.21 behaviour below.
       closeLmbPhrases();
+      // One pass = one layer (BACKLOG 10.3): closing the layer here means the
+      // next commit opens a fresh one. Both keeps for a line held across the
+      // seam happen in the same pass, so its halves stay on one layer.
+      currentLayerTrackId = null;
       if (g.recordArmed && composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
       // Loop wrap during sustained MIDI notes splits the curves at the wrap so
       // recordings don't cross the loop boundary as a single curve. Keep the
@@ -3097,6 +3244,7 @@ function startComposePerformPlayback() {
   store.setPlaybackState('playing');
   store.setPerformPhase('playing');
   composeEngine.startSession(performance.now());
+  resetLayerSession();
   updatePlayState(true);
   // Snap viewport immediately to avoid first-frame flash.
   scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
@@ -3179,6 +3327,13 @@ function jamToggle() {
       loopStart = lStart;
     }
     playback.play(comp, startBeat, endBeat, loopStart);
+    // play() can decline (empty range, bad bounds). Without this guard the UI
+    // would show a lit Jam button and a "playing" transport while the clock
+    // never actually runs — mirrors the same check in startPlayback().
+    if (!playback.isPlaying()) {
+      store.setJamActive(false);
+      return;
+    }
     store.setPlaybackState('playing');
     updatePlayState(true);
     // Snap viewport immediately to avoid first-frame flash.
@@ -3189,6 +3344,7 @@ function jamToggle() {
   // flash when jamming over a loop) and the idle-timeout check.
   store.setPerformPhase('playing');
   composeEngine.startSession(performance.now());
+  resetLayerSession();
 }
 
 function composePerformStop() {
@@ -3211,6 +3367,7 @@ function composePerformStop() {
   store.setPerformPhase('idle');
   store.setPerformArmed(false);
   store.setJamActive(false);
+  resetLayerSession();
   store.setPerformCountdownStartedAt(0);
   store.setPerformLmbSounding(false);
   updatePlayState(false);
@@ -3839,6 +3996,12 @@ if (import.meta.env.DEV) {
   (window as any).__debug = {
     store, interaction, viewport, composeEngine,
     keepLastPhrase, captureComposeRecordingSample, closeLmbPhrases,
+    // Layer/pass actions plus resetLayerSession, which stands in for a loop
+    // wrap (the wrap fires from the render loop, which a background tab pins
+    // at zero frames).
+    dropLastPass, resetLayerSession, passLog,
+    // Live voice counts — the observable for "removing a track stops its sound".
+    getActiveSynthCount, getActiveOscillatorCount,
   };
 }
 
@@ -3846,6 +4009,10 @@ if (import.meta.env.DEV) {
 store.subscribe(() => {
   bgDirty = true;
   const comp = store.getComposition();
+  // Undo / redo / file open replace the composition object outright, so keep the
+  // scheduler pointed at the live one — otherwise every edit after an undo taken
+  // mid-playback would be inaudible until the next play().
+  if (playback.isPlaying()) playback.setComposition(comp);
   updateBpm(comp.bpm);
   const tsValue = `${comp.beatsPerMeasure}/${comp.timeSignatureDenominator}`;
   if (timeSigSelect.value !== tsValue) timeSigSelect.value = tsValue;
