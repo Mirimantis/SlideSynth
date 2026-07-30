@@ -320,6 +320,31 @@
     <li>While Record is armed, gestures are already committed on release, so there's nothing left for Keep to find.</li>
   </ul>
 
+  <h3>Layers (looping)</h3>
+  <p>
+    Turn on the <strong>Layer</strong> switch in the transport panel and each pass you
+    perform becomes its own <strong>track</strong>, so passes stack into a choir
+    instead of piling onto one track. Because layers are ordinary tracks, they get
+    mute, solo, volume and their own tone from the track panel for free.
+  </p>
+  <ul>
+    <li><strong>One pass = one layer.</strong> The first thing you commit after the loop point opens a new layer; anything else you commit during that same pass joins it. So a line held across the loop seam (which needs two <kbd>K</kbd> presses) stays on one layer.</li>
+    <li>Layers are created only when you actually commit something, so a pass where you play nothing leaves no empty track behind.</li>
+    <li>Each layer inherits the <strong>tone and volume</strong> of the track you're performing from, and that source track stays active — so every layer sounds like the same instrument.</li>
+    <li>Layers are named <strong>Layer 1</strong>, <strong>Layer 2</strong>, and so on, and are capped at <strong>16 tracks</strong> total (the limit that still exports cleanly to MPE or a VCV poly cable). Past that, passes join the newest layer.</li>
+    <li>With Layer off, everything commits to the selected track exactly as before.</li>
+    <li>MIDI-armed recording ignores Layer mode — arming a track is already an explicit choice of where the notes go.</li>
+  </ul>
+
+  <h3>Dropping a bad pass</h3>
+  <ul>
+    <li><strong>U</strong> drops the most recent pass you performed — the live-looper's "undo last layer". If that pass created its own layer, the whole track goes with it.</li>
+    <li>Pressing <kbd>U</kbd> repeatedly peels back through the session, one pass at a time (the same walk-backward idea as <kbd>K</kbd>).</li>
+    <li>It works whether the pass was kept with <kbd>K</kbd> or recorded with Record armed.</li>
+    <li><kbd>Ctrl+Z</kbd> brings a dropped pass back, layer track included — that's your "redo layer". Unlike <kbd>Ctrl+Z</kbd> on its own, <kbd>U</kbd> always targets the last <em>performance</em>, so edits you've made since don't get in the way.</li>
+    <li>With Layer off it removes the last pass's curves and leaves the track in place.</li>
+  </ul>
+
   <h3>Recording</h3>
   <ul>
     <li><strong>R</strong> or the red <strong>Record</strong> button arms recording. From Idle it runs a 3-second countdown then starts Playback. If Playback is already running (including a jam), it arms immediately with no countdown. Recording forces the Scroll switch to <strong>Canvas</strong>.</li>
@@ -976,6 +1001,7 @@
     <tr><td><kbd>R</kbd></td><td>Arm / disarm Record</td></tr>
     <tr><td><kbd>J</kbd></td><td>Start / stop Jam (free-running clock, nothing recorded)</td></tr>
     <tr><td><kbd>K</kbd></td><td>Keep that — commit the phrase you just played</td></tr>
+    <tr><td><kbd>U</kbd></td><td>Drop the last performed pass (undo last layer)</td></tr>
     <tr><td><kbd>Escape</kbd></td><td>Cancel countdown / stop recording</td></tr>
     <tr><td><kbd>L</kbd></td><td>Toggle loop</td></tr>
     <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>

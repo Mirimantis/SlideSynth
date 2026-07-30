@@ -243,6 +243,9 @@ export interface AppState {
   drawPreviewMode: 'tone' | 'composition';   // Draw-tool spacebar preview scope
   bezierAutoSmooth: boolean;                  // Draw-tool: click-placed points get horizontal handles
   scrollCanvasEnabled: boolean;               // Compose Playback view preference (localStorage-backed)
+  /** Layer-per-pass looping (BACKLOG 10.3): each performed pass commits onto a
+   *  fresh track. localStorage-backed; off by default. */
+  layerModeEnabled: boolean;
   pitchHudVisible: boolean;                   // Pitch HUD user preference (localStorage-backed)
   perfHudVisible: boolean;                    // Perf HUD user preference (localStorage-backed)
   metronomeEnabled: boolean;                  // Metronome user preference (localStorage-backed)

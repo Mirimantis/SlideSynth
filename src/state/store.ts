@@ -21,6 +21,7 @@ function createInitialPrimaryPlanchette(trackId: string | null): PlanchetteState
 }
 
 const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollCanvas';
+const LAYER_MODE_STORAGE_KEY = 'slidesynth.layerMode';
 const PITCH_HUD_STORAGE_KEY = 'slidesynth.pitchHud';
 const PERF_HUD_STORAGE_KEY = 'slidesynth.perfHud';
 const METRONOME_ENABLED_STORAGE_KEY = 'slidesynth.metronomeEnabled';
@@ -180,6 +181,7 @@ function createInitialState(): AppState {
     drawPreviewMode: 'tone',
     bezierAutoSmooth: false,
     scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, true),
+    layerModeEnabled: loadBoolPref(LAYER_MODE_STORAGE_KEY, false),
     pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
     perfHudVisible: loadBoolPref(PERF_HUD_STORAGE_KEY, false),
     metronomeEnabled: loadBoolPref(METRONOME_ENABLED_STORAGE_KEY, false),
@@ -511,6 +513,16 @@ class Store {
     this.notify();
   }
 
+  /** Layer mode (BACKLOG 10.3): each performed pass commits onto its own track
+   *  instead of the selected one. Off by default so ordinary editing and armed
+   *  recording onto a chosen track behave as they always have. */
+  setLayerMode(enabled: boolean) {
+    if (this.state.layerModeEnabled === enabled) return;
+    this.state.layerModeEnabled = enabled;
+    saveBoolPref(LAYER_MODE_STORAGE_KEY, enabled);
+    this.notify();
+  }
+
   setPitchHudVisible(visible: boolean) {
     if (this.state.pitchHudVisible === visible) return;
     this.state.pitchHudVisible = visible;
@@ -761,6 +773,53 @@ class Store {
     comp.tracks.push(newTrack);
     this.moveCurvesToTrack(curveIds, newTrack.id);
     return newTrack.id;
+  }
+
+  /**
+   * Remove a track and everything on it (BACKLOG 10.4 — the first code path in
+   * the app that deletes a track). Every piece of state that can hold a track
+   * id or a curve id from this track has to be swept, or it dangles:
+   * selection, MIDI arm, the Prism projection source, and perform planchettes.
+   * Caller takes the `history.snapshot()`.
+   */
+  removeTrack(trackId: string): void {
+    const comp = this.state.composition;
+    const idx = comp.tracks.findIndex(t => t.id === trackId);
+    if (idx < 0) return;
+    const [removed] = comp.tracks.splice(idx, 1);
+    const removedCurveIds = new Set((removed?.curves ?? []).map(c => c.id));
+
+    if (this.state.selectedTrackId === trackId) {
+      // setSelectedTrack would notify mid-removal; inline its clearing instead.
+      this.state.selectedTrackId = comp.tracks[0]?.id ?? null;
+      this.state.selectedCurveIds = new Set();
+      this.state.selectedPointIndex = null;
+      this.state.selectedPointKeys = new Set();
+      const primary = this.state.performance.planchettes.find(p => p.voiceId === 'primary');
+      if (primary) primary.trackId = this.state.selectedTrackId;
+    } else {
+      // Selection lives elsewhere, but individual curves from this track may
+      // still be selected (cross-track selection, 8.23).
+      for (const id of removedCurveIds) this.state.selectedCurveIds.delete(id);
+      for (const key of [...this.state.selectedPointKeys]) {
+        if (removedCurveIds.has(key.split(':')[0]!)) this.state.selectedPointKeys.delete(key);
+      }
+    }
+
+    if (this.state.midiArmedTrackId === trackId) this.state.midiArmedTrackId = null;
+
+    const projectionSourceId = this.state.harmonicPrism.projectionSourceId;
+    if (projectionSourceId && removedCurveIds.has(projectionSourceId)) {
+      this.state.harmonicPrism.projectionSourceId = null;
+    }
+
+    // Non-primary planchettes bound to this track (MIDI voices on an armed
+    // track) would otherwise keep rendering and capturing against it.
+    this.state.performance.planchettes = this.state.performance.planchettes.filter(
+      p => p.voiceId === 'primary' || p.trackId !== trackId,
+    );
+
+    this.notify();
   }
 
   /** Replace entire composition (for load). Hydrates AppState mirrors of `comp.snap`
