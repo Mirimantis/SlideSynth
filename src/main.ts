@@ -2298,6 +2298,7 @@ function renderTrackList() {
         <button class="track-solo ${track.solo ? 'active' : ''}" title="Solo">S</button>
         <button class="track-midi-arm ${midiArmClass}" title="${midiArmTitle}">I</button>
         <button class="track-edit-tone" title="Edit tone">T</button>
+        <button class="track-delete" title="Delete track (undoable)">X</button>
       </div>
     `;
 
@@ -2311,6 +2312,18 @@ function renderTrackList() {
       if (target.classList.contains('track-solo')) {
         history.snapshot();
         store.mutate(() => { track.solo = !track.solo; });
+        return;
+      }
+      if (target.classList.contains('track-delete')) {
+        // In-flight MIDI voices on this track would otherwise keep capturing
+        // into a track that no longer exists.
+        if (store.getState().midiArmedTrackId === track.id) finalizeAllInFlightMidiVoices();
+        history.snapshot();
+        // If the current layer lived here, clear it so the next pass opens a new one.
+        if (currentLayerTrackId === track.id) currentLayerTrackId = null;
+        store.removeTrack(track.id);
+        showToast(`Deleted ${track.name} — Ctrl+Z to restore`, 2500);
+        bgDirty = true;
         return;
       }
       if (target.classList.contains('track-midi-arm')) {
@@ -3314,6 +3327,13 @@ function jamToggle() {
       loopStart = lStart;
     }
     playback.play(comp, startBeat, endBeat, loopStart);
+    // play() can decline (empty range, bad bounds). Without this guard the UI
+    // would show a lit Jam button and a "playing" transport while the clock
+    // never actually runs — mirrors the same check in startPlayback().
+    if (!playback.isPlaying()) {
+      store.setJamActive(false);
+      return;
+    }
     store.setPlaybackState('playing');
     updatePlayState(true);
     // Snap viewport immediately to avoid first-frame flash.
@@ -3980,6 +4000,8 @@ if (import.meta.env.DEV) {
     // wrap (the wrap fires from the render loop, which a background tab pins
     // at zero frames).
     dropLastPass, resetLayerSession, passLog,
+    // Live voice counts — the observable for "removing a track stops its sound".
+    getActiveSynthCount, getActiveOscillatorCount,
   };
 }
 
@@ -3987,6 +4009,10 @@ if (import.meta.env.DEV) {
 store.subscribe(() => {
   bgDirty = true;
   const comp = store.getComposition();
+  // Undo / redo / file open replace the composition object outright, so keep the
+  // scheduler pointed at the live one — otherwise every edit after an undo taken
+  // mid-playback would be inaudible until the next play().
+  if (playback.isPlaying()) playback.setComposition(comp);
   updateBpm(comp.bpm);
   const tsValue = `${comp.beatsPerMeasure}/${comp.timeSignatureDenominator}`;
   if (timeSigSelect.value !== tsValue) timeSigSelect.value = tsValue;

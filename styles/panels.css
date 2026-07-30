@@ -142,6 +142,7 @@
 }
 
 .track-edit-tone,
+.track-delete,
 .track-tone-select {
   background: var(--surface);
   color: var(--text-dim);
@@ -158,6 +159,13 @@
 .track-tone-select:hover {
   background: #1a4a80;
   color: var(--accent);
+}
+
+/* Delete is destructive — hover goes red rather than the usual accent blue. */
+.track-delete:hover {
+  background: #c62828;
+  color: #fff;
+  border-color: #c62828;
 }
 
 .track-panel-actions {

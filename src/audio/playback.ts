@@ -34,6 +34,13 @@ export interface PlaybackEngine {
   /** Update the active loop/auto-stop range mid-playback (e.g. when selection changes). */
   setPlayRange(loopStart: number, loopEnd: number): void;
   /**
+   * Re-point the scheduler at the live composition object. `loadComposition`
+   * (undo, redo, file open) *replaces* the composition rather than mutating it,
+   * so the reference cached at `play()` would go stale and every later edit
+   * would be invisible to the scheduler until the next `play()`.
+   */
+  setComposition(composition: Composition): void;
+  /**
    * Register a hook called once per scheduler tick with the current scheduling
    * window in beats and a helper to convert any beat in that window to audio time.
    * Used by the metronome to schedule clicks alongside tone playback.
@@ -65,6 +72,48 @@ export function createPlaybackEngine(
     const ctx = getAudioContext();
     const elapsedSec = ctx.currentTime - startAudioTime;
     return startBeatOffset + elapsedSec * (currentBpm / 60);
+  }
+
+  /**
+   * Stop voices whose curve or track disappeared mid-playback.
+   *
+   * Removing a track or curve stops it being *scheduled*, but automation
+   * already written into its AudioParams keeps playing — so the last tone it
+   * sounded sustains until the next loop restart tears the pool down. Deleting
+   * a track, dropping a layer, or deleting curves during playback all hit this.
+   */
+  function releaseRemovedVoices(): void {
+    if (!currentComposition) return;
+    const now = getAudioContext().currentTime;
+
+    // Whole tracks that vanished: dispose the pool, which silences and stops
+    // every voice and disconnects the track gain.
+    const liveTrackIds = new Set(currentComposition.tracks.map(t => t.id));
+    const survivors: TrackPlayback[] = [];
+    for (const tp of trackPlaybacks) {
+      if (liveTrackIds.has(tp.trackId)) survivors.push(tp);
+      else disposePool(tp);
+    }
+    trackPlaybacks = survivors;
+
+    // Individual curves that vanished from a surviving track.
+    for (const tp of trackPlaybacks) {
+      const track = currentComposition.tracks.find(t => t.id === tp.trackId);
+      if (!track) continue;
+      const liveCurveIds = new Set(track.curves.map(c => c.id));
+      let silenced = false;
+      for (const [curveId, voiceIndex] of [...tp.assignment]) {
+        if (liveCurveIds.has(curveId)) continue;
+        tp.assignment.delete(curveId);
+        tp.voices[voiceIndex]?.silence(now);
+        silenced = true;
+      }
+      // A voice slot is shared by non-overlapping curves, so silencing can also
+      // cut a live curve that happens to share the slot. Rewinding the track's
+      // scheduling horizon makes the next tick re-establish automation from now
+      // for everything still alive, which repairs that within ~25 ms.
+      if (silenced) tp.lastScheduledTime = now;
+    }
   }
 
   /**
@@ -118,6 +167,7 @@ export function createPlaybackEngine(
 
   function scheduleAhead(): void {
     if (!playing || !currentComposition) return;
+    releaseRemovedVoices();
     adoptNewCurves();
     const ctx = getAudioContext();
     const now = ctx.currentTime;
@@ -382,6 +432,14 @@ export function createPlaybackEngine(
       if (endBeat <= startBeat) return;
       playStartBeat = startBeat;
       playEndBeat = endBeat;
+    },
+    setComposition(composition: Composition) {
+      if (composition === currentComposition) return;
+      currentComposition = composition;
+      // Deliberately not touching currentBpm: it is baked into the
+      // startAudioTime/startBeatOffset mapping, so changing it mid-playback
+      // would warp the timeline. Tempo picks up on the next play().
+      // Pools reconcile on the next tick via releaseRemovedVoices/adoptNewCurves.
     },
     setSchedulerHook(hook) {
       schedulerHook = hook;
