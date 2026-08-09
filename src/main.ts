@@ -64,7 +64,7 @@ import iconStop from './assets/icons/stop.svg?raw';
 import iconRecord from './assets/icons/record.svg?raw';
 import iconJam from './assets/icons/jam.svg?raw';
 import iconKeep from './assets/icons/keep.svg?raw';
-import { canOpenLayer, createLayerTrack, newestLayerTrack, LAYER_TRACK_LIMIT } from './model/layer';
+import { canOpenLayer, createLayerTrack, newestLayerTrack, nextPassRecordState, LAYER_TRACK_LIMIT } from './model/layer';
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import type { AppState, ToolMode, Lane, LanePoint, BezierCurve } from './types';
 
@@ -836,7 +836,12 @@ const AFK_WARNING_LEAD_MS = 30_000;
  *  and while jamming (the free-running clock is a scrolling-view experience). */
 function effectiveScrollCanvas(): boolean {
   const st = store.getState();
-  return st.scrollCanvasEnabled || st.performance.recordArmed || st.performance.jamActive;
+  return st.scrollCanvasEnabled
+    || st.performance.recordArmed
+    || st.performance.jamActive
+    // Queued pass-record counts too, so the view doesn't switch modes at the
+    // moment capture starts (BACKLOG 10.5).
+    || st.performance.passRecordState !== 'off';
 }
 /** Minimum offsetX for clamping — negative when Scroll Canvas is on so beat 0 can
  * reach the rail at canvas centre. */
@@ -860,8 +865,11 @@ function updateRecordButtonVisuals() {
   const g = st.performance;
 
   btnRecord.removeAttribute('hidden');
-  btnRecord.classList.toggle('armed', g.recordArmed && g.phase !== 'playing');
-  btnRecord.classList.toggle('recording', g.recordArmed && g.phase === 'playing');
+  // Queued (10.5) is its own state: waiting for the loop point, not yet capturing.
+  const queued = g.passRecordState === 'queued';
+  btnRecord.classList.toggle('queued', queued);
+  btnRecord.classList.toggle('armed', !queued && g.recordArmed && g.phase !== 'playing');
+  btnRecord.classList.toggle('recording', !queued && g.recordArmed && g.phase === 'playing');
   btnRecord.disabled = st.selectedTrackId === null;
 
   btnJam.classList.toggle('jamming', g.jamActive);
@@ -983,9 +991,11 @@ btnStop.addEventListener('click', () => {
   updatePlayState(false);
 });
 
-btnRecord.addEventListener('click', () => {
+btnRecord.addEventListener('click', (e) => {
   if (store.getState().selectedTrackId === null) return; // no track to record onto
-  composeToggleArmed();
+  // Shift+click mirrors Shift+R — one obvious place for both record styles.
+  if (e.shiftKey) toggleRecordNextPass();
+  else composeToggleArmed();
   updateRecordButtonVisuals();
 });
 
@@ -1900,7 +1910,10 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (e.repeat) return;
     if (store.getState().selectedTrackId === null) return;
-    composeToggleArmed();
+    // Shift+R = deliberate one-pass record (10.5); plain R = open-ended record.
+    if (e.shiftKey) toggleRecordNextPass();
+    else composeToggleArmed();
+    updateRecordButtonVisuals();
     return;
   }
   if (e.key.toLowerCase() === 'j' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -3202,10 +3215,6 @@ function tickComposePerform() {
       // gesture across the seam keeps as two contiguous curves. This is the
       // un-armed mirror of the armed 8.21 behaviour below.
       closeLmbPhrases();
-      // One pass = one layer (BACKLOG 10.3): closing the layer here means the
-      // next commit opens a fresh one. Both keeps for a line held across the
-      // seam happen in the same pass, so its halves stay on one layer.
-      currentLayerTrackId = null;
       if (g.recordArmed && composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
       // Loop wrap during sustained MIDI notes splits the curves at the wrap so
       // recordings don't cross the loop boundary as a single curve. Keep the
@@ -3214,6 +3223,24 @@ function tickComposePerform() {
       // behaviour, which the surrounding finalizeComposeRecordedCurves call
       // already does. (BACKLOG 8.21)
       finalizeAllInFlightMidiVoices({ keepPlanchette: true });
+
+      // Deliberate one-pass record (BACKLOG 10.5): a queued arm starts here,
+      // a pass in progress ends here. Runs after the commits above so the
+      // finishing pass's material is captured before we disarm.
+      const passState = store.getState().performance.passRecordState;
+      if (passState !== 'off') {
+        const next = nextPassRecordState(passState);
+        store.setPassRecordState(next);
+        store.setPerformArmed(next === 'recording');
+        if (next === 'recording') showToast('Recording this pass', 1500);
+        else showToast('Pass recorded', 2000);
+      }
+
+      // One pass = one layer (BACKLOG 10.3): closing the layer here means the
+      // next commit opens a fresh one. Deliberately AFTER the commits above —
+      // resetting first would push a gesture held across the seam into the
+      // NEXT pass's layer, and anything kept during that pass would join it.
+      currentLayerTrackId = null;
     },
     onAfkTimeout: composePerformStop,
   });
@@ -3255,6 +3282,11 @@ function composeToggleArmed() {
   if (store.getState().selectedTrackId === null) return;
   const g = store.getState().performance;
 
+  // Plain R takes over from a queued one-pass arm (10.5) rather than running
+  // both — otherwise the pass's end-of-loop disarm would silently stop an
+  // open-ended recording the user started afterwards.
+  if (g.passRecordState !== 'off') store.setPassRecordState('off');
+
   // Recording → full stop: commit any in-progress curve, stop playback, return to idle.
   if (g.phase === 'playing' && g.recordArmed) {
     composePerformStop();
@@ -3290,6 +3322,69 @@ function composeToggleArmed() {
   store.setPerformCountdownStartedAt(getAudioContext().currentTime);
   store.setPerformPhase('countdown');
   composeEngine.startSession(performance.now());
+}
+
+/**
+ * Deliberate "record next full pass" (BACKLOG 10.5) — the structured
+ * counterpart to retrospective keep. Arms exactly one loop pass: recording
+ * starts at the loop point and auto-commits and disarms at the next one.
+ */
+function toggleRecordNextPass() {
+  const g = store.getState().performance;
+
+  // Already armed or running → cancel. Anything captured so far commits, the
+  // same as stopping an ordinary recording.
+  if (g.passRecordState !== 'off') {
+    if (g.passRecordState === 'recording') {
+      if (composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
+      finalizeAllInFlightMidiVoices({ keepPlanchette: true });
+    }
+    store.setPassRecordState('off');
+    store.setPerformArmed(false);
+    showToast('Pass record cancelled', 2000);
+    return;
+  }
+
+  if (store.getState().selectedTrackId === null) return;
+  ensureResumed();
+
+  // A "pass" is defined by the loop, so turn Loop on rather than refusing —
+  // but say so, since it changes the transport out from under the user.
+  if (!playback.isLoopEnabled()) {
+    playback.setLoop(true);
+    loopToggle.checked = true;
+    showToast('Record next Pass: Loop On', 2000);
+  }
+
+  const comp = store.getComposition();
+  if (!playback.isPlaying()) {
+    // From idle: start at the loop point and record that first cycle — it *is*
+    // the full pass, so recording is live immediately rather than queued.
+    const r = canvasContainer.getBoundingClientRect();
+    playback.play(comp, comp.loopStartBeats, comp.loopEndBeats, comp.loopStartBeats);
+    if (!playback.isPlaying()) {
+      showToast('Set a loop range first', 2500);
+      return;
+    }
+    store.setPlaybackState('playing');
+    store.setPerformPhase('playing');
+    store.setPassRecordState('recording');
+    store.setPerformArmed(true);
+    composeEngine.startSession(performance.now());
+    resetLayerSession();
+    updatePlayState(true);
+    scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
+    bgDirty = true;
+    showToast('Recording this pass', 1500);
+    return;
+  }
+
+  // Transport already running → queue it; the wrap handler starts the capture
+  // so the pass is always whole.
+  store.setPerformPhase('playing');
+  composeEngine.startSession(performance.now());
+  store.setPassRecordState('queued');
+  showToast('Armed — recording starts at the loop point', 2500);
 }
 
 /** Toggle the free-running jam clock (BACKLOG 10.1). Starts instantly — no
@@ -3367,6 +3462,7 @@ function composePerformStop() {
   store.setPerformPhase('idle');
   store.setPerformArmed(false);
   store.setJamActive(false);
+  store.setPassRecordState('off');
   resetLayerSession();
   store.setPerformCountdownStartedAt(0);
   store.setPerformLmbSounding(false);

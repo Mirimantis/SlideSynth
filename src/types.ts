@@ -171,9 +171,16 @@ export interface PlanchetteState {
   lastCrossedAt: number;
 }
 
+/** Deliberate "record next full pass" (BACKLOG 10.5). `queued` waits for the
+ *  next loop point; `recording` is the pass in progress, which auto-commits and
+ *  disarms at the following one. */
+export type PassRecordState = 'off' | 'queued' | 'recording';
+
 export interface PerformanceState {
   phase: PerformancePhase;
   recordArmed: boolean;
+  /** Deliberate one-pass record (BACKLOG 10.5). Runtime only. */
+  passRecordState: PassRecordState;
   /** Free-running jam clock active (BACKLOG 10.1): transport rolls open-ended,
    *  nothing armed, LMB perform sounds without capturing. Runtime-only — never
    *  persisted to the composition. */

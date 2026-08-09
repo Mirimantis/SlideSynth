@@ -320,6 +320,21 @@
     <li>While Record is armed, gestures are already committed on release, so there's nothing left for Keep to find.</li>
   </ul>
 
+  <h3>Recording a whole pass on purpose</h3>
+  <p>
+    Keep (<kbd>K</kbd>) rescues something good you happened to play. When you want the
+    opposite — a drone or harmony bed placed <em>precisely</em> — arm a pass instead.
+  </p>
+  <ul>
+    <li><strong>Shift+R</strong> (or <strong>Shift</strong>+click the Record button) arms exactly <strong>one full loop pass</strong>. Recording begins at the loop point and commits automatically at the next one, then disarms itself.</li>
+    <li>Arm it partway through a pass and it waits: the Record button turns <strong>amber</strong> to show it's queued, then goes red when capture actually starts. You always get a whole pass, never a partial one.</li>
+    <li>Arm it while stopped and playback starts at the loop point, recording that first cycle straight away.</li>
+    <li>A pass needs a loop to define it, so if <strong>Loop</strong> is off it's switched on for you and a toast says <em>Record next Pass: Loop On</em>.</li>
+    <li>Press <kbd>Shift+R</kbd> again to cancel. Anything already captured is kept, the same as stopping an ordinary recording.</li>
+    <li>With <strong>Layer</strong> mode on, the pass lands on its own layer — which is the whole point: stack a bass drone, then a harmony bed, then a lead.</li>
+    <li>Plain <kbd>R</kbd> is unchanged: open-ended recording that runs until you stop it.</li>
+  </ul>
+
   <h3>Layers (looping)</h3>
   <p>
     Turn on the <strong>Layer</strong> switch in the transport panel and each pass you
@@ -1002,6 +1017,7 @@
     <tr><td><kbd>R</kbd></td><td>Arm / disarm Record</td></tr>
     <tr><td><kbd>J</kbd></td><td>Start / stop Jam (free-running clock, nothing recorded)</td></tr>
     <tr><td><kbd>K</kbd></td><td>Keep that — commit the phrase you just played</td></tr>
+    <tr><td><kbd>Shift+R</kbd></td><td>Record exactly one full loop pass</td></tr>
     <tr><td><kbd>U</kbd></td><td>Drop the last performed pass (undo last layer)</td></tr>
     <tr><td><kbd>Escape</kbd></td><td>Cancel countdown / stop recording</td></tr>
     <tr><td><kbd>L</kbd></td><td>Toggle loop</td></tr>

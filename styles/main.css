@@ -930,6 +930,15 @@ body {
   background: #e53935;
 }
 
+/* Queued one-pass record (10.5) — waiting for the loop point, not yet
+   capturing, so amber rather than the armed/recording reds. */
+.record-btn.queued {
+  color: #1b2430;
+  background: #f9a825;
+  border-color: #f9a825;
+  animation: recordPulse 1s infinite;
+}
+
 /* Jam button — free-running clock (BACKLOG 10.1) */
 .jam-btn {
   background: var(--surface);

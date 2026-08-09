@@ -233,10 +233,11 @@ First slice of [performance-jam-looper-plan.md](performance-jam-looper-plan.md) 
 - [ ] **10.4 Undo last layer** *(S–M, after 10.3)*
   Semantic key on the single existing undo stack ([src/state/history.ts](src/state/history.ts)): each kept pass = exactly one snapshot. No separate layer history, no mode-dependent undo (decided 2026-07-19). Planning session done — decisions + build spec in [.claude/plans/10.4-drop-last-pass.md](.claude/plans/10.4-drop-last-pass.md). Key refinement: history is a linear snapshot stack with no way to excise a middle entry, so the key is a **forward delete that is itself undoable** rather than a rewind — it works regardless of edits made since, and `Ctrl+Z` restoring a dropped layer doubles as the looper's "redo layer". `U` key, any performed pass (keeps + armed), walks back through the whole session, removes the layer track when that pass created it and it's left empty. Introduces the app's first `removeTrack` mutator. Pass log is append-only with droppability *derived* from whether the curves still exist, so undo/redo interplay and manual deletions need no bookkeeping.
 
-- [ ] **10.5 Deliberate "record next full pass"** *(M)*
-  Arm to record exactly one loop-length pass, auto-committing at the wrap — the structured-material capture style (drones, harmony beds), complementing 10.2's serendipitous leads.
+- [x] **10.5 Deliberate "record next full pass"** *(M)*
+  Arm to record exactly one loop-length pass, auto-committing at the wrap — the structured-material capture style (drones, harmony beds), complementing 10.2's serendipitous leads. `Shift+R` / `Shift`+click Record; a queued arm shows an amber Record button and starts at the next loop point; from idle it starts the loop and records the first pass; Loop is auto-enabled with a `Record next Pass: Loop On` toast; plain `R` takes over a queued arm. Decisions + spec in [.claude/plans/10.5-record-next-pass.md](.claude/plans/10.5-record-next-pass.md). Also fixed a 10.3 ordering bug found here: the layer boundary reset *before* wrap-time commits, so a gesture held across the seam landed in the **next** pass's layer.
 
-- [ ] **10.6 Live loop in/out taps, bar-quantized** *(S–M)*
+- [ ] **10.6 Live loop in/out taps, bar-quantized** *(S–M, DEFERRED)*
+  **Deferred 2026-07-30 at the user's request — not sure it's wanted.** Revisit only if setting loop points mid-jam proves necessary in practice; dragging the ruler markers covers it for now.
   Set loop points mid-jam by key; quantize taps to the nearest bar (absorbs reaction delay). Optional classic-looper behavior: a late tap reads as the previous boundary and snaps the playhead back. Dragged ruler markers keep today's fine-grid snapping (`snapBeatForMarker` in [src/canvas/interaction.ts](src/canvas/interaction.ts)) — bar-quantize applies to taps only (decided 2026-07-19).
 
 ---
