@@ -1,4 +1,4 @@
-import type { AppState, BezierCurve, Composition, GuideDefinition, PerformancePhase, PlanchetteState, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode } from '../types';
+import type { AppState, BezierCurve, Composition, GuideDefinition, PerformancePhase, PassRecordState, PlanchetteState, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode } from '../types';
 import { createComposition } from '../model/composition';
 import { createTrack } from '../model/track';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
@@ -147,6 +147,7 @@ function createInitialState(): AppState {
     performance: {
       phase: 'idle',
       recordArmed: false,
+      passRecordState: 'off',
       jamActive: false,
       countdownStartedAt: 0,
       lmbSounding: false,
@@ -398,6 +399,13 @@ class Store {
 
   setPerformArmed(on: boolean) {
     this.state.performance.recordArmed = on;
+    this.notify();
+  }
+
+  /** Deliberate one-pass record state (BACKLOG 10.5). */
+  setPassRecordState(state: PassRecordState) {
+    if (this.state.performance.passRecordState === state) return;
+    this.state.performance.passRecordState = state;
     this.notify();
   }
 

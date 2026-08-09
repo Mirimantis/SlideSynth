@@ -6,8 +6,19 @@
  * from the existing track panel for free.
  */
 
-import type { Track } from '../types';
+import type { PassRecordState, Track } from '../types';
 import { createTrack } from './track';
+
+/**
+ * Advance the deliberate one-pass record at a loop boundary (BACKLOG 10.5):
+ * a queued arm starts recording at the loop point, and a pass in progress
+ * finishes there — committing and disarming. `off` stays `off`.
+ */
+export function nextPassRecordState(current: PassRecordState): PassRecordState {
+  if (current === 'queued') return 'recording';
+  if (current === 'recording') return 'off';
+  return 'off';
+}
 
 /** Ceiling on total tracks while layering. 16 matches MPE's usable channel
  *  count and a VCV poly cable, so a stack that fits here can be exported to
