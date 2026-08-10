@@ -154,9 +154,36 @@ export function renderRail(
 }
 
 /**
+ * Soft halo behind a planchette showing the dynamics-bus value for that voice
+ * (BACKLOG 11.1) — bigger and brighter as the swell rises. Drawn *behind* the
+ * glyph rather than scaling it: the glyph marks an exact pitch, so its geometry
+ * has to stay put while loudness moves.
+ */
+function renderDynamicsHalo(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  dynamics: number,
+  color: string,
+): void {
+  const d = Math.max(0, Math.min(1, dynamics));
+  ctx.save();
+  ctx.globalAlpha = 0.10 + 0.30 * d;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, CIRCLE_RADIUS * (0.8 + 1.4 * d), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
  * Render the rail + any planchettes riding it at their snapped Y values.
  * Used in Glissandograph rendering (rail is always present) and in Compose
  * when Scroll-Canvas Playback is active.
+ *
+ * `dynamicsOf` resolves a voice's current dynamics-bus value; returning null
+ * (which is what the bus's `fixed` source does) draws the planchette exactly as
+ * it looked before the bus existed.
  */
 export function renderPlanchettes(
   ctx: CanvasRenderingContext2D,
@@ -166,6 +193,7 @@ export function renderPlanchettes(
   planchettes: PlanchetteState[],
   lastLoopWrapAt: number = 0,
   prismMode: boolean = false,
+  dynamicsOf?: (voiceId: string) => number | null,
 ): void {
   renderRail(ctx, canvasWidth, canvasHeight, lastLoopWrapAt);
   const railX = canvasWidth * RAIL_SCREEN_X_RATIO;
@@ -185,6 +213,13 @@ export function renderPlanchettes(
         ctx.fillStyle = GHOST_COLOR;
         ctx.fill();
       }
+    }
+
+    const dyn = dynamicsOf?.(p.voiceId) ?? null;
+    if (dyn != null) {
+      // Gradients can't fill a halo meaningfully, so the halo always uses the
+      // voice's solid trail colour even in Prism mode.
+      renderDynamicsHalo(ctx, railX, snappedScreenY, dyn, recordingTrailColor(p.voiceId, prismMode));
     }
 
     const color: string | CanvasGradient = prismMode
@@ -278,21 +313,40 @@ export function renderRecordingTrails(
   const topY = RULER_HEIGHT;
   ctx.save();
   ctx.globalAlpha = 0.7;
-  ctx.lineWidth = 2;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   for (const [voiceId, samples] of buffers) {
     if (samples.length < 2) continue;
     ctx.strokeStyle = recordingTrailColor(voiceId, prismMode);
-    ctx.beginPath();
+    // The trail thickens with each sample's dynamics (BACKLOG 11.1) so the
+    // shape of the swell is visible as it's played. A single path can only
+    // carry one lineWidth, so the polyline is broken into runs of equal
+    // (quantized) width — a handful of strokes per voice, not one per segment.
+    // A `fixed`-source take has one width throughout, i.e. a single stroke,
+    // which is exactly the pre-bus drawing.
     let started = false;
+    let runWidth = trailWidthFor(samples[0]!.volume);
+    ctx.lineWidth = runWidth;
+    ctx.beginPath();
+    let last: { sx: number; sy: number } | null = null;
     for (const s of samples) {
       const scr = vp.worldToScreen(s.beat, s.note);
       // Skip points outside the canvas body but keep the polyline continuous
       // by re-entering with moveTo when we come back in range.
       if (scr.sy < topY || scr.sy > canvasHeight) {
         started = false;
+        last = null;
         continue;
+      }
+      const width = trailWidthFor(s.volume);
+      if (started && width !== runWidth) {
+        // Close out the current run, then reopen from the same point at the new
+        // width so the trail stays visually continuous across the seam.
+        ctx.stroke();
+        ctx.lineWidth = width;
+        runWidth = width;
+        ctx.beginPath();
+        if (last) ctx.moveTo(last.sx, last.sy);
       }
       if (!started) {
         ctx.moveTo(scr.sx, scr.sy);
@@ -300,10 +354,18 @@ export function renderRecordingTrails(
       } else {
         ctx.lineTo(scr.sx, scr.sy);
       }
+      last = scr;
     }
     ctx.stroke();
   }
   ctx.restore();
+}
+
+/** Trail stroke width for a captured dynamics value, quantized to 0.5 px so a
+ *  gently drifting value doesn't split the polyline into hundreds of runs. */
+function trailWidthFor(volume: number): number {
+  const d = Math.max(0, Math.min(1, volume));
+  return Math.round((1 + 3 * d) * 2) / 2;
 }
 
 /**

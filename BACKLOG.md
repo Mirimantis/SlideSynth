@@ -246,11 +246,11 @@ First slice of [performance-jam-looper-plan.md](performance-jam-looper-plan.md) 
 
 The plan doc's dynamics-axis direction: one shared normalized channel that drives live synth amplitude and records into the currently-recording voice's volume lane; every input device is then a thin adapter. Build order per the plan: swell → MIDI → pen → gamepad.
 
-- [ ] **11.1 Dynamics bus + key-held swell** *(M)*
-  Stand up the bus: keydown ramps up, keyup decays. Replaces the hardcoded `volume: 0.8` in `captureComposeRecordingSample` ([src/main.ts](src/main.ts)) / flat 2-point volume lane in `curveFromRecording` ([src/model/curve.ts](src/model/curve.ts)) with continuous bus samples. Per-voice on capture, not global.
+- [x] **11.1 Dynamics bus + key-held swell** *(M)*
+  Bus stood up in [src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts) with a **source selector** (`fixed` | `key-swell`, workspace preference, Transport drawer). `fixed` returns `DEFAULT_VOLUME` so pre-bus takes reproduce exactly; `key-swell` rests at a floor and swells while `F` is held (exponential, frame-rate-independent envelope). Replaced the hardcoded `volume: 0.8` in `captureComposeRecordingSample` and gave `curveFromRecording` an **independent volume simplification pass** — a flat take still collapses to 2 points, a performed swell keeps its shape. Live loudness rides `preview.setVoiceVolume`; planchette halo, trail thickness, and Pitch HUD show the value.
 
 - [ ] **11.2 MIDI velocity + CC/expression + MIDI-learn** *(M)*
-  Stop discarding live velocity (`void velocity;` at [src/main.ts:1082](src/main.ts)) — the first half of 9.4. Add CC + channel-pressure decode in [src/audio/midi-input.ts](src/audio/midi-input.ts) (currently note-on/off + pitch bend only) feeding the bus, plus MIDI-learn so any controller/pedal maps. Optional, never a prerequisite.
+  Stop discarding live velocity (`void velocity;` in the `onNoteOn` handler of [src/main.ts](src/main.ts)) — the first half of 9.4. Add CC + channel-pressure decode in [src/audio/midi-input.ts](src/audio/midi-input.ts) (currently note-on/off + pitch bend only) feeding the bus as a new `DynamicsSource`, plus MIDI-learn so any controller/pedal maps. Optional, never a prerequisite.
 
 - [ ] **11.3 Pointer Events migration + pen pressure/tilt** *(M)*
   Migrate [src/canvas/interaction.ts](src/canvas/interaction.ts) from legacy mouse events to Pointer Events; pen pressure feeds the bus; capture tilt now even though its use (vibrato/timbre) is decided later. Pen-vs-mouse detection + adjustable sensitivity curve.

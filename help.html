@@ -369,9 +369,26 @@
     <li>Looping back (loop-wrap) during recording commits the current gesture as a curve and flashes the planchette — the next pass starts a fresh curve.</li>
   </ul>
 
+  <h3>Dynamics — playing the swell</h3>
+  <p>
+    The mouse gives you pitch, but a note also needs a <em>shape</em> — the swell and fade
+    within it. That comes from a second channel, the <strong>dynamics bus</strong>: one value
+    that both sets how loud you sound right now and is written into the recorded curve's
+    volume lane. Set it from <strong>Dynamics</strong> in the Transport drawer.
+  </p>
+  <ul>
+    <li><strong>Fixed</strong> (default) — every performed note records at one steady level. This is how recording has always behaved.</li>
+    <li><strong>Key swell</strong> — notes sit quiet until you hold <kbd>F</kbd>, then swell up; let go and they fall away. Your right hand stays on the mouse for pitch while your left hand shapes the volume.</li>
+    <li>The swell applies to whatever is sounding — the line you're performing, every voice of a Harmonic Prism chord, and held MIDI notes.</li>
+    <li>What you played is what gets recorded: the committed curve's volume lane traces the swell, with just enough points to hold its shape. You can still refine it point-by-point afterward.</li>
+    <li>The setting is remembered between sessions, and it belongs to your workspace rather than the composition — files you send elsewhere are unaffected.</li>
+  </ul>
+
   <h3>Heads-up display</h3>
   <ul>
     <li><strong>Pitch readout</strong> (top-right) shows the planchette's current pitch as a note name plus cents offset (e.g. <code>C#4 +12¢</code>). Out-of-tune cents appear only when the raw cursor pitch differs from the snapped pitch by more than a cent.</li>
+    <li><strong>Dynamics readout</strong> sits beside the pitch as a small bar plus value, whenever Dynamics is set to something other than Fixed.</li>
+    <li><strong>Planchette and trail</strong> respond to the swell too — the planchette gains a halo that grows and brightens as you push, and the live recording trail thickens with it.</li>
     <li><strong>Record button</strong> in the transport row pulses red when armed and glows solid red while recording.</li>
   </ul>
 
@@ -508,6 +525,7 @@
         <li><strong>Pitch HUD</strong> — shows the pitch under the cursor (note name + cents + frequency in Hz) in the top-right of the canvas while the cursor has a meaningful Y. The Hz readout reflects the current Tune A4 setting, so A=432 etc. shifts every frequency in lockstep. Toggle off to hide. Preference persists via localStorage.</li>
         <li><strong>Perf HUD</strong> — passive observer in the top-left: frame ms (p50 / p99 over a rolling ~2 s), live synth / oscillator / voice counts, and audio output latency. Off by default; toggle from the Transport panel or press <kbd>!</kbd> (Shift+1). Useful when something feels sluggish — load a heavy composition (see <code>fixtures/stress-test.ssn</code>) and watch the numbers move.</li>
         <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording. From Idle, a 3-second countdown runs then Playback begins. If Playback is already running (classic or Perform), the countdown is skipped and recording arms immediately at the current beat. While armed, holding LMB in the canvas plays the selected track's tone AND captures it as a curve; release commits the curve. Recording forces the Scroll switch to <strong>Canvas</strong> and hijacks LMB for Perform — the XY tool buttons (Draw, Select, Delete, Slice) gray out while live. Escape cancels.</li>
+        <li><strong>Dynamics</strong> — picks what drives the loudness of what you perform: <strong>Fixed</strong> (a steady level, the original behaviour) or <strong>Key swell</strong> (hold <kbd>F</kbd> to swell). See <a href="#perform">Perform &amp; Record</a>. Remembered between sessions.</li>
         <li><strong>Perform during Playback</strong> — when Playback is running with the Scroll switch on <strong>Canvas</strong> (including during Record), LMB plays the selected track's tone at the cursor's Y pitch. XY tools are disabled for the duration. Release LMB to stop the tone. With the switch on Planchette, Playback stays classic — LMB runs the active XY tool as usual.</li>
         <li><strong>Ruler</strong> — two stacked strips at the top of the canvas: a <strong>seconds ruler</strong> (adapts tick spacing to zoom; labels decimal seconds when zoomed in and <code>M:SS</code> for larger steps) and a <strong>beat / measure ruler</strong> with subdivision ticks. The seconds ruler also reflects BPM changes.</li>
         <li><strong>Scrubbing</strong> — click and drag anywhere in the ruler bar (either strip) to position the playhead. Scrubbing is allowed into empty grid past the last point.</li>
@@ -1019,6 +1037,7 @@
     <tr><td><kbd>K</kbd></td><td>Keep that — commit the phrase you just played</td></tr>
     <tr><td><kbd>Shift+R</kbd></td><td>Record exactly one full loop pass</td></tr>
     <tr><td><kbd>U</kbd></td><td>Drop the last performed pass (undo last layer)</td></tr>
+    <tr><td><kbd>F</kbd> (hold)</td><td>Swell the note you're performing — only when Dynamics is set to Key swell</td></tr>
     <tr><td><kbd>Escape</kbd></td><td>Cancel countdown / stop recording</td></tr>
     <tr><td><kbd>L</kbd></td><td>Toggle loop</td></tr>
     <tr><td><kbd>D</kbd></td><td>Draw tool</td></tr>

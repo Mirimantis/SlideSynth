@@ -1,4 +1,5 @@
-import type { AppState, BezierCurve, Composition, GuideDefinition, PerformancePhase, PassRecordState, PlanchetteState, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode } from '../types';
+import type { AppState, BezierCurve, Composition, GuideDefinition, PerformancePhase, PassRecordState, PlanchetteState, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode, DynamicsSource } from '../types';
+import { DYNAMICS_SOURCES } from '../types';
 import { createComposition } from '../model/composition';
 import { createTrack } from '../model/track';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
@@ -32,6 +33,7 @@ const PRISM_OCTAVE_RANGE_STORAGE_KEY = 'slidesynth.prismOctaveRange';
 const PRISM_DRAW_MODE_STORAGE_KEY = 'slidesynth.prismDrawMode';
 const GUIDES_VISIBLE_STORAGE_KEY = 'slidesynth.guidesVisible';
 const GUIDES_LOCKED_STORAGE_KEY = 'slidesynth.guidesLocked';
+const DYNAMICS_SOURCE_STORAGE_KEY = 'slidesynth.dynamicsSource';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -65,6 +67,26 @@ function loadNumberPref(key: string, defaultValue: number): number {
 function saveNumberPref(key: string, value: number): void {
   try {
     localStorage.setItem(key, String(value));
+  } catch {
+    // Silently ignore — preference just won't persist.
+  }
+}
+
+/** Load a string preference, falling back to the default unless the stored
+ *  value is still one this build recognises. */
+function loadStringPref<T extends string>(key: string, allowed: readonly T[], defaultValue: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return defaultValue;
+    return (allowed as readonly string[]).includes(raw) ? raw as T : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+function saveStringPref(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
   } catch {
     // Silently ignore — preference just won't persist.
   }
@@ -188,6 +210,7 @@ function createInitialState(): AppState {
     metronomeEnabled: loadBoolPref(METRONOME_ENABLED_STORAGE_KEY, false),
     metronomeVolume: loadNumberPref(METRONOME_VOLUME_STORAGE_KEY, 0.6),
     autoSmoothXRatio: Math.max(0, Math.min(1, loadNumberPref(AUTO_SMOOTH_X_RATIO_STORAGE_KEY, AUTO_SMOOTH_X_RATIO))),
+    dynamicsSource: loadStringPref(DYNAMICS_SOURCE_STORAGE_KEY, DYNAMICS_SOURCES, 'fixed'),
     harmonicPrism: {
       chordSpec: loadChordSpecPref(DEFAULT_CHORD_SPEC),
       projectionOctaveRange: Math.max(0, Math.min(3, Math.round(loadNumberPref(PRISM_OCTAVE_RANGE_STORAGE_KEY, 2)))),
@@ -542,6 +565,15 @@ class Store {
     if (this.state.perfHudVisible === visible) return;
     this.state.perfHudVisible = visible;
     saveBoolPref(PERF_HUD_STORAGE_KEY, visible);
+    this.notify();
+  }
+
+  /** What drives performed volume (BACKLOG 11.1). Workspace preference — the
+   *  dynamics bus is a live-input concern, so it never enters the composition. */
+  setDynamicsSource(source: DynamicsSource) {
+    if (this.state.dynamicsSource === source) return;
+    this.state.dynamicsSource = source;
+    saveStringPref(DYNAMICS_SOURCE_STORAGE_KEY, source);
     this.notify();
   }
 

@@ -191,6 +191,15 @@ export interface PerformanceState {
   currentRecordedCurveIds: Record<VoiceId, string | null>;
 }
 
+// ── Dynamics bus (BACKLOG Phase 11) ─────────────────────────────
+
+/** What drives the dynamics bus — the shared 0–1 channel that sets live
+ *  performed loudness and fills the recorded volume lane. `fixed` is the
+ *  pre-bus behaviour (a constant); every other value is a live input adapter. */
+export type DynamicsSource = 'fixed' | 'key-swell';
+
+export const DYNAMICS_SOURCES: readonly DynamicsSource[] = ['fixed', 'key-swell'];
+
 // ── Harmonic Prism ──────────────────────────────────────────────
 
 export type HarmonicPrismMode = 'draw' | 'perform' | 'projection';
@@ -258,6 +267,7 @@ export interface AppState {
   metronomeEnabled: boolean;                  // Metronome user preference (localStorage-backed)
   metronomeVolume: number;                    // 0..1 — metronome master gain (localStorage-backed)
   autoSmoothXRatio: number;                   // 0..1 — fraction of neighbor segment length used for Draw auto-smooth + Smooth Curve action (localStorage-backed)
+  dynamicsSource: DynamicsSource;             // What drives performed volume (localStorage-backed)
   harmonicPrism: HarmonicPrismState;          // Harmonic Prism feature (chordSpec + octaveRange localStorage-backed)
 }
 

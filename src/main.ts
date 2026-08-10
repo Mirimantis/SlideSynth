@@ -25,6 +25,7 @@ import { openContextMenu } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
 import { createMidiInput } from './audio/midi-input';
+import { createDynamicsBus, isDynamicsSource } from './audio/dynamics-bus';
 import { createMagneticState, updateMagnetic, resetMagnetic } from './utils/snap-magnetic';
 import { renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
@@ -176,6 +177,13 @@ app.innerHTML = `
               <span class="toggle-switch-label">Metronome</span>
             </label>
             <input type="range" id="metronome-volume" class="metronome-volume" min="0" max="100" value="60" title="Metronome volume" />
+          </div>
+          <div class="transport-row">
+            <label>Dynamics</label>
+            <select id="input-dynamics-source" title="What drives performed volume">
+              <option value="fixed">Fixed</option>
+              <option value="key-swell">Key swell (hold F)</option>
+            </select>
           </div>
           <div class="transport-row">
             <label>MIDI Input</label>
@@ -391,6 +399,7 @@ pitchHud.innerHTML = `
   <span class="hud-slot hud-sep" id="hud-sep"></span>
   <span class="hud-slot hud-note" id="hud-raw-name"></span>
   <span class="hud-slot hud-cents" id="hud-raw-cents"></span>
+  <span class="hud-slot hud-dyn" id="hud-dyn"></span>
 `;
 const hudSnapName = document.getElementById('hud-snap-name') as HTMLSpanElement;
 const hudSnapCents = document.getElementById('hud-snap-cents') as HTMLSpanElement;
@@ -398,6 +407,7 @@ const hudSnapHz = document.getElementById('hud-snap-hz') as HTMLSpanElement;
 const hudSep = document.getElementById('hud-sep') as HTMLSpanElement;
 const hudRawName = document.getElementById('hud-raw-name') as HTMLSpanElement;
 const hudRawCents = document.getElementById('hud-raw-cents') as HTMLSpanElement;
+const hudDyn = document.getElementById('hud-dyn') as HTMLSpanElement;
 
 function formatCents(cents: number): string {
   if (cents === 0) return '';
@@ -411,8 +421,20 @@ function formatHz(hz: number): string {
   return `${hz.toFixed(1)} Hz`;
 }
 
-/** Fill each HUD slot in place — no innerHTML, no text concatenation. */
-function writePitchHud(snappedY: number | null, rawY: number | null): void {
+/** Four-step bar for the dynamics readout, quietest to loudest. */
+const DYNAMICS_BAR_GLYPHS = ['▁', '▃', '▅', '▇'];
+
+function formatDynamics(value: number): string {
+  const clamped = Math.max(0, Math.min(1, value));
+  const filled = Math.max(1, Math.ceil(clamped * DYNAMICS_BAR_GLYPHS.length));
+  return `${DYNAMICS_BAR_GLYPHS.slice(0, filled).join('')} ${clamped.toFixed(2)}`;
+}
+
+/** Fill each HUD slot in place — no innerHTML, no text concatenation.
+ *  `dynamics` is null when the bus isn't driving (fixed source), which blanks
+ *  the slot so the HUD reads exactly as it did pre-bus. */
+function writePitchHud(snappedY: number | null, rawY: number | null, dynamics: number | null = null): void {
+  hudDyn.textContent = dynamics == null ? '' : formatDynamics(dynamics);
   if (snappedY == null) {
     hudSnapName.textContent = '';
     hudSnapCents.textContent = '';
@@ -494,6 +516,24 @@ function resizeCanvases() {
 // ── Audio preview ──────────────────────────────────────────────
 const preview = createPreviewManager();
 let previewActive = false;
+
+// ── Dynamics bus (BACKLOG 11.1) ────────────────────────────────
+// One normalized channel driving live perform loudness AND the recorded volume
+// lane. Seeded from the persisted workspace preference; `fixed` reproduces the
+// pre-bus constant exactly.
+const dynamics = createDynamicsBus(store.getState().dynamicsSource);
+const dynamicsSourceSelect = document.getElementById('input-dynamics-source') as HTMLSelectElement;
+dynamicsSourceSelect.value = dynamics.getSource();
+dynamicsSourceSelect.addEventListener('change', () => {
+  const value = dynamicsSourceSelect.value;
+  if (!isDynamicsSource(value)) return;
+  dynamics.setSource(value);
+  store.setDynamicsSource(value);
+  dynamicsSourceSelect.blur();
+});
+// A keyup that lands while the window is unfocused never reaches us, which
+// would leave the swell latched on. Releasing on blur is the cheap fix.
+window.addEventListener('blur', () => dynamics.setSwellHeld(false));
 
 // Spacebar tap-vs-hold: under this threshold, Space is a transport tap (play / pause /
 // stop-recording). Past it, Space becomes a hold-to-preview. The timer fires the preview
@@ -1150,8 +1190,14 @@ midiInput.onNoteOn((note, velocity) => {
   // Initial pitch reflects current bend so a key struck with the wheel held
   // off-centre starts at the bent pitch, no audible jump on the first frame.
   heldMidiNotes.add(note);
-  preview.startDrawPreview(tone, midiToCents(note) + liveBendCents, `midi-${note}`);
-  // velocity reserved for a future loudness-mapped preview; stable mid-volume for now.
+  preview.startDrawPreview(
+    tone,
+    midiToCents(note) + liveBendCents,
+    `midi-${note}`,
+    dynamics.getValue(`midi-${note}`),
+  );
+  // Velocity still unused: the dynamics bus owns loudness, and mapping velocity
+  // into it is 11.2's job (where it becomes a proper bus source alongside CC).
   void velocity;
 
   // Safety-net hint: if MIDI is sounding but no track is armed, the user's
@@ -1936,6 +1982,16 @@ window.addEventListener('keydown', (e) => {
     dropLastPass();
     return;
   }
+  // Dynamics swell (BACKLOG 11.1) — hold to swell, release to fall away. Held
+  // with the left hand while the right works the mouse. No-op unless the bus is
+  // on its key-swell source, so F stays free otherwise.
+  if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (dynamics.getSource() !== 'key-swell') return;
+    e.preventDefault();
+    if (e.repeat) return;
+    dynamics.setSwellHeld(true);
+    return;
+  }
   if (e.key === 'Escape') {
     const g = store.getState().performance;
     if (g.phase === 'countdown' || g.recordArmed || g.jamActive) {
@@ -2258,10 +2314,14 @@ window.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('keyup', (e) => {
-  if (e.key !== ' ') return;
-  // Mirror the keydown guard — otherwise typing a space into a form field still
-  // releases through to the transport tap action.
+  // Mirror the keydown guard — otherwise typing into a form field still
+  // releases through to the transport tap / swell actions.
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
+  if (e.key.toLowerCase() === 'f') {
+    dynamics.setSwellHeld(false);
+    return;
+  }
+  if (e.key !== ' ') return;
   // If the timer is still pending, the key was a tap — run the transport action.
   // If it already fired, decide based on whether preview actually started:
   //   - previewActive: hold-release, just stop preview (no tap action).
@@ -2727,7 +2787,9 @@ function startComposePerformSounding(snappedBaseY: number) {
   for (const p of st.performance.planchettes) {
     const y = voiceYFromBase(p.voiceId, snappedBaseY, offsets);
     if (y == null) continue;
-    preview.startDrawPreview(tone, y, p.voiceId);
+    // Start at the bus's current value so the note doesn't jump on the first
+    // frame. Under the `fixed` source this is exactly the old preview level.
+    preview.startDrawPreview(tone, y, p.voiceId, dynamics.getValue(p.voiceId));
   }
   store.setPerformLmbSounding(true);
 }
@@ -2829,7 +2891,7 @@ function syncHarmonyPlanchettes() {
     // mid-perform), start its synth at the right pitch immediately.
     if (composeEngine.isLmbDown() && initialY != null) {
       const tone = getSelectedTrackTone();
-      if (tone) preview.startDrawPreview(tone, initialY, voiceId);
+      if (tone) preview.startDrawPreview(tone, initialY, voiceId, dynamics.getValue(voiceId));
     }
   }
 }
@@ -2891,8 +2953,36 @@ function captureComposeRecordingSample() {
     composeEngine.captureSample(p.voiceId, {
       beat,
       note: p.snappedWorldY,
-      volume: 0.8,
+      // The dynamics bus replaces what used to be a hardcoded 0.8 (BACKLOG
+      // 11.1). Its `fixed` source still returns exactly that, so a take made
+      // without a dynamics input records identically to before.
+      volume: dynamics.getValue(p.voiceId),
     });
+  }
+}
+
+/** Dynamics halo resolver for the planchette renderer: null while the bus is on
+ *  its `fixed` source (draw as before the bus), and null for voices that aren't
+ *  sounding (an idle planchette has no dynamics to show). */
+function planchetteDynamicsOf(voiceId: string): number | null {
+  if (!dynamics.isDriven()) return null;
+  if (!preview.isDrawPreviewActive(voiceId)) return null;
+  return dynamics.getValue(voiceId);
+}
+
+/** Push the bus into every sounding voice, so what you hear tracks the swell.
+ *  Runs each frame; `setVoiceVolume` no-ops for voices that aren't sounding and
+ *  for values that haven't moved. */
+function applyDynamicsToSoundingVoices() {
+  if (!dynamics.isDriven()) return;
+  for (const p of store.getState().performance.planchettes) {
+    preview.setVoiceVolume(p.voiceId, dynamics.getValue(p.voiceId));
+  }
+  // Held MIDI notes with no armed track have no planchette but are still
+  // sounding — the swell should shape them too.
+  for (const note of heldMidiNotes) {
+    const voiceId = `midi-${note}`;
+    preview.setVoiceVolume(voiceId, dynamics.getValue(voiceId));
   }
 }
 
@@ -3459,6 +3549,8 @@ function composePerformStop() {
   preview.stopDrawPreview('primary');
   if (playback.isPlaying()) playback.stop();
   composeEngine.stopSession();
+  // The next session starts from rest, not from wherever the swell was left.
+  dynamics.reset();
   store.setPerformPhase('idle');
   store.setPerformArmed(false);
   store.setJamActive(false);
@@ -3593,7 +3685,10 @@ function updatePitchHudDom(state: AppState) {
   const planchette = state.performance.planchettes[0];
   const show = state.pitchHudVisible && planchette?.snappedWorldY != null;
   if (show) {
-    writePitchHud(planchette!.snappedWorldY, planchette!.cursorWorldY);
+    // Dynamics is shown whenever a live source is driving the bus, held or not,
+    // so the player can see where the swell rests before they lean on it.
+    const dyn = dynamics.isDriven() ? dynamics.getValue('primary') : null;
+    writePitchHud(planchette!.snappedWorldY, planchette!.cursorWorldY, dyn);
     pitchHud.removeAttribute('hidden');
   } else if (!pitchHud.hasAttribute('hidden')) {
     pitchHud.setAttribute('hidden', '');
@@ -3696,6 +3791,12 @@ function render() {
 
   // Compose performance tick: countdown advance, loop-wrap detection, AFK auto-stop.
   tickComposePerform();
+
+  // Dynamics bus: advance the envelope, then ride the sounding voices with it.
+  // Must run before captureComposeRecordingSample so this frame's samples carry
+  // this frame's value.
+  dynamics.tick(performance.now());
+  applyDynamicsToSoundingVoices();
 
   // Y auto-scroll while LMB held in Perform / Record so the user can drag
   // past the visible pitch range without releasing.
@@ -3958,6 +4059,7 @@ function render() {
         state.performance.planchettes,
         composeEngine.getLastLoopWrapAt(),
         state.harmonicPrism.drawMode,
+        planchetteDynamicsOf,
       );
     } else {
       renderRail(fgCtx, rect.width, rect.height, composeEngine.getLastLoopWrapAt());
