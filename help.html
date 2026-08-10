@@ -243,21 +243,30 @@
     Bezier curves on a chromatic staff to create melodies. Each curve maps pitch over time
     and is played back as a continuous, sliding tone — enabling expressive glissandi,
     portamenti, and microtonal passages that traditional step-sequencers can't easily
-    produce. Beyond drawing, the canvas doubles as a performance surface: with Scroll
-    Canvas on during Playback, the canvas slides past a stationary rail so you can play
+    produce. Beyond drawing, the canvas doubles as a performance surface: with Lock Rail
+    on during Playback, the canvas slides past a stationary rail so you can play
     — and optionally record — live gestures with the mouse.
   </p>
   <p>
-    The workspace has three columns: a <strong>track panel</strong> on the left,
-    the <strong>canvas</strong> in the centre, and a <strong>properties panel</strong>
-    on the right. The right-hand panel is split into <strong>Tool Properties</strong>
-    (variable settings for the active tool) on top and <strong>Object Properties</strong>
-    (context for the selected track or point) below. The left panel is divided into
-    <strong>Transport</strong> (BPM, time signature, metronome, loop, scroll
-    mode), <strong>Tools</strong> (tool-mode buttons), and <strong>Tracks</strong>. A toolbar across the top shows the
-    <strong>composition name</strong> (editable) alongside the <strong>composition length</strong>
-    (auto-derived from the rightmost point, shown as <code>M:SS</code>), followed by
-    scale controls and file operations. A <strong>ruler bar</strong>
+    The workspace has an <strong>icon rail</strong> down the left, the <strong>canvas</strong>
+    in the centre, and a <strong>properties panel</strong> on the right. Each rail icon opens
+    a <strong>drawer</strong> that slides out over the canvas edge — <strong>Transport</strong>
+    (BPM, time signature, metronome, loop, dynamics, MIDI input), <strong>Tools</strong>
+    (tool-mode buttons), <strong>Snap</strong> (snap presets, magnetic settings, guides),
+    <strong>Harmonic Prism</strong>, and <strong>Tuning</strong> (key, scale, reference pitch).
+    One drawer is open at a time; <kbd>Escape</kbd> or a click on the canvas closes it. The
+    right-hand panel stacks <strong>Tool Properties</strong> (variable settings for the active
+    tool), <strong>Object Properties</strong> (context for the selected track or point), and
+    <strong>Tracks</strong>.
+  </p>
+  <p>
+    A toolbar across the top carries the <strong>composition name</strong> (editable) alongside
+    the <strong>composition length</strong> (auto-derived from the rightmost point, shown as
+    <code>M:SS</code>), the <strong>File</strong> menu and <strong>Undo</strong>/<strong>Redo</strong>
+    on the left; the <strong>Lock Rail</strong> switch in the centre; and on the right the
+    transport buttons (Play, Pause, Stop, Record, Jam, Keep) followed by two icon toggles,
+    <strong>Snap</strong> and <strong>Loop</strong>, which fill with the accent colour when on.
+    A <strong>ruler bar</strong>
     along the top of the canvas has two stacked strips: a <strong>seconds ruler</strong>
     on top that adapts its tick interval to zoom (sub-second decimals when zoomed in,
     whole seconds or larger when zoomed out) and a <strong>beat ruler</strong> below
@@ -271,7 +280,7 @@
     <em>These features are under active development — behaviour may change.</em>
   </p>
   <p>
-    The canvas doubles as a performance surface. Set the <strong>Scroll</strong> switch to <strong>Canvas</strong>
+    The canvas doubles as a performance surface. Turn on <strong>Lock Rail</strong> (top toolbar)
     and press Play: the music slides right-to-left past a stationary <strong>rail</strong>
     at the centre of the canvas. The <strong>planchette</strong> is the movable dot that
     rides the rail, following the mouse's Y to show the pitch currently being played.
@@ -285,18 +294,18 @@
 
   <h3>Playing</h3>
   <ul>
-    <li>Set the <strong>Scroll</strong> switch (transport panel) to <strong>Canvas</strong> and press <kbd>Space</kbd> or Play — the canvas scrolls past the rail at the composition's BPM.</li>
+    <li>Turn on <strong>Lock Rail</strong> (top toolbar) and press <kbd>Space</kbd> or Play — the canvas scrolls past the rail at the composition's BPM.</li>
     <li><strong>Mouse Y</strong> moves the planchette along the rail, driving pitch (snapped to scale/semitone if snap is on).</li>
     <li><strong>Hold LMB</strong> while Playback is running to sound the selected track's tone at the planchette's pitch — release to stop. XY tools (Draw, Select, Delete, Slice) gray out while Perform owns LMB.</li>
     <li>Play and Record both start at the <strong>rail's current beat</strong> — wherever you've panned to — not from beat 0.</li>
     <li>With Loop on, playback uses the loop markers (dragged in the ruler) for its range.</li>
-    <li>With the Scroll switch on <strong>Planchette</strong>, Playback stays classic — the playhead moves across a fixed canvas and LMB runs the active XY tool as usual.</li>
+    <li>With <strong>Lock Rail</strong> off, Playback stays classic — the playhead moves across a fixed canvas and LMB runs the active XY tool as usual.</li>
   </ul>
 
   <h3>Jamming</h3>
   <ul>
     <li><strong>J</strong> or the blue <strong>Jam</strong> button starts a <strong>free-running clock</strong>: the canvas scrolls at the composition's BPM with no fixed end, nothing armed, and nothing recorded. Hold LMB to play the selected track's tone — pure noodling, no countdown.</li>
-    <li>Jam forces the Scroll switch to <strong>Canvas</strong> and starts from the rail's current beat. With <strong>Loop</strong> on, the jam cycles the loop range instead of running open-ended.</li>
+    <li>Jam forces <strong>Lock Rail</strong> on and starts from the rail's current beat. With <strong>Loop</strong> on, the jam cycles the loop range instead of running open-ended.</li>
     <li>Magnetic snap is fully live while jamming — and pitch gravity now settles even when the transport is stopped (e.g. hovering while armed, before the countdown ends).</li>
     <li>Press <kbd>J</kbd> again, <kbd>Space</kbd>, <kbd>Escape</kbd>, Pause, or Stop to end the jam. You can arm <strong>Record</strong> (<kbd>R</kbd>) mid-jam to start capturing without stopping the clock.</li>
     <li>An un-armed jam auto-stops after <strong>10 minutes</strong> of inactivity (the warning popup appears 30 seconds before). Moving the mouse over the canvas counts as activity.</li>
@@ -337,7 +346,7 @@
 
   <h3>Layers (looping)</h3>
   <p>
-    Turn on the <strong>Layer</strong> switch in the transport panel and each pass you
+    Turn on the <strong>Layer</strong> switch in the Transport drawer and each pass you
     perform becomes its own <strong>track</strong>, so passes stack into a choir
     instead of piling onto one track. Because layers are ordinary tracks, they get
     mute, solo, volume and their own tone from the track panel for free.
@@ -362,7 +371,7 @@
 
   <h3>Recording</h3>
   <ul>
-    <li><strong>R</strong> or the red <strong>Record</strong> button arms recording. From Idle it runs a 3-second countdown then starts Playback. If Playback is already running (including a jam), it arms immediately with no countdown. Recording forces the Scroll switch to <strong>Canvas</strong>.</li>
+    <li><strong>R</strong> or the red <strong>Record</strong> button arms recording. From Idle it runs a 3-second countdown then starts Playback. If Playback is already running (including a jam), it arms immediately with no countdown. Recording forces <strong>Lock Rail</strong> on.</li>
     <li>While recording, each LMB press/release captures a curve onto the selected track. The curve is simplified and auto-smoothed on release, so the result is fully editable afterward. A live trail follows the planchette as you record, showing the path being captured; on release it's replaced by the simplified curve.</li>
     <li><strong>Escape</strong> during the countdown or recording stops and returns to Idle.</li>
     <li>Recording continues past the composition end so you can extend phrases or capture silence; an AFK timeout stops it after 1 minute of inactivity (a warning popup appears at 30s with a countdown to the stop). The timeout is suppressed while <strong>Loop</strong> is on, while the playhead hasn't yet reached the rightmost control point (there's still existing content to record over), and while MIDI keys are being played.</li>
@@ -521,12 +530,12 @@
         <li><strong>Length</strong> — derived automatically from the rightmost point in any curve and shown as <code>M:SS</code> next to the composition name. Playback stops at that point (or loops back to the start if Loop is on). With no points, playback is a no-op.</li>
         <li><strong>Canvas extent</strong> — the grid, staff, and rulers render everywhere you pan or zoom, with a generous buffer of open space past the last point so you can keep drawing outward. A memory-safe cap limits total pan range.</li>
         <li><strong>Loop</strong> (<kbd>L</kbd>) — toggle from the icon button at the right of the top toolbar, the Transport drawer checkbox, or the hotkey; all three stay in sync. When enabled, two draggable <strong>loop markers</strong> (green in, red out) appear in the ruler. Drag them to set the loop range; they snap to the beat grid and to existing curve control points. The range is saved with the composition. Markers hide when Loop is off; playback then runs through to composition end.</li>
-        <li><strong>Scroll switch</strong> — chooses what scrolls during Playback. Set to <strong>Canvas</strong> (default) to slide the canvas right-to-left past a stationary centered rail, giving a performance feel. Set to <strong>Planchette</strong> for a classic static canvas where the playhead moves across a fixed view — useful for A/B editing. Preference persists via localStorage. Record forces it to Canvas while armed.</li>
+        <li><strong>Lock Rail</strong> (top toolbar, centre) — chooses what moves during Playback. <strong>On</strong> (default) locks the playhead rail at canvas centre and slides the canvas right-to-left past it, giving a performance feel. <strong>Off</strong> gives a classic static canvas where the playhead moves across a fixed view — useful for A/B editing. Preference persists via localStorage. Record and Jam force it on while live.</li>
         <li><strong>Pitch HUD</strong> — shows the pitch under the cursor (note name + cents + frequency in Hz) in the top-right of the canvas while the cursor has a meaningful Y. The Hz readout reflects the current Tune A4 setting, so A=432 etc. shifts every frequency in lockstep. Toggle off to hide. Preference persists via localStorage.</li>
-        <li><strong>Perf HUD</strong> — passive observer in the top-left: frame ms (p50 / p99 over a rolling ~2 s), live synth / oscillator / voice counts, and audio output latency. Off by default; toggle from the Transport panel or press <kbd>!</kbd> (Shift+1). Useful when something feels sluggish — load a heavy composition (see <code>fixtures/stress-test.ssn</code>) and watch the numbers move.</li>
-        <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording. From Idle, a 3-second countdown runs then Playback begins. If Playback is already running (classic or Perform), the countdown is skipped and recording arms immediately at the current beat. While armed, holding LMB in the canvas plays the selected track's tone AND captures it as a curve; release commits the curve. Recording forces the Scroll switch to <strong>Canvas</strong> and hijacks LMB for Perform — the XY tool buttons (Draw, Select, Delete, Slice) gray out while live. Escape cancels.</li>
+        <li><strong>Perf HUD</strong> — passive observer in the top-left: frame ms (p50 / p99 over a rolling ~2 s), live synth / oscillator / voice counts, and audio output latency. Off by default; toggle from the Transport drawer or press <kbd>!</kbd> (Shift+1). Useful when something feels sluggish — load a heavy composition (see <code>fixtures/stress-test.ssn</code>) and watch the numbers move.</li>
+        <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording. From Idle, a 3-second countdown runs then Playback begins. If Playback is already running (classic or Perform), the countdown is skipped and recording arms immediately at the current beat. While armed, holding LMB in the canvas plays the selected track's tone AND captures it as a curve; release commits the curve. Recording forces <strong>Lock Rail</strong> on and hijacks LMB for Perform — the XY tool buttons (Draw, Select, Delete, Slice) gray out while live. Escape cancels.</li>
         <li><strong>Dynamics</strong> — picks what drives the loudness of what you perform: <strong>Fixed</strong> (a steady level, the original behaviour) or <strong>Key swell</strong> (hold <kbd>F</kbd> to swell). See <a href="#perform">Perform &amp; Record</a>. Remembered between sessions.</li>
-        <li><strong>Perform during Playback</strong> — when Playback is running with the Scroll switch on <strong>Canvas</strong> (including during Record), LMB plays the selected track's tone at the cursor's Y pitch. XY tools are disabled for the duration. Release LMB to stop the tone. With the switch on Planchette, Playback stays classic — LMB runs the active XY tool as usual.</li>
+        <li><strong>Perform during Playback</strong> — when Playback is running with <strong>Lock Rail</strong> on (including during Record), LMB plays the selected track's tone at the cursor's Y pitch. XY tools are disabled for the duration. Release LMB to stop the tone. With Lock Rail off, Playback stays classic — LMB runs the active XY tool as usual.</li>
         <li><strong>Ruler</strong> — two stacked strips at the top of the canvas: a <strong>seconds ruler</strong> (adapts tick spacing to zoom; labels decimal seconds when zoomed in and <code>M:SS</code> for larger steps) and a <strong>beat / measure ruler</strong> with subdivision ticks. The seconds ruler also reflects BPM changes.</li>
         <li><strong>Scrubbing</strong> — click and drag anywhere in the ruler bar (either strip) to position the playhead. Scrubbing is allowed into empty grid past the last point.</li>
       </ul>
@@ -601,7 +610,7 @@
     <div class="detail-body">
       <ul>
         <li>Pick a device from the <strong>MIDI Input</strong> dropdown in the
-            Transport panel. On first selection the browser prompts for MIDI access.
+            Transport drawer. On first selection the browser prompts for MIDI access.
             If no track is currently armed, a small dialog asks which track to record into
             (or offers to create a new one) so the arming step is never silently skipped.</li>
         <li><kbd>Note On</kbd> sounds a track's tone at the note's pitch;
@@ -772,8 +781,8 @@
   <!-- Key & Scale -->
   <h2 id="scales">Key & Scale</h2>
   <p>
-    Use the <strong>Key</strong> and <strong>Scale</strong> dropdowns in the toolbar
-    to set a musical key. When a key is active, the staff highlights in-scale notes
+    Use the <strong>Key</strong> and <strong>Scale</strong> dropdowns in the
+    <strong>Tuning</strong> drawer to set a musical key. When a key is active, the staff highlights in-scale notes
     and snap quantises to scale degrees.
   </p>
   <details>
@@ -817,7 +826,7 @@
     <div class="detail-body">
       <ol>
         <li>Pick the Draw tool. Toggle <strong>Draw</strong> on in the
-          Harmonic Prism panel (or press <kbd>H</kbd>).</li>
+          Harmonic Prism drawer (or press <kbd>H</kbd>).</li>
         <li>Hover the canvas. The cursor shows a primary planchette
           (rainbow-filled disc) plus N&minus;1 harmony planchettes (solid
           rainbow stops) at the chord-spec Y offsets.</li>
