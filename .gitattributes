@@ -1,0 +1,17 @@
+# Keep line endings LF everywhere — in the repo AND in the working tree.
+#
+# Without this, `core.autocrlf=true` on a Windows checkout smudges files to CRLF,
+# while the JS toolchain (vitest, vite, prettier) writes LF. Any file a tool
+# rewrites then permanently reports as modified with an EMPTY `git diff`, because
+# diff normalizes line endings for display but status compares against the
+# smudged blob. The vitest snapshot under src/export/__snapshots__ hit this.
+#
+# Every blob in this repo is already LF, so this changes no content — it only
+# stops the CRLF smudge on checkout.
+* text=auto eol=lf
+
+# Binary assets: never touch, never diff as text.
+*.png binary
+*.jpg binary
+*.wav binary
+*.mp3 binary
