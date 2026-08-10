@@ -114,6 +114,61 @@ body {
   gap: 6px;
 }
 
+/* ── Top-bar icon toggles (Snap, Loop) ───────────────────────────
+   Same icon vocabulary as the left rail, but these are stateful on/off
+   switches rather than drawer openers: "on" fills with the accent colour and
+   flips the glyph to the dark surface colour, so the state reads at a glance
+   from across the room. Deliberately louder than .rail-icon.active (a tint),
+   because that marks "this drawer is showing" — a transient — while these mark
+   a setting that changes what the instrument does. */
+.toolbar-toggles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-toggle {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--icon-color);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  font-size: 18px; /* drives the 1.25em SVG sizing */
+  padding: 0;
+}
+
+.icon-toggle:hover {
+  background: rgba(79, 195, 247, 0.12);
+  color: var(--icon-color-hover);
+}
+
+.icon-toggle[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.icon-toggle[aria-pressed='true']:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.icon-toggle:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 1px;
+}
+
+.icon-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .comp-name-input {
   background: transparent;
   color: var(--accent);

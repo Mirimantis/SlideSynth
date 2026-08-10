@@ -258,6 +258,11 @@ The plan doc's dynamics-axis direction: one shared normalized channel that drive
 - [ ] **11.4 Gamepad analog input** *(S–M)*
   Poll the Gamepad API in the existing frame loop; analog trigger/stick feeds the bus; "pick your control" mapping step for hardware variance.
 
+- [ ] **11.5 Cursor Y-velocity as a dynamics source** *(M)*
+  A `DynamicsSource` derived from how fast the pitch input is moving vertically — no extra hardware, no free hand, the gesture itself supplies the dynamics. Mouse today, but write it against the *linear pitch input* generally so a fader / touchstrip / any future 1-D controller feeds it unchanged.
+  **Critical constraint: read the velocity of the raw input cursor, not the planchette.** The planchette's Y is post-snap, so under Magnetic it carries spring oscillation — deriving dynamics from it would ring the volume at the vibrato rate every time the pitch settles onto a target. The pre-snap cursor is the clean signal. In [src/main.ts](src/main.ts) that's `cursorWorldY` (what `computeComposeCursorPitch` returns before snapping), not `snappedWorldY`; `lastComposeSy` is the raw screen Y the frame loop already retains.
+  Session inputs: velocity → 0–1 mapping (magnitude only, or does direction matter — does a rising line get louder?); smoothing window vs. latency; what happens when the cursor is still (rest at a floor, or hold the last value?); interaction with 11.3's sensitivity curve, which should share one mapping rather than growing a second.
+
 ---
 
 ## Phase 12 — Harmony & format guardrails

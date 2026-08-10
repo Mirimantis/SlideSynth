@@ -65,6 +65,7 @@ import iconStop from './assets/icons/stop.svg?raw';
 import iconRecord from './assets/icons/record.svg?raw';
 import iconJam from './assets/icons/jam.svg?raw';
 import iconKeep from './assets/icons/keep.svg?raw';
+import iconLoop from './assets/icons/loop.svg?raw';
 import { canOpenLayer, createLayerTrack, newestLayerTrack, nextPassRecordState, LAYER_TRACK_LIMIT } from './model/layer';
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import type { AppState, ToolMode, Lane, LanePoint, BezierCurve } from './types';
@@ -96,13 +97,10 @@ app.innerHTML = `
         <button id="btn-jam" class="jam-btn" title="Jam (J) — free-running clock: sound on, nothing recorded"></button>
         <button id="btn-keep" class="keep-btn" title="Keep that (K) — commit the phrase you just played" disabled></button>
       </div>
-      <label class="toggle-switch" title="Toggle snap (S)">
-        <span class="toggle-switch-track">
-          <input type="checkbox" id="snap-toggle" checked />
-          <span class="toggle-switch-thumb"></span>
-        </span>
-        <span class="toggle-switch-label">Snap</span>
-      </label>
+      <div class="toolbar-toggles">
+        <button id="snap-toggle" class="icon-toggle" title="Toggle snap (S)" aria-label="Snap" aria-pressed="true"></button>
+        <button id="loop-toggle-btn" class="icon-toggle" title="Toggle loop (L)" aria-label="Loop" aria-pressed="false"></button>
+      </div>
     </div>
   </div>
   <div id="main-area">
@@ -209,23 +207,23 @@ app.innerHTML = `
           <div class="transport-row">
             <label class="toggle-switch" title="Magnetic Snap: pitch follows physics model with snap-line attractors">
               <span class="toggle-switch-track">
-                <input type="checkbox" id="magnetic-toggle" />
+                <input type="checkbox" id="magnetic-toggle" checked />
                 <span class="toggle-switch-thumb"></span>
               </span>
               <span class="toggle-switch-label">Magnetic</span>
             </label>
-            <input type="range" id="input-magnetic-strength" class="magnetic-strength-slider" min="0" max="1" value="0.75" step="0.05" title="Snap attraction strength (0 = smooth cursor follow, 1 = strong snap pull)" />
-            <span class="magnetic-strength-value">0.75</span>
+            <input type="range" id="input-magnetic-strength" class="magnetic-strength-slider" min="0" max="1" value="0.85" step="0.05" title="Snap attraction strength (0 = smooth cursor follow, 1 = strong snap pull)" />
+            <span class="magnetic-strength-value">0.85</span>
           </div>
           <div class="transport-row">
             <label for="input-magnetic-spring">Spring</label>
-            <input type="range" id="input-magnetic-spring" class="magnetic-spring-slider" min="1" max="50" value="30" step="1" title="Cursor-to-pitch spring stiffness (1 = loose, 50 = tight tracking)" />
-            <span class="magnetic-spring-value">30</span>
+            <input type="range" id="input-magnetic-spring" class="magnetic-spring-slider" min="1" max="50" value="50" step="1" title="Cursor-to-pitch spring stiffness (1 = loose, 50 = tight tracking)" />
+            <span class="magnetic-spring-value">50</span>
           </div>
           <div class="transport-row">
             <label for="input-magnetic-damping">Damping</label>
-            <input type="range" id="input-magnetic-damping" class="magnetic-damping-slider" min="0.25" max="15" value="3" step="0.25" title="Velocity damping (low = long vibrato wobbles, high = quick settle)" />
-            <span class="magnetic-damping-value">3</span>
+            <input type="range" id="input-magnetic-damping" class="magnetic-damping-slider" min="0.25" max="15" value="6" step="0.25" title="Velocity damping (low = long vibrato wobbles, high = quick settle)" />
+            <span class="magnetic-damping-value">6</span>
           </div>
           <div class="transport-row guides-row">
             <label class="toggle-switch" title="Show snap guides — when off, guides are hidden and don't snap">
@@ -761,6 +759,18 @@ setIcon(document.getElementById('btn-stop')!, iconStop);
 setIcon(document.getElementById('btn-record')!, iconRecord);
 setIcon(document.getElementById('btn-jam')!, iconJam);
 setIcon(document.getElementById('btn-keep')!, iconKeep);
+// Top-bar icon toggles. Snap reuses the Snap drawer's icon so the two read as
+// the same feature — the button is the on/off, the drawer is the detail.
+setIcon(document.getElementById('snap-toggle')!, iconSnap);
+setIcon(document.getElementById('loop-toggle-btn')!, iconLoop);
+
+/** Drive an `.icon-toggle` button's on/off state. `aria-pressed` is both the
+ *  accessible state and the CSS hook, so there's one source of truth. Writes
+ *  only on change — these are called from the per-frame sync. */
+function setIconTogglePressed(btn: HTMLButtonElement, on: boolean): void {
+  const next = on ? 'true' : 'false';
+  if (btn.getAttribute('aria-pressed') !== next) btn.setAttribute('aria-pressed', next);
+}
 
 // ── Tool panel (Tools drawer) ──────────────────────────────────
 const toolPanelContainer = document.getElementById('tool-panel')!;
@@ -799,6 +809,8 @@ const btnJam = document.getElementById('btn-jam') as HTMLButtonElement;
 const btnKeep = document.getElementById('btn-keep') as HTMLButtonElement;
 const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
 const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
+const loopToggleBtn = document.getElementById('loop-toggle-btn') as HTMLButtonElement;
+setIconTogglePressed(loopToggleBtn, loopToggle.checked);
 const layerToggle = document.getElementById('layer-toggle') as HTMLInputElement;
 layerToggle.checked = store.getState().layerModeEnabled;
 layerToggle.addEventListener('change', () => {
@@ -919,8 +931,10 @@ function updateRecordButtonVisuals() {
   lockRailToggle.checked = st.scrollCanvasEnabled;
   layerToggle.checked = st.layerModeEnabled;
 
-  // Lock loop toggle while recording.
-  loopToggle.disabled = g.recordArmed && g.phase === 'playing';
+  // Lock loop toggle while recording — both controls that expose it.
+  const loopLocked = g.recordArmed && g.phase === 'playing';
+  loopToggle.disabled = loopLocked;
+  loopToggleBtn.disabled = loopLocked;
 }
 
 /** Keep button doubles as the "keepable material pending" indicator (BACKLOG
@@ -1314,13 +1328,14 @@ if (!midiInput.isSupported()) {
   midiDeviceSelect.title = 'MIDI Input Not Supported By Browser.';
 }
 
-// ── Snap toggle (Transport) ────────────────────────────────────
-const snapToggleInput = document.getElementById('snap-toggle') as HTMLInputElement;
-snapToggleInput.checked = store.getState().snapEnabled;
-snapToggleInput.addEventListener('change', () => {
-  store.setSnap(snapToggleInput.checked);
+// ── Snap toggle (top bar icon button) ──────────────────────────
+const snapToggleBtn = document.getElementById('snap-toggle') as HTMLButtonElement;
+setIconTogglePressed(snapToggleBtn, store.getState().snapEnabled);
+snapToggleBtn.addEventListener('click', () => {
+  store.setSnap(!store.getState().snapEnabled);
+  setIconTogglePressed(snapToggleBtn, store.getState().snapEnabled);
   syncSnapPresetUi();
-  snapToggleInput.blur();
+  snapToggleBtn.blur();
 });
 
 // ── Magnetic Snap toggle + strength slider + spring slider (Transport) ─
@@ -1340,7 +1355,7 @@ function formatDamping(d: number): string {
  *  Called on initial load and after a preset is applied. */
 function syncSnapSectionDom(): void {
   const st = store.getState();
-  snapToggleInput.checked = st.snapEnabled;
+  setIconTogglePressed(snapToggleBtn, st.snapEnabled);
   magneticToggle.checked = st.magneticEnabled;
   magneticStrengthSlider.value = String(st.magneticStrength);
   magneticStrengthValue.textContent = st.magneticStrength.toFixed(2);
@@ -1572,18 +1587,33 @@ metronomeVolumeSlider.addEventListener('input', () => {
   store.setMetronomeVolume(Number(metronomeVolumeSlider.value) / 100);
 });
 
-loopToggle.addEventListener('change', () => {
-  playback.setLoop(loopToggle.checked);
-  // If toggling on mid-play, update the play range to the markers right away.
+/** The one place loop state changes. Three controls reach it — the top-bar icon
+ *  button, the Transport drawer checkbox, and the L hotkey — so they can't drift
+ *  apart. Also the path Record-next-Pass uses when it forces Loop on. */
+function applyLoopEnabled(enabled: boolean): void {
+  playback.setLoop(enabled);
+  loopToggle.checked = enabled;
+  setIconTogglePressed(loopToggleBtn, enabled);
+  // If toggling mid-play, update the play range to the markers right away.
   if (playback.isPlaying()) {
     const comp = store.getComposition();
-    if (loopToggle.checked) {
+    if (enabled) {
       playback.setPlayRange(comp.loopStartBeats, comp.loopEndBeats);
     } else {
       playback.setPlayRange(0, getCompositionLength(comp));
     }
   }
+  bgDirty = true; // loop markers appear / disappear in the ruler
+}
+
+loopToggle.addEventListener('change', () => {
+  applyLoopEnabled(loopToggle.checked);
   loopToggle.blur();
+});
+
+loopToggleBtn.addEventListener('click', () => {
+  applyLoopEnabled(!playback.isLoopEnabled());
+  loopToggleBtn.blur();
 });
 
 // ── Zoom controls (on canvas) ──────────────────────────────────
@@ -2179,11 +2209,7 @@ window.addEventListener('keydown', (e) => {
     }
     case 'l':
     case 'L': {
-      const loopCb = document.getElementById('loop-toggle') as HTMLInputElement | null;
-      if (loopCb) {
-        loopCb.checked = !loopCb.checked;
-        playback.setLoop(loopCb.checked);
-      }
+      applyLoopEnabled(!playback.isLoopEnabled());
       break;
     }
     case '?':
@@ -3441,8 +3467,7 @@ function toggleRecordNextPass() {
   // A "pass" is defined by the loop, so turn Loop on rather than refusing —
   // but say so, since it changes the transport out from under the user.
   if (!playback.isLoopEnabled()) {
-    playback.setLoop(true);
-    loopToggle.checked = true;
+    applyLoopEnabled(true);
     showToast('Record next Pass: Loop On', 2000);
   }
 
@@ -4218,9 +4243,8 @@ store.subscribe(() => {
   if (metronomeToggle.checked !== appState.metronomeEnabled) {
     metronomeToggle.checked = appState.metronomeEnabled;
   }
-  if (snapToggleInput.checked !== appState.snapEnabled) {
-    snapToggleInput.checked = appState.snapEnabled;
-  }
+  setIconTogglePressed(snapToggleBtn, appState.snapEnabled);
+  setIconTogglePressed(loopToggleBtn, playback.isLoopEnabled());
   if (magneticToggle.checked !== appState.magneticEnabled) {
     magneticToggle.checked = appState.magneticEnabled;
   }

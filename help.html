@@ -520,7 +520,7 @@
         <li><strong>Metronome</strong> — checkbox + volume slider in Transport. When enabled, audible clicks play during Playback (and Record) with three tiers: a bright high click on beat 1 of each measure (downbeat), a medium click on compound-meter secondary accents (beat 4 of 6/8, etc.), and a soft low click on every other tick. The ruler playhead / rail flashes a coloured ring on each tick so the beat is visible as well as audible. /4 meters tick on the beat; /8 meters tick on eighth-note subdivisions. Metronome clicks are not captured while recording (Record stores cursor Y, not audio output). Enabled state and volume persist via localStorage.</li>
         <li><strong>Length</strong> — derived automatically from the rightmost point in any curve and shown as <code>M:SS</code> next to the composition name. Playback stops at that point (or loops back to the start if Loop is on). With no points, playback is a no-op.</li>
         <li><strong>Canvas extent</strong> — the grid, staff, and rulers render everywhere you pan or zoom, with a generous buffer of open space past the last point so you can keep drawing outward. A memory-safe cap limits total pan range.</li>
-        <li><strong>Loop</strong> (<kbd>L</kbd>) — when enabled, two draggable <strong>loop markers</strong> (green in, red out) appear in the ruler. Drag them to set the loop range; they snap to the beat grid and to existing curve control points. The range is saved with the composition. Markers hide when Loop is off; playback then runs through to composition end.</li>
+        <li><strong>Loop</strong> (<kbd>L</kbd>) — toggle from the icon button at the right of the top toolbar, the Transport drawer checkbox, or the hotkey; all three stay in sync. When enabled, two draggable <strong>loop markers</strong> (green in, red out) appear in the ruler. Drag them to set the loop range; they snap to the beat grid and to existing curve control points. The range is saved with the composition. Markers hide when Loop is off; playback then runs through to composition end.</li>
         <li><strong>Scroll switch</strong> — chooses what scrolls during Playback. Set to <strong>Canvas</strong> (default) to slide the canvas right-to-left past a stationary centered rail, giving a performance feel. Set to <strong>Planchette</strong> for a classic static canvas where the playhead moves across a fixed view — useful for A/B editing. Preference persists via localStorage. Record forces it to Canvas while armed.</li>
         <li><strong>Pitch HUD</strong> — shows the pitch under the cursor (note name + cents + frequency in Hz) in the top-right of the canvas while the cursor has a meaningful Y. The Hz readout reflects the current Tune A4 setting, so A=432 etc. shifts every frequency in lockstep. Toggle off to hide. Preference persists via localStorage.</li>
         <li><strong>Perf HUD</strong> — passive observer in the top-left: frame ms (p50 / p99 over a rolling ~2 s), live synth / oscillator / voice counts, and audio output latency. Off by default; toggle from the Transport panel or press <kbd>!</kbd> (Shift+1). Useful when something feels sluggish — load a heavy composition (see <code>fixtures/stress-test.ssn</code>) and watch the numbers move.</li>
@@ -659,8 +659,10 @@
   <!-- Snap -->
   <h2 id="snapping">Snap & Grid</h2>
   <p>
-    Toggle snap on/off with the <strong>Snap</strong> switch in the Transport panel
-    or press <kbd>S</kbd>.
+    Toggle snap on/off with the <strong>Snap</strong> button at the right of the top
+    toolbar (it fills with the accent colour when on) or press <kbd>S</kbd>. The
+    <strong>Loop</strong> button sits beside it and works the same way — see
+    <a href="#playback">Playback &amp; Transport</a> for what the loop range does.
   </p>
   <details>
     <summary>Snap details</summary>
@@ -674,22 +676,24 @@
             snapping during performance. The planchette has inertia, is pulled toward
             the cursor by an elastic force, and is attracted to the nearest snap line
             with proximity-based strength. Only active during Compose Performance
-            (LMB held). Requires Snap on to have any effect. Three tuning sliders:
+            (LMB held). Requires Snap on to have any effect. <strong>On by default</strong> —
+            the magnetic pull is the instrument's feel, not an add-on. Three tuning sliders:
             <ul>
-              <li><strong>Magnetic</strong> (0–1, default 0.75) — snap attractor
+              <li><strong>Magnetic</strong> (0–1, default 0.85) — snap attractor
                   strength. At 0 the planchette is a smooth cursor-follower with no
                   snap detents; higher values make snap lines pull the pitch in
                   increasingly hard.</li>
-              <li><strong>Spring</strong> (1–50, default 30) — cursor-to-pitch coupling
+              <li><strong>Spring</strong> (1–50, default 50) — cursor-to-pitch coupling
                   stiffness. Lower values feel rubbery and let the planchette linger
                   between snaps; higher values track the cursor tightly.</li>
-              <li><strong>Damping</strong> (0.25–15, default 3) — how quickly pitch
-                  oscillations near a snap line fade. Low values sustain tremolo
+              <li><strong>Damping</strong> (0.25–15, default 6) — how quickly pitch
+                  oscillations near a snap line fade. Low values sustain vibrato
                   wobbles for longer; high values settle quickly. Too low combined
                   with high Magnetic can swing wildly.</li>
             </ul>
+            The defaults are tuned tight, so pitch settles onto a target promptly.
             Combine strong Magnetic with low Damping and a moderate Spring to get
-            tremolo around held notes; combine low Magnetic with high Spring for
+            vibrato around held notes; combine low Magnetic with high Spring for
             free-sliding microtonal performance with gentle detents.</li>
       </ul>
     </div>
