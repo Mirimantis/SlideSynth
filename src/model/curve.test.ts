@@ -3,11 +3,13 @@ import { curveFromRecording, pitchPoints, applyTransformToCurve, deepCopyPoints,
 import { getLane, deepCopyLanes } from './lane';
 
 describe('curveFromRecording — volume lane density', () => {
-  it('collapses volume to exactly 2 points (start/end), independent of pitch point count', () => {
+  it('collapses constant volume to exactly 2 points, independent of pitch point count', () => {
     // A gliding gesture: pitch moves continuously (RDP keeps several points),
     // volume stays constant. Recording used to mirror the pitch curve's point
     // density onto the volume lane, making a flat volume look as busy as the
-    // glissando. It should only ever carry the start/end of the gesture.
+    // glissando. Volume is simplified on its own terms, so a flat take — which
+    // is every take made with the dynamics bus on its `fixed` source — carries
+    // nothing but the two endpoints.
     const samples: RecordedSample[] = [];
     for (let i = 0; i <= 20; i++) {
       // A wobbling (non-linear) pitch path so RDP keeps interior points.
@@ -26,9 +28,11 @@ describe('curveFromRecording — volume lane density', () => {
   });
 
   it('keeps distinct start/end volume values when they differ (no averaging)', () => {
+    // A straight fade: the midpoint sits on the line between the endpoints, so
+    // simplification drops it and the lane is just the two ends.
     const samples: RecordedSample[] = [
       { beat: 0, note: 6000, volume: 0.9 },
-      { beat: 0.5, note: 6100, volume: 0.5 },
+      { beat: 0.5, note: 6100, volume: 0.55 },
       { beat: 1, note: 6000, volume: 0.2 },
     ];
     const curve = curveFromRecording(samples)!;
@@ -36,6 +40,46 @@ describe('curveFromRecording — volume lane density', () => {
     expect(volumeLane.points).toHaveLength(2);
     expect(volumeLane.points[0]!.position.y).toBeCloseTo(0.9, 6);
     expect(volumeLane.points[1]!.position.y).toBeCloseTo(0.2, 6);
+  });
+
+  it('keeps interior points for a performed swell (BACKLOG 11.1)', () => {
+    // Volume swells 0.15 -> 1.0 and falls back over 2 beats while pitch holds
+    // flat. The shape has to survive: a flat pitch lane must not flatten the
+    // dynamics with it.
+    const samples: RecordedSample[] = [];
+    for (let i = 0; i <= 40; i++) {
+      const t = i / 40;
+      samples.push({
+        beat: t * 2,
+        note: 6000,
+        volume: 0.15 + 0.85 * Math.sin(t * Math.PI),
+      });
+    }
+    const curve = curveFromRecording(samples)!;
+    expect(pitchPoints(curve)).toHaveLength(2); // flat pitch stays 2 points
+
+    const volumeLane = getLane(curve, 'volume')!;
+    expect(volumeLane.points.length).toBeGreaterThan(2);
+    // The peak of the swell is represented, not averaged away.
+    const peak = Math.max(...volumeLane.points.map(p => p.position.y));
+    expect(peak).toBeGreaterThan(0.9);
+    // Endpoints stay pinned to the note's span and to what was played.
+    expect(volumeLane.points[0]!.position.x).toBe(0);
+    expect(volumeLane.points[volumeLane.points.length - 1]!.position.x).toBe(2);
+    expect(volumeLane.points[0]!.position.y).toBeCloseTo(0.15, 6);
+  });
+
+  it('leaves swell endpoints sharp and smooths only interior points', () => {
+    const samples: RecordedSample[] = [];
+    for (let i = 0; i <= 20; i++) {
+      const t = i / 20;
+      samples.push({ beat: t * 2, note: 6000, volume: 0.1 + 0.9 * Math.sin(t * Math.PI) });
+    }
+    const volumeLane = getLane(curveFromRecording(samples)!, 'volume')!;
+    const last = volumeLane.points.length - 1;
+    expect(volumeLane.points[0]!.handleOut).toBeNull();
+    expect(volumeLane.points[last]!.handleIn).toBeNull();
+    expect(volumeLane.points[1]!.handleOut).not.toBeNull();
   });
 
   it('clamps volume to [0,1]', () => {

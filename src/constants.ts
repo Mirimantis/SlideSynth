@@ -103,13 +103,17 @@ export const AUTO_SMOOTH_X_RATIO = 0.25;
 
 // ── Snap defaults ──────────────────────────────────────────────
 // Used as the seed values when a new composition is created and as the migration
-// target for v1 composition files (which had no snap block). Matches the historical
-// global defaults from the AppState localStorage layer.
+// target for v1 composition files (which had no snap block).
+//
+// Magnetic is ON out of the box: the magnetic pull *is* the instrument's feel,
+// and starting with it off meant a new user's first gesture behaved like a plain
+// quantized grid. Tuned tight (high spring, firm damping) so pitch settles onto
+// a target quickly rather than wobbling into it.
 export const DEFAULT_SNAP_ENABLED = true;
-export const DEFAULT_MAGNETIC_ENABLED = false;
-export const DEFAULT_MAGNETIC_STRENGTH = 0.75;
-export const DEFAULT_MAGNETIC_SPRING_K = 30;
-export const DEFAULT_MAGNETIC_DAMPING = 3;
+export const DEFAULT_MAGNETIC_ENABLED = true;
+export const DEFAULT_MAGNETIC_STRENGTH = 0.85;
+export const DEFAULT_MAGNETIC_SPRING_K = 50;
+export const DEFAULT_MAGNETIC_DAMPING = 6;
 
 // ── Canvas extent ──────────────────────────────────────────────
 // The canvas renders (and the viewport pans) over this range in beats.
