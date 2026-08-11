@@ -283,6 +283,78 @@ Unification and portability items from the plan doc. 12.1 is sequenced after Pha
 
 ---
 
+## Phase 13 — Captured 2026-08-10 (unsequenced)
+
+Grab-bag from a single capture pass, grouped by area and roughly ordered easiest-first within each group. No cross-group sequencing implied.
+
+### Snap UI & presets
+- [ ] **13.1 Rename the Magnetic strength slider to "Force"** *(XS, rename)*
+  `#input-magnetic-strength` sits unlabeled beside the Magnetic toggle in the Snap drawer ([src/main.ts:215](src/main.ts)) while Spring and Damping below it both carry labels. Give it a `Force` label to match, and reword the tooltip. Internal names (`magneticStrength`, `setMagneticStrength`, the `SnapSettings` field) can stay as-is — this is a display-string change; rename the internals too only if it can be done without touching the persisted composition schema. Update [help.html](help.html).
+
+- [ ] **13.2 Snap presets hold force / spring / damping only, + define the shipped defaults** *(M, own planning session)*
+  Two halves; the mechanical one is small, the other needs a design pass.
+
+  *Mechanical.* `SnapPresetSettings` in [src/utils/snap-presets.ts](src/utils/snap-presets.ts) already excludes `scaleRoot` / `scaleId` / `hidePitchLines`, but presets still carry `enabled` + `magneticEnabled` and the built-in names advertise key/scale feel ("Chromatic 1/16", "Magnetic + Diatonic"). Narrow the type to the three physics fields and drop the toggle fields from `snapshotPreset` / `presetMatches` / the loader validation / the apply path ([src/main.ts:1480-1483](src/main.ts)). Loading a preset then never changes whether snap or magnetic is on — only how the magnet feels. Old user presets in localStorage carry the removed fields; the per-field loader drops them silently, so no migration needed.
+
+  *Needs the session.* Once presets are pure feel, the built-in set has to be **authored by ear**, not renamed in place — the current four exist to demo the old key/scale-flavored axis and won't survive the narrowing. Session inputs:
+  - What feels are worth shipping, and what are they called? (Names must describe magnet behaviour — settle time, wobble, grip — with no key/scale words.)
+  - How many? Four is arbitrary; the useful range of force × spring × damping may be smaller or larger.
+  - How are they arrived at? Preferred route is to tune them live in the app, save as user presets, then promote those exact numbers into `BUILTIN_SNAP_PRESETS` — which needs an **export/import path for presets** so a tuned set can leave the browser's localStorage and come back as code or as a shipped file. That may be its own deliverable: a "settings" file the app can read presets out of. Overlaps [12.2](#phase-12--harmony--format-guardrails)'s `.glisskit` + **Import settings…** verb, which already proposes reading `tuning`/`snap` out of any conforming file — decide in the session whether preset import is a third section in that same envelope or a separate lighter-weight path.
+  - Does a shipped default become *the* default on a fresh install, or does the app still boot to the hardcoded `SnapSettings` values with presets purely opt-in?
+
+### Viewport & canvas
+- [ ] **13.3 New composition with Lock Rail on starts at 0:00 on the rail** *(S, bug)*
+  Starting a fresh composition with Lock Rail enabled (`scrollCanvasEnabled`, toggle wired at [src/main.ts:820-828](src/main.ts)) leaves the viewport at its default scroll, so beat 0 isn't under the rail and the first drawn gesture starts at a nonzero beat. On new-composition init (and on toggling Lock Rail on with an empty composition), scroll the viewport so beat 0 sits exactly at the rail X. Reuse the existing viewport scroll helpers (the same ones 7.4 / 8.9 / 8.10 use).
+
+- [ ] **13.4 Pitch ruler down the left edge of the canvas** *(M, feature)*
+  Vertical counterpart to the existing top ruler ([src/canvas/ruler-renderer.ts](src/canvas/ruler-renderer.ts)): a fixed-width strip along the left showing note names / octaves at the current zoom, with adaptive label density so it thins out when zoomed away (mirror `getAdaptiveBeatStep`'s 1-2-5 approach against semitone / octave steps). Respects the Key setting the way the staff does — including 8.19's true-**None** mode, where there are no pitch lines to label. Note names come from `centsToNoteName` in [src/constants.ts](src/constants.ts) and must reflect the 8.27 A4 tuning. Costs horizontal canvas width, so the viewport's world↔screen origin and every hit-test that assumes X starts at 0 need the same treatment `RULER_HEIGHT` gets on the Y side. Prerequisite for 13.5's Y-axis drag-out.
+
+### Guides
+- [ ] **13.5 Create guides by dragging out of the axis rulers** *(M, feature)*
+  Today guides are born at viewport centre from the two Add buttons (`addGuideAtViewportCenter`, [src/main.ts:1552](src/main.ts)) and only then dragged into place. Add the direct gesture: mousedown in the top ruler and drag down into the canvas creates an X (beat) guide that follows the cursor; the same out of the left pitch ruler creates a Y (pitch) guide. Release inside the canvas commits, release back over the ruler cancels. Reuse the existing guide-drag path in [src/canvas/interaction.ts:174-186](src/canvas/interaction.ts) (including `buildSnapConfigExcludingGuide`) so a dragged-out guide snaps exactly like a moved one. Must not break ruler scrubbing — a click without drag still scrubs the playhead. The Add buttons stay as the keyboard-reachable path. Y-axis drag-out needs 13.4 first; the X-axis half can ship alone.
+
+- [ ] **13.6 Hold Space to audition a pitch guide's current pitch while dragging** *(S, feature)*
+  While dragging a Y guide, holding Space sounds the guide's post-snap pitch, so guides can be placed by ear. Same rules as the Draw-mode planchette preview: the snapped value, current track's tone, released on keyup / drag end. Under Magnetic the guide drag is snapped by the same config path, so the audition follows whatever the guide is actually pulled to. Sequence after 13.5 (or ship against the existing guide drag).
+
+### Key & scale selection
+- [ ] **13.8 Tuning / key / scale selector rework** *(L, own planning session)*
+  The Key + Scale dropdowns mix levels of definition. `SCALE_CATALOG` in [src/utils/scales.ts](src/utils/scales.ts) is one flat list where 12-TET church modes, Gamelan Pelog, Maqam Rast, Thai 7-TET, and 24-TET are peers, distinguished only by a cosmetic `group` string — a 12-TET *mode* and a whole *tuning system* are presented as the same kind of choice, and picking a root note means something quite different in each case.
+
+  **Direction settled 2026-08-10, after the research pass below: no strict cascade.** There is no clean partition to cascade down — the families genuinely overlap (12-, 19- and 31-EDO are all meantones) and the levels differ in kind between them, so a four-deep dropdown chain would be enforcing a taxonomy that isn't true. Do instead what musicians already know from other apps:
+  - **Group like with like into sections that make sense**, accepting overlapping entry points rather than pretending to disjointness — the convergent shape across Ableton Live 12, Surge XT, MTS-ESP, Entonal and Scale Workshop.
+  - **Parameterize the systems that lend themselves to it** (equal divisions by N and equave; possibly MOS by generator + step signature; JI by limit) instead of enumerating their members as list rows.
+  - Sections and parameter controls are the design work; the original 4-level cascade sketch (Tuning → interval/size → key → mode) is **superseded** and kept only in the research report for context.
+
+  Still to settle even under this direction: whether the two axes get **two controls or one grouped list** (a single grouped picker still mixes a tuning with a mode unless the sections themselves separate them), which sections ship, and which families get parameter fields vs. plain rows.
+
+  **Research pass done 2026-08-10 — full report with sources in [.claude/plans/13.8-tuning-taxonomy-research.md](.claude/plans/13.8-tuning-taxonomy-research.md).** Headlines:
+
+  - **The diagnosis isn't "missing hierarchy" — it's one control serving two orthogonal axes.** Axis A = the tuning (which pitch classes exist); Axis B = the subset/mode chosen out of them. `24tet` and `thai-7tet` are Axis A entries sitting in an Axis B list; the maqam scales are the two fused (they're 24-EDO subsets written as 12-TET decimals — `maqam-rast`'s `[0,2,3.5,5,7,9,10.5]` is 24-EDO degrees `[0,4,7,10,14,18,21]`); slendro/pelog are irregular tunings that are neither EDO nor JI. The ~20 Western/world modes are clean Axis B and need no change.
+  - **The sketched top level isn't a partition.** 12-EDO *is* a meantone; so are 19- and 31-EDO, which the sketch lists under EDO. Meantone is rank-2 and EDO is rank-1 — points on the same axis (rank), not siblings. Theory's actual split is regular (rank-1 EDO / rank-2 linear) vs. irregular (well temperaments) vs. untempered JI.
+  - **Level 2 differs in kind per family**, so it can't be one dropdown with swapped options: a *count* (N) for EDO, a *limit* (prime/odd) or named construction for JI, a *generator/comma* for rank-2, a *named table* for well temperaments. The sketch's JI ratios (9:8, 3:2, 7:4) are single intervals, not systems.
+  - **Level 3 degrades in four steps, not gracefully-by-magic.** Letter names work in 12- and 19-EDO (19 is a meantone: "C♯ and D♭ are different notes"); 22-EDO breaks the chain of fifths outright and needs ups-and-downs notation; other EDOs want degree indices (`n\N`); JI wants a 1/1 reference, not a key. Note that root is *sonically* load-bearing for irregular temperaments (unequal keys) in a way it never is for an EDO — an argument for keeping it always-visible.
+  - **Level 4 outside 12-EDO is generated, not enumerated** — MOS scales are specified by (period, generator, step signature `5L 2s`), and there's a maintained MIT-licensed JS library (`xenharmonic-devs/moment-of-symmetry`) that does it. Whether to take that on in the first cut is a scoping call.
+  - **Nobody ships the cascade except Leimma** (a pedagogical tool), and it does it correctly: tuning → reference → subset → root. Ableton Live 12, Surge XT, MTS-ESP, Entonal Studio and Scale Workshop all converged on the same three-part shape instead: a searchable named-preset list + a few *parameterised constructors* for the generative families + `.scl` import as escape hatch, with reference pitch as a separate always-visible control. Scale Workshop's top level is construction *methods* ("Equal temperaments", "Rank-2 temperaments") side by side with no claim of disjointness — the most instructive precedent.
+  - **Three candidate shapes are written up** in the report: (1) the strict cascade, corrected; (2) **two axes + root** — Tuning / Root / Scale, three always-visible controls, flagged there as the minimum honest fix and the recommended core model; (3) search-first list + constructors + import, the industry-converged answer. Every existing catalog row maps cleanly under (2).
+  - **Data-model reach.** `period` is already a float, so non-octave equaves (Bohlen-Pierce ED3-13) come free, and fractional semitone intervals already work — the model is in better shape than expected. The blocker is elsewhere: **`scaleRoot` is `number | null` documented `0..11`** and `getScaleNotes` does `root * CENTS_PER_SEMITONE`, hard-quantising the root to the 12-EDO lattice. In a 19-tone system that offers 12 roots at 100-cent spacing — none of them degrees of the tuning. Generalising it to a cents offset or a degree index is the load-bearing change, and saved compositions carry `scaleId` + `scaleRoot`, so it needs a migration + golden-format shim like 8.27's.
+  - **The staff's reference frame is a real design question, not a detail.** [src/canvas/staff-renderer.ts](src/canvas/staff-renderer.ts) draws the 100-cent chromatic grid as substrate and renders microtonal scales as dashed deviations labelled `C+50c`. Defensible as a transitional view; arguably wrong as the permanent one for a 19-EDO piece. The `hidePitchLines` plumbing (8.19) already proves the substrate can be switched off.
+  - **Keep out of the cascade:** Tune A4 (8.27) is the reference-frequency axis and is already correctly orthogonal — `tuningOffsetCents` lives only in `centsToFreq`, `A4_CENTS` is frozen. "None" is a display/snap mode, not a tuning family; keeping it as a sentinel is pragmatic but the taxonomy shouldn't treat it as a peer of JI.
+  - **Related work.** Sits underneath [12.1](#phase-12--harmony--format-guardrails)'s snap-target composition (that decides how gravity sources *combine*; this decides what a source *is* — plan 13.8 first). `.scl`/`.kbm` import overlaps 12.2's import-settings verb and would let the built-in taxonomy stay curated at ~15–20 entries; note `.scl` carries no root, no reference frequency and no note names, so import does *not* remove the naming decision. Harmonic Prism's JI ratio chains (`src/utils/harmonics.ts`) already encode a JI vocabulary that shouldn't get duplicated.
+
+  Ten open questions for the session are listed at the end of the research report; the two that gate the rest are **how many always-visible controls the toolbar can spend** and **whether the staff keeps the 12-EDO substrate under non-12 tunings** — the latter decides whether SlideSynth is a 12-EDO tool with microtonal decoration or a genuinely tuning-agnostic one.
+
+### MIDI
+- [ ] **13.7 Monophonic MIDI input mode with auto-glissando** *(M, own planning session)*
+  Live MIDI recording (8.11) is polyphonic — overlapping held notes become overlapping curves. Add a poly/mono toggle for MIDI input: in mono, a new noteOn ends the previous note first, so no two curves from a single MIDI recording session overlap in time. Once notes are guaranteed sequential, connect consecutive notes with a glissando automatically — the outgoing note and the incoming one become one continuous line rather than two separate curves. Touches [src/audio/midi-input.ts](src/audio/midi-input.ts), the MIDI voice bookkeeping in [src/main.ts](src/main.ts), and `finalizeAllInFlightMidiVoices`.
+  Session inputs:
+  - **Glide shape and duration.** Instantaneous vertical jump, or a spanned transition? A settable time reopens exactly the control Phase 7.1 deleted for having too narrow a useful range — if a duration is wanted, it needs a different framing than the old Glide slider (fixed constant? proportional to interval size? derived from note-off→note-on gap?).
+  - **What "connect" produces.** One merged curve spanning the whole phrase, or per-note curves plus a joining segment. Affects undo granularity, per-curve editing, and whether note boundaries stay visible after the fact.
+  - **Legato vs. detached.** A gap between note-off and the next note-on — does mono still glide across the silence, or only connect when the player overlaps/abuts the notes?
+  - **Interactions.** Loop-wrap split (8.21), pitch bend held across the transition (8.25), and whether mono mode also constrains the LMB/perform path or is strictly a MIDI-input setting.
+  - **Scope of "session".** The item says overlap is prevented "during that midi recording session" — define the boundary (record arm→disarm? per-track? survives a loop wrap?).
+
+---
+
 ## Housekeeping reminders
 
 - Update [help.html](help.html) in the same PR as each feature.
