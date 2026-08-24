@@ -73,13 +73,13 @@ export const BUILTIN_SNAP_PRESETS: readonly SnapPreset[] = Object.freeze([
     },
   },
   {
-    // Strong attractor + loose spring + low damping = sustained pitch
-    // undulation around a held target.
+    // Strong attractor + low damping = sustained pitch undulation around a
+    // held target instead of a settle.
     id: 'builtin-vibrato',
     name: 'Vibrato',
     settings: {
       magneticStrength: 0.9,
-      magneticSpringK: 18,
+      magneticSpringK: 35,
       magneticDamping: 1.5,
     },
   },
