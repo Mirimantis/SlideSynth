@@ -41,14 +41,15 @@ export const BUILTIN_SNAP_PRESETS: readonly SnapPreset[] = Object.freeze([
     },
   },
   {
-    // Attractors inert: smooth cursor-follow with no detents. Distinct from
-    // Magnetic off, which is an instant hard jump to the snap line.
-    id: 'builtin-free-glide',
-    name: 'Free Glide',
+    // Just enough force to feel a target without being caught by it, with heavy
+    // damping so it never wobbles. At force 0 this was indistinguishable from
+    // Snap off, which is why it carries a little pull.
+    id: 'builtin-smooth-glide',
+    name: 'Smooth Glide',
     settings: {
-      magneticStrength: 0,
-      magneticSpringK: 50,
-      magneticDamping: 8,
+      magneticStrength: 0.25,
+      magneticSpringK: 30,
+      magneticDamping: 13,
     },
   },
   {
