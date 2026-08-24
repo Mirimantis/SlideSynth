@@ -1,13 +1,22 @@
 import type { SnapSettings } from '../types';
 
 /**
- * Snap presets — named bundles of snap-section settings that the user can load
- * with one click. Presets carry a *partial* of SnapSettings: only the fields
- * they intend to override get applied. Notably, presets never touch
+ * Snap presets — named bundles of *magnet feel* that the user can load with one
+ * click. A preset carries only the three physics fields (force / spring /
+ * damping); it never stores whether Snap or Magnetic is on, and never touches
  * `scaleRoot` / `scaleId` / `hidePitchLines` — the Key dropdown is an orthogonal
- * user choice that a "snap feel" preset shouldn't clobber.
+ * user choice that a "snap feel" preset shouldn't clobber. (BACKLOG 13.2)
+ *
+ * Note `magneticStrength` is the "Force" slider in the UI (BACKLOG 13.1); the
+ * field name stays because it's persisted in the composition file.
+ *
+ * Loading a preset force-enables Snap + Magnetic at the call site — magnetic
+ * physics is gated on both, so a feel-only preset would otherwise be inaudible.
+ * That's an apply-time side effect, deliberately not a stored field.
  */
-export type SnapPresetSettings = Partial<Omit<SnapSettings, 'scaleRoot' | 'scaleId' | 'hidePitchLines'>>;
+export type SnapPresetSettings = Partial<
+  Pick<SnapSettings, 'magneticStrength' | 'magneticSpringK' | 'magneticDamping'>
+>;
 
 export interface SnapPreset {
   id: string;            // stable id (built-ins use 'builtin-*'; user presets use 'user-*<timestamp>')
@@ -17,45 +26,60 @@ export interface SnapPreset {
 
 /**
  * Built-in starter set. Frozen so accidental mutation doesn't bleed across loads.
- * Names map to a recognisable "feel" rather than a specific tuning combo.
+ * Names describe how the magnet behaves — settle time, grip, wobble — and never
+ * reference a key or scale.
  */
 export const BUILTIN_SNAP_PRESETS: readonly SnapPreset[] = Object.freeze([
   {
-    id: 'builtin-free-draw',
-    name: 'Free Draw',
+    // Matches the app's boot defaults, so the default feel is nameable.
+    id: 'builtin-standard',
+    name: 'Standard',
     settings: {
-      enabled: false,
-      magneticEnabled: false,
-    },
-  },
-  {
-    id: 'builtin-chromatic',
-    name: 'Chromatic 1/16',
-    settings: {
-      enabled: true,
-      magneticEnabled: false,
-    },
-  },
-  {
-    id: 'builtin-magnetic-tight',
-    name: 'Magnetic On-Pitch',
-    settings: {
-      enabled: true,
-      magneticEnabled: true,
       magneticStrength: 0.85,
-      magneticSpringK: 35,
-      magneticDamping: 4,
+      magneticSpringK: 50,
+      magneticDamping: 6,
     },
   },
   {
-    id: 'builtin-magnetic-loose',
-    name: 'Magnetic + Diatonic',
+    // Attractors inert: smooth cursor-follow with no detents. Distinct from
+    // Magnetic off, which is an instant hard jump to the snap line.
+    id: 'builtin-free-glide',
+    name: 'Free Glide',
     settings: {
-      enabled: true,
-      magneticEnabled: true,
-      magneticStrength: 0.7,
-      magneticSpringK: 22,
-      magneticDamping: 2.5,
+      magneticStrength: 0,
+      magneticSpringK: 50,
+      magneticDamping: 8,
+    },
+  },
+  {
+    // Gentle pull that lets the pitch sit between targets.
+    id: 'builtin-loose-detents',
+    name: 'Loose Detents',
+    settings: {
+      magneticStrength: 0.45,
+      magneticSpringK: 30,
+      magneticDamping: 5,
+    },
+  },
+  {
+    // Hard grab, quick settle, minimal overshoot.
+    id: 'builtin-pitch-lock',
+    name: 'Pitch Lock',
+    settings: {
+      magneticStrength: 1,
+      magneticSpringK: 50,
+      magneticDamping: 10,
+    },
+  },
+  {
+    // Strong attractor + loose spring + low damping = sustained pitch
+    // undulation around a held target.
+    id: 'builtin-vibrato',
+    name: 'Vibrato',
+    settings: {
+      magneticStrength: 0.9,
+      magneticSpringK: 18,
+      magneticDamping: 1.5,
     },
   },
 ] as const);
@@ -63,7 +87,9 @@ export const BUILTIN_SNAP_PRESETS: readonly SnapPreset[] = Object.freeze([
 /** localStorage key for user-saved presets. */
 export const USER_SNAP_PRESETS_STORAGE_KEY = 'slidesynth.snapPresets';
 
-/** Load user presets from localStorage. Per-field validation; bad entries are dropped. */
+/** Load user presets from localStorage. Per-field validation; bad entries are
+ *  dropped. Presets saved before 13.2 also carry `enabled` / `magneticEnabled`;
+ *  those keys are simply not read, so old entries load as feel-only. */
 export function loadUserSnapPresets(): SnapPreset[] {
   try {
     const raw = localStorage.getItem(USER_SNAP_PRESETS_STORAGE_KEY);
@@ -76,8 +102,6 @@ export function loadUserSnapPresets(): SnapPreset[] {
       if (typeof obj.id !== 'string' || typeof obj.name !== 'string' || !obj.settings) return [];
       const s = obj.settings as Record<string, unknown>;
       const settings: SnapPresetSettings = {};
-      if (typeof s.enabled === 'boolean') settings.enabled = s.enabled;
-      if (typeof s.magneticEnabled === 'boolean') settings.magneticEnabled = s.magneticEnabled;
       if (typeof s.magneticStrength === 'number' && Number.isFinite(s.magneticStrength)) {
         settings.magneticStrength = Math.max(0, Math.min(1, s.magneticStrength));
       }
@@ -103,25 +127,23 @@ export function saveUserSnapPresets(presets: SnapPreset[]): void {
 }
 
 /** Given the current snap settings, return true iff every overridden field in
- *  `preset.settings` matches the live value. Used to detect "(modified)" state. */
+ *  `preset.settings` matches the live value. Used to detect "(modified)" state.
+ *  Only the feel fields participate, so a preset can read as selected while
+ *  Magnetic is off — the name describes the stored feel, not the toggle state. */
 export function presetMatches(preset: SnapPreset, live: SnapSettings): boolean {
   const s = preset.settings;
-  if (s.enabled !== undefined && s.enabled !== live.enabled) return false;
-  if (s.magneticEnabled !== undefined && s.magneticEnabled !== live.magneticEnabled) return false;
   if (s.magneticStrength !== undefined && Math.abs(s.magneticStrength - live.magneticStrength) > 1e-6) return false;
   if (s.magneticSpringK !== undefined && Math.abs(s.magneticSpringK - live.magneticSpringK) > 1e-6) return false;
   if (s.magneticDamping !== undefined && Math.abs(s.magneticDamping - live.magneticDamping) > 1e-6) return false;
   return true;
 }
 
-/** Snapshot the current live settings (excluding scale) into a new user preset. */
+/** Snapshot the current live feel into a new user preset. */
 export function snapshotPreset(name: string, live: SnapSettings): SnapPreset {
   return {
     id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name,
     settings: {
-      enabled: live.enabled,
-      magneticEnabled: live.magneticEnabled,
       magneticStrength: live.magneticStrength,
       magneticSpringK: live.magneticSpringK,
       magneticDamping: live.magneticDamping,

@@ -1478,11 +1478,18 @@ snapPresetSelect.addEventListener('change', () => {
   if (id === CUSTOM_PRESET_VALUE) return;
   const preset = getAllPresets().find(p => p.id === id);
   if (!preset) return;
+  // Presets are feel-only (BACKLOG 13.2), but magnetic physics is gated on
+  // `snapEnabled && magneticEnabled` — so a load with either toggle off would be
+  // silently inaudible. Turn both on and say so, per the 10.5 auto-Loop precedent.
+  const st = store.getState();
+  const turnedOn: string[] = [];
+  if (!st.snapEnabled) { store.setSnap(true); turnedOn.push('Snap'); }
+  if (!st.magneticEnabled) { store.setMagneticEnabled(true); turnedOn.push('Magnetic'); }
+  if (turnedOn.length > 0) showToast(`${preset.name}: ${turnedOn.join(' + ')} On`);
+
   // Apply each defined field via the corresponding setter (write-through to comp.snap).
   // Note: no history.snapshot() — preset loading mirrors the magnetic-slider precedent.
   const s = preset.settings;
-  if (s.enabled !== undefined) store.setSnap(s.enabled);
-  if (s.magneticEnabled !== undefined) store.setMagneticEnabled(s.magneticEnabled);
   if (s.magneticStrength !== undefined) store.setMagneticStrength(s.magneticStrength);
   if (s.magneticSpringK !== undefined) store.setMagneticSpringK(s.magneticSpringK);
   if (s.magneticDamping !== undefined) store.setMagneticDamping(s.magneticDamping);

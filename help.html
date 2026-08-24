@@ -719,20 +719,28 @@
     <div class="detail-body">
       <p>
         The <strong>Preset</strong> dropdown at the top of the Snap section
-        loads a named bundle of snap settings in one click. Built-in presets
-        cover the common workflows:
+        loads a named <em>magnet feel</em> in one click. A preset carries only
+        the three physics values — Force, Spring and Damping — so it
+        never changes your Key/Scale pick, and never changes what the magnet
+        snaps <em>to</em>, only how it gets there:
       </p>
       <ul>
-        <li><strong>Free Draw</strong> — snap off; the cursor follows freely (good for sketching).</li>
-        <li><strong>Chromatic 1/16</strong> — snap on, magnetic off; the classic discrete grid.</li>
-        <li><strong>Magnetic On-Pitch</strong> — tight magnetic pull (force 0.85, spring 35, damping 4); great for pitch-locked performances.</li>
-        <li><strong>Magnetic + Diatonic</strong> — looser magnetic feel (force 0.7, spring 22, damping 2.5); pair with a Key/Scale for diatonic snap with vibrato headroom.</li>
+        <li><strong>Standard</strong> — force 0.85, spring 50, damping 6. The app's default feel: settles onto a target promptly.</li>
+        <li><strong>Free Glide</strong> — force 0, spring 50, damping 8. Attractors inert, so the pitch follows the cursor smoothly with no detents. Different from turning Magnetic off, which gives an instant hard jump to the snap line.</li>
+        <li><strong>Loose Detents</strong> — force 0.45, spring 30, damping 5. A gentle pull that still lets the pitch sit between targets; good for microtonal work.</li>
+        <li><strong>Pitch Lock</strong> — force 1.0, spring 50, damping 10. Hard grab, quick settle, minimal overshoot; for pitch-accurate performances.</li>
+        <li><strong>Vibrato</strong> — force 0.9, spring 18, damping 1.5. Strong attractor with a loose spring and low damping, so held notes undulate around the target instead of settling.</li>
       </ul>
       <p>
-        Click <strong>Save</strong> to capture the current settings as a
+        Loading a preset turns <strong>Snap</strong> and <strong>Magnetic</strong>
+        on if either is off (magnetic physics needs both), and a toast says which
+        it switched on — so a preset click always changes how the instrument
+        feels rather than doing nothing.
+      </p>
+      <p>
+        Click <strong>Save</strong> to capture the current feel as a
         named user preset (stored locally in your browser). <strong>Del</strong>
-        removes the active user preset. Presets only override snap/magnetic
-        fields — they leave your Key/Scale pick untouched. Loading a preset is
+        removes the active user preset. Loading a preset is
         <em>not</em> recorded in undo history (it's a workflow toggle, not a
         composition edit).
       </p>
