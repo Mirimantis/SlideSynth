@@ -212,7 +212,10 @@ app.innerHTML = `
               </span>
               <span class="toggle-switch-label">Magnetic</span>
             </label>
-            <input type="range" id="input-magnetic-strength" class="magnetic-strength-slider" min="0" max="1" value="0.85" step="0.05" title="Snap attraction strength (0 = smooth cursor follow, 1 = strong snap pull)" />
+          </div>
+          <div class="transport-row">
+            <label for="input-magnetic-strength">Force</label>
+            <input type="range" id="input-magnetic-strength" class="magnetic-strength-slider" min="0" max="1" value="0.85" step="0.05" title="Force: how hard snap lines pull the pitch (0 = smooth cursor follow, 1 = strong snap pull)" />
             <span class="magnetic-strength-value">0.85</span>
           </div>
           <div class="transport-row">
@@ -1338,7 +1341,9 @@ snapToggleBtn.addEventListener('click', () => {
   snapToggleBtn.blur();
 });
 
-// ── Magnetic Snap toggle + strength slider + spring slider (Transport) ─
+// ── Magnetic Snap toggle + Force / Spring / Damping sliders (Transport) ─
+// The Force slider is `magneticStrength` internally — the field is persisted in
+// the composition file, so the rename (BACKLOG 13.1) is display-only.
 const magneticToggle = document.getElementById('magnetic-toggle') as HTMLInputElement;
 const magneticStrengthSlider = document.getElementById('input-magnetic-strength') as HTMLInputElement;
 const magneticStrengthValue = document.querySelector('.magnetic-strength-value') as HTMLSpanElement;
