@@ -828,6 +828,16 @@ const lockRailToggle = document.getElementById('lock-rail-toggle') as HTMLInputE
 lockRailToggle.checked = store.getState().scrollCanvasEnabled;
 lockRailToggle.addEventListener('change', () => {
   store.setScrollCanvas(lockRailToggle.checked);
+  // Same reasoning as the boot case (BACKLOG 13.3): once the rail is where the
+  // next gesture lands, beat 0 belongs under it. Only on an empty composition —
+  // with content on the canvas, yanking the view out from under the user would
+  // be worse than leaving it, and playback re-centres on the playhead anyway.
+  if (lockRailToggle.checked && getCompositionLength(store.getComposition()) === 0) {
+    const r = canvasContainer.getBoundingClientRect();
+    scrollViewportToBeat(viewport, 0, r.width, r.height);
+    updateZoom();
+    bgDirty = true;
+  }
   lockRailToggle.blur();
 });
 const pitchHudToggle = document.getElementById('pitch-hud-toggle') as HTMLInputElement;
@@ -4321,9 +4331,16 @@ resizeCanvases();
   const visibleBeats = (30 / 60) * store.getComposition().bpm;  // 30s of beats
   viewport.setZoomX(rect.width / visibleBeats);
   viewport.setZoomY((rect.height - viewport.topInset) / visibleCents);
-  viewport.state.offsetX = 0;
   viewport.state.offsetY = midPitch + visibleCents / 2 + viewport.topInset / viewport.state.zoomY;
-  viewport.clampOffset(rect.width, rect.height);
+  // With Lock Rail on, the rail — not the left edge — is where the next gesture
+  // lands, so beat 0 belongs under it (BACKLOG 13.3). Otherwise a fresh
+  // composition starts drawing at whatever beat the rail happens to sit over.
+  if (store.getState().scrollCanvasEnabled) {
+    scrollViewportToBeat(viewport, 0, rect.width, rect.height);
+  } else {
+    viewport.state.offsetX = 0;
+    viewport.clampOffset(rect.width, rect.height);
+  }
   updateZoom();
   bgDirty = true;
 }
