@@ -66,7 +66,7 @@ function snapFalloff(distance: number, radius: number): number {
 /**
  * Advance physics one step. Returns the current pitch.
  *  - cursorPitch: raw target the spring pulls toward.
- *  - strength: 0..1 — user slider for snap attractor strength.
+ *  - strength: 0..1 — snap attractor strength (the "Force" slider in the UI).
  *  - springK: cursor-to-pitch spring stiffness (user slider). At 0 the cursor
  *    doesn't pull the planchette at all — motion comes purely from snap
  *    attractors as the nearest-snap switches under the cursor.

@@ -212,7 +212,10 @@ app.innerHTML = `
               </span>
               <span class="toggle-switch-label">Magnetic</span>
             </label>
-            <input type="range" id="input-magnetic-strength" class="magnetic-strength-slider" min="0" max="1" value="0.85" step="0.05" title="Snap attraction strength (0 = smooth cursor follow, 1 = strong snap pull)" />
+          </div>
+          <div class="transport-row">
+            <label for="input-magnetic-strength">Force</label>
+            <input type="range" id="input-magnetic-strength" class="magnetic-strength-slider" min="0" max="1" value="0.85" step="0.05" title="Force: how hard snap lines pull the pitch (0 = smooth cursor follow, 1 = strong snap pull)" />
             <span class="magnetic-strength-value">0.85</span>
           </div>
           <div class="transport-row">
@@ -1338,7 +1341,9 @@ snapToggleBtn.addEventListener('click', () => {
   snapToggleBtn.blur();
 });
 
-// ── Magnetic Snap toggle + strength slider + spring slider (Transport) ─
+// ── Magnetic Snap toggle + Force / Spring / Damping sliders (Transport) ─
+// The Force slider is `magneticStrength` internally — the field is persisted in
+// the composition file, so the rename (BACKLOG 13.1) is display-only.
 const magneticToggle = document.getElementById('magnetic-toggle') as HTMLInputElement;
 const magneticStrengthSlider = document.getElementById('input-magnetic-strength') as HTMLInputElement;
 const magneticStrengthValue = document.querySelector('.magnetic-strength-value') as HTMLSpanElement;
@@ -1473,11 +1478,18 @@ snapPresetSelect.addEventListener('change', () => {
   if (id === CUSTOM_PRESET_VALUE) return;
   const preset = getAllPresets().find(p => p.id === id);
   if (!preset) return;
+  // Presets are feel-only (BACKLOG 13.2), but magnetic physics is gated on
+  // `snapEnabled && magneticEnabled` — so a load with either toggle off would be
+  // silently inaudible. Turn both on and say so, per the 10.5 auto-Loop precedent.
+  const st = store.getState();
+  const turnedOn: string[] = [];
+  if (!st.snapEnabled) { store.setSnap(true); turnedOn.push('Snap'); }
+  if (!st.magneticEnabled) { store.setMagneticEnabled(true); turnedOn.push('Magnetic'); }
+  if (turnedOn.length > 0) showToast(`${preset.name}: ${turnedOn.join(' + ')} On`);
+
   // Apply each defined field via the corresponding setter (write-through to comp.snap).
   // Note: no history.snapshot() — preset loading mirrors the magnetic-slider precedent.
   const s = preset.settings;
-  if (s.enabled !== undefined) store.setSnap(s.enabled);
-  if (s.magneticEnabled !== undefined) store.setMagneticEnabled(s.magneticEnabled);
   if (s.magneticStrength !== undefined) store.setMagneticStrength(s.magneticStrength);
   if (s.magneticSpringK !== undefined) store.setMagneticSpringK(s.magneticSpringK);
   if (s.magneticDamping !== undefined) store.setMagneticDamping(s.magneticDamping);
