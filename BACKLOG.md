@@ -149,6 +149,11 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - **Each control exists once.** Loop is currently in both the top bar and the Transport drawer.
     - **Clear names.** Fix the "Tuning" collision: the drawer vs. the Prism JI/ET field. Replace the single-letter M S I T X track buttons.
     - **Space key.** Reconsider tap-vs-hold (250 ms) for transport vs. preview.
+    - **Scrubbing with Lock Rail on** *(found in 15.2 testing, deferred here 2026-09-24).* Scrubbing the top ruler moves the stored playhead, and audio preview and the Parameters Graph follow it. The main canvas draws only the fixed rail, though, so nothing visibly moves there, and Play starts from the rail beat, not the scrubbed one. The stored playhead is effectively meaningless in Lock Rail mode. Options considered:
+      - on release, scroll the canvas so the scrubbed beat sits under the rail, with a playhead line following the cursor while dragging;
+      - show a playhead line while dragging and leave the view alone.
+      Decide as part of the Lock Rail / visible-perform-state rework.
+    - **Group visibility** — see 13.12.
 - [ ] **16.2 Implement the interface spec** *(XL — split into items after 16.1)*
   - Builds on 15.4's component layer.
   - Update [help.html](help.html) in the same PRs.
@@ -205,6 +210,31 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
   - The Parameters Graph below the canvas shipped in PR #58, showing the selected curve's volume lane.
   - Remaining: more lane types (pan, cutoff, per-layer mix), show/hide/solo per lane, and a lane picker.
   - Inherits the "functional curve, lane-agnostic gravity" framing from the lanes model.
+
+### Groups
+
+Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand `Ctrl+G` groups). There is no group object: a group is just the curves that carry the same id. 13.13 and 13.14 would likely need one — a first-class group entity with an id, and room for its own lanes — which is a data-model change with a composition-version bump and migration.
+
+- [ ] **13.12 Make grouping visible, and ungrouping easy** *(S–M — UI half folds into Phase 16)*
+  - Found in 15.2 testing: Prism draw correctly places two offset curves as a group, but nothing on screen says they're grouped, so it read as a bug.
+  - Show grouped status on the canvas, for example a shared outline or bracket when any member is hovered or selected, or a group badge on the selection. Show it in Object Properties too ("Group (3 curves)" exists only for the Move-to-track picker today).
+  - Put Ungroup somewhere easier to reach than `Ctrl+Shift+G` and the right-click menu: a button in Object Properties when a group is selected, and on the transform box.
+- [ ] **13.13 Group volume envelope** *(M, own planning session)*
+  - Explore giving a group its own volume lane that scales the group's *summed* output equally: one fade or swell across a whole chord cluster, on top of each member's own volume lane.
+  - **Session inputs:**
+    - where it lives: needs the first-class group entity above;
+    - audio: a per-group gain node between the member voices and the track, or multiplying the envelope into each member's sampled volume. The first is truer to "summed output"; the second needs no graph change;
+    - how it's edited: the Parameters Graph showing the group lane when the group is selected (ties into 8.4's lane picker);
+    - what Ungroup does to it: bake it into the members, or discard it;
+    - copy / paste / duplicate / join semantics.
+- [ ] **13.14 Group isolation mode** *(M–L, own planning session)*
+  - Explore an Adobe Illustrator-style isolation mode: enter a group (double-click it, or a button) to edit its members individually without ungrouping. Everything outside the group fades and ignores input; Esc or clicking outside exits.
+  - **Session inputs:**
+    - entry and exit gestures, and how the canvas shows you're inside;
+    - which tools work inside (point edits, adding a member, removing one);
+    - how it interacts with transform-box group expansion (today selecting one member selects the whole group);
+    - fits the input router (15.2) as an input-scope filter: hit-tests limited to the isolated group;
+    - reuses 8.23's non-active dimming for the fade.
 
 ### Snap, harmony & tuning
 - [ ] **13.8 Tuning / key / scale model rework** *(L, own planning session)*
