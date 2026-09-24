@@ -62,19 +62,28 @@ The [queued features](#queued-features-paused) resume after Phase 16. Several of
 
 The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target-architecture). Suggested order: 15.1 → 15.2 → 15.3 / 15.4 (incremental, one panel or region at a time). 15.5–15.8 can interleave. This replaces the old "extract pieces of main.ts opportunistically" housekeeping note.
 
-- [ ] **15.1 Signals-based store** *(L)*
+- [x] **15.1 Signals-based store** *(L)*
   - Fine-grained subscriptions replace the single `notify()`. Today that notify rebuilds the track list and both property panels via `innerHTML` on every change, including every mousemove of a drag.
   - Split state into three kinds:
     - **document:** the composition, which is undoable and saved;
     - **workspace preferences:** localStorage;
     - **runtime:** transport, selection, planchettes.
   - Remove the `AppState` mirrors of `composition.snap`, and move loop-enabled out of the playback engine into state.
-  - Replace stringly `curveId:idx` point keys with a structured selection type.
+  - *Shipped:*
+    - `@preact/signals-core` backs every `AppState` field with a version signal behind the unchanged `getState()` API. `watch` / `effect` in `src/state/reactive.ts` replace every `store.subscribe` caller, and the catch-all subscribe is gone.
+    - Panels render only when their markup changes (`setHtmlIfChanged`). Their listeners look state up by id at event time, so they stay correct after undo.
+    - Measured: 60 no-op edits went from 240 DOM mutations (~53 ms) to 0 (~9 ms).
+  - *Fixed along the way:*
+    - The track-volume and Handle-length sliders stopped mid-drag because each input rebuilt the panel under the pointer.
+    - The snap drawer and preset dropdown didn't follow undo or file open.
+    - Turning Loop off mid-Jam stopped the transport at the end of existing content.
+  - *Deferred to 15.2:* replacing the stringly `curveId:idx` point keys with a structured selection type. That code lives in the interaction handlers 15.2 rewrites.
 - [ ] **15.2 Transport / perform state machine** *(L)*
   - One module with a single mode value and named transitions, replacing the ~8 flags spread across the store, the playback engine and `main.ts`: `phase`, `recordArmed`, `jamActive`, `passRecordState`, `lmbSounding`, `midiArmedTrackId`, loop-enabled and Lock Rail.
   - `composeToggleArmed`, `jamToggle`, `toggleRecordNextPass`, `composePerformStop` and the loop-wrap handler become transitions, with unit tests covering every transition.
   - The canvas gets **one input router** that asks the state machine whether a press performs or edits. This replaces today's capture-phase listener in `main.ts` racing the bubbling handlers in `interaction.ts`.
   - Do the Pointer Events migration here; it is the first half of 11.3.
+  - Replace the stringly `curveId:idx` point-selection keys with a structured type (deferred from 15.1).
   - Phase 16 may simplify the mode set, so keep the transitions easy to reshape.
 - [ ] **15.3 Break up `main.ts`** *(L)*
   - **Layout:** move the HTML template into components (15.4).

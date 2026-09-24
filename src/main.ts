@@ -69,6 +69,8 @@ import iconLoop from './assets/icons/loop.svg?raw';
 import { canOpenLayer, createLayerTrack, newestLayerTrack, nextPassRecordState, LAYER_TRACK_LIMIT } from './model/layer';
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
+import { effect, watch } from './state/reactive';
+import { escapeHtml, setHtmlIfChanged } from './utils/dom-helpers';
 import type { AppState, ToolMode, BezierCurve } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -340,14 +342,7 @@ function getSelectedParamCurve(): BezierCurve | null {
 const paramInteraction = createParamInteraction(paramCanvas, paramViewport, getSelectedParamCurve);
 
 // Reset the param-point selection whenever the selected curve changes.
-let lastParamCurveId: string | null = null;
-store.subscribe(() => {
-  const id = store.getSelectedCurveId();
-  if (id !== lastParamCurveId) {
-    lastParamCurveId = id;
-    paramInteraction.resetSelection();
-  }
-});
+watch(() => store.getSelectedCurveId(), () => paramInteraction.resetSelection());
 
 // ── Parameters Graph: drag-to-resize height ────────────────────
 const PARAM_HEIGHT_KEY = 'slidesynth.paramGraphHeight';
@@ -683,8 +678,6 @@ const playback = createPlaybackEngine((beats) => {
 
 // ── Metronome ───────────────────────────────────────────────────
 const metronome = createMetronome(getAudioContext, getMasterGain);
-metronome.setEnabled(store.getState().metronomeEnabled);
-metronome.setVolume(store.getState().metronomeVolume);
 /** Wall-clock ms at which the latest metronome tick is scheduled to fire, plus
  *  its tier — render loop reads these to flash the planchette/playhead. */
 let lastMetronomeClickAt = 0;
@@ -720,22 +713,14 @@ const toolbar = createToolbar(tuningScaleSlot, {
 // Sync toolbar dropdowns to AppState — so load-composition / undo / redo restore
 // the visible Key + Scale Type selection. Tracks last-rendered values to avoid
 // thrashing the <select> on every store notify.
-let lastToolbarScaleRoot: number | null | undefined = undefined;
-let lastToolbarHidePitchLines: boolean | undefined = undefined;
-let lastToolbarScaleId: string | null | undefined = undefined;
-store.subscribe(() => {
-  const s = store.getState();
-  if (s.scaleRoot !== lastToolbarScaleRoot || s.hidePitchLines !== lastToolbarHidePitchLines) {
+watch(
+  () => `${store.getState().scaleRoot}|${store.getState().hidePitchLines}`,
+  () => {
+    const s = store.getState();
     toolbar.updateScaleRoot(s.scaleRoot, s.hidePitchLines);
-    lastToolbarScaleRoot = s.scaleRoot;
-    lastToolbarHidePitchLines = s.hidePitchLines;
-    bgDirty = true;
-  }
-  if (s.scaleId !== lastToolbarScaleId) {
-    toolbar.updateScaleId(s.scaleId);
-    lastToolbarScaleId = s.scaleId;
-  }
-});
+  },
+);
+watch(() => store.getState().scaleId, id => toolbar.updateScaleId(id));
 
 // ── Icon rail + sliding drawers (WS3) ──────────────────────────
 // Inject shape-only SVG icons (color comes from CSS currentColor) and wire the
@@ -814,7 +799,8 @@ const toolPanel = createToolPanel(toolPanelContainer, {
 // ── Harmonic Prism panel (chord-spec picker) ───────────────────
 const prismPanelContainer = document.getElementById('prism-panel')!;
 const prismPanel = createPrismPanel(prismPanelContainer);
-store.subscribe(() => prismPanel.refresh());
+// The panel shows only the Prism settings, so it re-renders only when they change.
+watch(() => JSON.stringify(store.getState().harmonicPrism), () => prismPanel.refresh());
 
 // ── Transport controls (in track panel) ────────────────────────
 const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
@@ -854,27 +840,19 @@ lockRailToggle.addEventListener('change', () => {
   lockRailToggle.blur();
 });
 const pitchHudToggle = document.getElementById('pitch-hud-toggle') as HTMLInputElement;
-pitchHudToggle.checked = store.getState().pitchHudVisible;
+watch(() => store.getState().pitchHudVisible, v => { pitchHudToggle.checked = v; });
 pitchHudToggle.addEventListener('change', () => {
   store.setPitchHudVisible(pitchHudToggle.checked);
   pitchHudToggle.blur();
 });
 const perfHudToggle = document.getElementById('perf-hud-toggle') as HTMLInputElement;
-perfHudToggle.checked = store.getState().perfHudVisible;
 perfHudToggle.addEventListener('change', () => {
   store.setPerfHudVisible(perfHudToggle.checked);
   perfHudToggle.blur();
 });
 const perfHud = createPerfHud(document.getElementById('perf-hud') as HTMLDivElement);
-perfHud.setVisible(store.getState().perfHudVisible);
-// Mirror external state changes (hotkey, undo, etc.) back into the checkbox so
-// the two stay in sync. Cheap — only runs on store.notify, only branches on
-// actual changes.
-let lastPerfHudVisible = store.getState().perfHudVisible;
-store.subscribe(() => {
-  const v = store.getState().perfHudVisible;
-  if (v === lastPerfHudVisible) return;
-  lastPerfHudVisible = v;
+// Follows the store, so the `!` hotkey and the checkbox stay in step.
+watch(() => store.getState().perfHudVisible, v => {
   perfHudToggle.checked = v;
   perfHud.setVisible(v);
 });
@@ -1010,7 +988,7 @@ function startPlayback() {
   let startBeat: number;
   let endBeat: number | undefined;
   let loopStart: number | undefined;
-  if (playback.isLoopEnabled()) {
+  if (store.getState().loopEnabled) {
     const range = getLoopRange();
     // Resume from current position if it's inside the loop; else start at loopStart.
     startBeat = (pos > range.start && pos < range.end) ? pos : range.start;
@@ -1070,17 +1048,14 @@ btnRecord.addEventListener('click', (e) => {
   // Shift+click mirrors Shift+R — one obvious place for both record styles.
   if (e.shiftKey) toggleRecordNextPass();
   else composeToggleArmed();
-  updateRecordButtonVisuals();
 });
 
 btnJam.addEventListener('click', () => {
   jamToggle();
-  updateRecordButtonVisuals();
 });
 
 btnKeep.addEventListener('click', () => {
   keepLastPhrase();
-  updateRecordButtonVisuals();
 });
 
 bpmInput.addEventListener('change', () => {
@@ -1133,17 +1108,8 @@ tuningInput.addEventListener('change', () => {
   tuningInput.blur();
 });
 
-// Apply the composition's tuning whenever it changes (load, undo/redo, setter).
-// The check skips redundant work when nothing tuning-related changed.
-let lastAppliedTuningCents: number | null = null;
-store.subscribe(() => {
-  const cents = store.getComposition().tuningOffsetCents;
-  if (cents === lastAppliedTuningCents) return;
-  lastAppliedTuningCents = cents;
-  syncTuningToAudio();
-});
-// Initial sync on app boot.
-syncTuningToAudio();
+// Apply the composition's tuning now and whenever it changes (load, undo/redo, setter).
+watch(() => store.getComposition().tuningOffsetCents, () => syncTuningToAudio());
 
 // ── Time signature dropdown ────────────────────────────────────
 const timeSigSelect = document.getElementById('input-time-sig') as HTMLSelectElement;
@@ -1327,13 +1293,7 @@ async function promptForMidiArm() {
 // behavior. While armed: suppress (hint is irrelevant). On disarm: re-enable
 // so the next time the user falls into the no-armed-track trap, the hint
 // fires again.
-let lastMidiArmedState = store.getState().midiArmedTrackId !== null;
-store.subscribe(() => {
-  const armedNow = store.getState().midiArmedTrackId !== null;
-  if (armedNow === lastMidiArmedState) return;
-  midiArmHintShown = armedNow;
-  lastMidiArmedState = armedNow;
-});
+watch(() => store.getState().midiArmedTrackId !== null, armed => { midiArmHintShown = armed; });
 
 // Populate the list lazily on first focus — requesting MIDI access earlier
 // would trigger a permission prompt before the user showed intent.
@@ -1350,11 +1310,8 @@ if (!midiInput.isSupported()) {
 
 // ── Snap toggle (top bar icon button) ──────────────────────────
 const snapToggleBtn = document.getElementById('snap-toggle') as HTMLButtonElement;
-setIconTogglePressed(snapToggleBtn, store.getState().snapEnabled);
 snapToggleBtn.addEventListener('click', () => {
   store.setSnap(!store.getState().snapEnabled);
-  setIconTogglePressed(snapToggleBtn, store.getState().snapEnabled);
-  syncSnapPresetUi();
   snapToggleBtn.blur();
 });
 
@@ -1373,8 +1330,9 @@ function formatDamping(d: number): string {
   return Number.isInteger(d) ? String(d) : d.toFixed(1);
 }
 
-/** Push the current snap-section AppState values back into the DOM controls.
- *  Called on initial load and after a preset is applied. */
+/** Push the current snap values into the DOM controls. Runs from the snap
+ *  watch below — on load, undo/redo, file open, presets, hotkeys and the
+ *  controls themselves (re-setting a dragged slider's own value is harmless). */
 function syncSnapSectionDom(): void {
   const st = store.getState();
   setIconTogglePressed(snapToggleBtn, st.snapEnabled);
@@ -1386,30 +1344,19 @@ function syncSnapSectionDom(): void {
   magneticDampingSlider.value = String(st.magneticDamping);
   magneticDampingValue.textContent = formatDamping(st.magneticDamping);
 }
-syncSnapSectionDom();
 
 magneticToggle.addEventListener('change', () => {
   store.setMagneticEnabled(magneticToggle.checked);
-  syncSnapPresetUi();
   magneticToggle.blur();
 });
 magneticStrengthSlider.addEventListener('input', () => {
-  const s = Number(magneticStrengthSlider.value);
-  store.setMagneticStrength(s);
-  magneticStrengthValue.textContent = s.toFixed(2);
-  syncSnapPresetUi();
+  store.setMagneticStrength(Number(magneticStrengthSlider.value));
 });
 magneticSpringSlider.addEventListener('input', () => {
-  const k = Number(magneticSpringSlider.value);
-  store.setMagneticSpringK(k);
-  magneticSpringValue.textContent = String(Math.round(k));
-  syncSnapPresetUi();
+  store.setMagneticSpringK(Number(magneticSpringSlider.value));
 });
 magneticDampingSlider.addEventListener('input', () => {
-  const d = Number(magneticDampingSlider.value);
-  store.setMagneticDamping(d);
-  magneticDampingValue.textContent = formatDamping(d);
-  syncSnapPresetUi();
+  store.setMagneticDamping(Number(magneticDampingSlider.value));
 });
 
 // ── Snap presets (BACKLOG 8.6) ─────────────────────────────────
@@ -1488,7 +1435,18 @@ function syncSnapPresetUi(): void {
   // Delete is only valid for an active USER preset.
   snapPresetDeleteBtn.disabled = !match || !userSnapPresets.some(u => u.id === match.id);
 }
-syncSnapPresetUi();
+
+// The whole snap drawer follows composition.snap.
+watch(
+  () => {
+    const st = store.getState();
+    return `${st.snapEnabled}|${st.magneticEnabled}|${st.magneticStrength}|${st.magneticSpringK}|${st.magneticDamping}`;
+  },
+  () => {
+    syncSnapSectionDom();
+    syncSnapPresetUi();
+  },
+);
 
 snapPresetSelect.addEventListener('change', () => {
   const id = snapPresetSelect.value;
@@ -1510,8 +1468,9 @@ snapPresetSelect.addEventListener('change', () => {
   if (s.magneticStrength !== undefined) store.setMagneticStrength(s.magneticStrength);
   if (s.magneticSpringK !== undefined) store.setMagneticSpringK(s.magneticSpringK);
   if (s.magneticDamping !== undefined) store.setMagneticDamping(s.magneticDamping);
+  // The setters above already re-synced the drawer; sync again now that the
+  // picked preset is active, so it wins over any other preset that also matches.
   activeSnapPresetId = preset.id;
-  syncSnapSectionDom();
   syncSnapPresetUi();
   snapPresetSelect.blur();
 });
@@ -1547,8 +1506,7 @@ const guidesVisibleToggle = document.getElementById('guides-visible-toggle') as 
 const guidesLockedToggle = document.getElementById('guides-locked-toggle') as HTMLInputElement;
 const addGuideXBtn = document.getElementById('add-guide-x-btn') as HTMLButtonElement;
 const addGuideYBtn = document.getElementById('add-guide-y-btn') as HTMLButtonElement;
-guidesVisibleToggle.checked = store.getState().guidesVisible;
-guidesLockedToggle.checked = store.getState().guidesLocked;
+watch(() => store.getState().guidesVisible, v => { guidesVisibleToggle.checked = v; });
 
 /** Disable the + X / + Y buttons when guides are locked so the user can't add a
  *  new guide and leave it stuck-selected (the lock prevents deselect-on-canvas). */
@@ -1562,7 +1520,10 @@ function syncGuideAddButtonsEnabled(): void {
   addGuideXBtn.title = tip ?? 'Add a vertical (beat) guide at the centre of the viewport';
   addGuideYBtn.title = tip ?? 'Add a horizontal (pitch) guide at the centre of the viewport';
 }
-syncGuideAddButtonsEnabled();
+watch(() => store.getState().guidesLocked, locked => {
+  guidesLockedToggle.checked = locked;
+  syncGuideAddButtonsEnabled();
+});
 
 guidesVisibleToggle.addEventListener('change', () => {
   store.setGuidesVisible(guidesVisibleToggle.checked);
@@ -1571,7 +1532,6 @@ guidesVisibleToggle.addEventListener('change', () => {
 });
 guidesLockedToggle.addEventListener('change', () => {
   store.setGuidesLocked(guidesLockedToggle.checked);
-  syncGuideAddButtonsEnabled();
   bgDirty = true;
   guidesLockedToggle.blur();
 });
@@ -1606,8 +1566,14 @@ addGuideYBtn.addEventListener('click', () => { addGuideAtViewportCenter('y'); ad
 // ── Metronome controls ─────────────────────────────────────────
 const metronomeToggle = document.getElementById('metronome-toggle') as HTMLInputElement;
 const metronomeVolumeSlider = document.getElementById('metronome-volume') as HTMLInputElement;
-metronomeToggle.checked = store.getState().metronomeEnabled;
-metronomeVolumeSlider.value = String(Math.round(store.getState().metronomeVolume * 100));
+watch(() => store.getState().metronomeEnabled, on => {
+  metronomeToggle.checked = on;
+  metronome.setEnabled(on);
+});
+watch(() => store.getState().metronomeVolume, v => {
+  metronomeVolumeSlider.value = String(Math.round(v * 100));
+  metronome.setVolume(v);
+});
 metronomeToggle.addEventListener('change', () => {
   store.setMetronomeEnabled(metronomeToggle.checked);
   metronomeToggle.blur();
@@ -1616,24 +1582,18 @@ metronomeVolumeSlider.addEventListener('input', () => {
   store.setMetronomeVolume(Number(metronomeVolumeSlider.value) / 100);
 });
 
-/** The one place loop state changes. Three controls reach it — the top-bar icon
- *  button, the Transport drawer checkbox, and the L hotkey — so they can't drift
- *  apart. Also the path Record-next-Pass uses when it forces Loop on. */
+/** Loop on/off. Three controls reach it — the top-bar icon button, the
+ *  Transport drawer checkbox, and the L hotkey — plus Record-next-Pass forcing
+ *  it on. State owns the flag; the engine, both controls and the play range
+ *  follow it (the watch below and the play-range watch at the end of the file). */
 function applyLoopEnabled(enabled: boolean): void {
+  store.setLoopEnabled(enabled);
+}
+watch(() => store.getState().loopEnabled, enabled => {
   playback.setLoop(enabled);
   loopToggle.checked = enabled;
   setIconTogglePressed(loopToggleBtn, enabled);
-  // If toggling mid-play, update the play range to the markers right away.
-  if (playback.isPlaying()) {
-    const comp = store.getComposition();
-    if (enabled) {
-      playback.setPlayRange(comp.loopStartBeats, comp.loopEndBeats);
-    } else {
-      playback.setPlayRange(0, getCompositionLength(comp));
-    }
-  }
-  bgDirty = true; // loop markers appear / disappear in the ruler
-}
+});
 
 loopToggle.addEventListener('change', () => {
   applyLoopEnabled(loopToggle.checked);
@@ -1641,7 +1601,7 @@ loopToggle.addEventListener('change', () => {
 });
 
 loopToggleBtn.addEventListener('click', () => {
-  applyLoopEnabled(!playback.isLoopEnabled());
+  applyLoopEnabled(!store.getState().loopEnabled);
   loopToggleBtn.blur();
 });
 
@@ -2018,21 +1978,18 @@ window.addEventListener('keydown', (e) => {
     // Shift+R = deliberate one-pass record (10.5); plain R = open-ended record.
     if (e.shiftKey) toggleRecordNextPass();
     else composeToggleArmed();
-    updateRecordButtonVisuals();
     return;
   }
   if (e.key.toLowerCase() === 'j' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     if (e.repeat) return;
     jamToggle();
-    updateRecordButtonVisuals();
     return;
   }
   if (e.key.toLowerCase() === 'k' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     if (e.repeat) return;
     keepLastPhrase();
-    updateRecordButtonVisuals();
     return;
   }
   if (e.key.toLowerCase() === 'u' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -2235,14 +2192,14 @@ window.addEventListener('keydown', (e) => {
     }
     case 'l':
     case 'L': {
-      applyLoopEnabled(!playback.isLoopEnabled());
+      applyLoopEnabled(!store.getState().loopEnabled);
       break;
     }
     case '?':
       window.open('/help.html', '_blank');
       break;
     case '!':
-      // Toggle the Perf HUD. The store.subscribe binding above mirrors the
+      // Toggle the Perf HUD. The perfHudVisible watch mirrors the
       // change back into the Transport-panel checkbox.
       store.setPerfHudVisible(!store.getState().perfHudVisible);
       break;
@@ -2393,14 +2350,17 @@ window.addEventListener('keyup', (e) => {
 });
 
 // ── Track panel ─────────────────────────────────────────────────
+const trackListEl = document.getElementById('track-list')!;
+
+/** Render the track rows. Runs from an effect on every relevant store change;
+ *  the DOM is only touched when what the rows show actually changes, so drags
+ *  and slider moves elsewhere no longer rebuild the list (BACKLOG 15.1). */
 function renderTrackList() {
-  const trackList = document.getElementById('track-list')!;
   const state = store.getState();
   const comp = state.composition;
-
-  trackList.innerHTML = '';
-  for (const track of comp.tracks) {
+  const rows = comp.tracks.map(track => {
     const tone = comp.toneLibrary.find(t => t.id === track.toneId);
+    const color = tone?.color ?? '#888';
     const isSelected = track.id === state.selectedTrackId;
     const isMidiArmed = state.midiArmedTrackId === track.id;
     const isMidiRecording = isMidiArmed && state.performance.planchettes.some(
@@ -2410,95 +2370,105 @@ function renderTrackList() {
     const midiArmTitle = isMidiArmed
       ? 'MIDI input armed — click to disarm'
       : 'Arm this track for MIDI input recording';
-    const div = document.createElement('div');
-    div.className = `track-item${isSelected ? ' selected' : ''}${track.muted ? ' muted' : ''}`;
-    div.innerHTML = `
-      <div class="track-color" style="background:${tone?.color ?? '#888'}"></div>
-      <div class="track-info">
-        <span class="track-name">${track.name}</span>
-        <span class="track-tone tone-name-clickable" style="color:${tone?.color ?? '#888'}" title="Click to change tone">${tone?.name ?? '?'}</span>
-      </div>
-      <div class="track-controls">
-        <button class="track-mute ${track.muted ? 'active' : ''}" title="Mute">M</button>
-        <button class="track-solo ${track.solo ? 'active' : ''}" title="Solo">S</button>
-        <button class="track-midi-arm ${midiArmClass}" title="${midiArmTitle}">I</button>
-        <button class="track-edit-tone" title="Edit tone">T</button>
-        <button class="track-delete" title="Delete track (undoable)">X</button>
-      </div>
-    `;
+    return `
+      <div class="track-item${isSelected ? ' selected' : ''}${track.muted ? ' muted' : ''}" data-track-id="${escapeHtml(track.id)}">
+        <div class="track-color" style="background:${escapeHtml(color)}"></div>
+        <div class="track-info">
+          <span class="track-name">${escapeHtml(track.name)}</span>
+          <span class="track-tone tone-name-clickable" style="color:${escapeHtml(color)}" title="Click to change tone">${escapeHtml(tone?.name ?? '?')}</span>
+        </div>
+        <div class="track-controls">
+          <button class="track-mute ${track.muted ? 'active' : ''}" title="Mute">M</button>
+          <button class="track-solo ${track.solo ? 'active' : ''}" title="Solo">S</button>
+          <button class="track-midi-arm ${midiArmClass}" title="${midiArmTitle}">I</button>
+          <button class="track-edit-tone" title="Edit tone">T</button>
+          <button class="track-delete" title="Delete track (undoable)">X</button>
+        </div>
+      </div>`;
+  });
+  setHtmlIfChanged(trackListEl, rows.join(''));
+}
 
-    div.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target.classList.contains('track-mute')) {
-        history.snapshot();
-        store.mutate(() => { track.muted = !track.muted; });
-        return;
-      }
-      if (target.classList.contains('track-solo')) {
-        history.snapshot();
-        store.mutate(() => { track.solo = !track.solo; });
-        return;
-      }
-      if (target.classList.contains('track-delete')) {
-        // In-flight MIDI voices on this track would otherwise keep capturing
-        // into a track that no longer exists.
-        if (store.getState().midiArmedTrackId === track.id) finalizeAllInFlightMidiVoices();
-        history.snapshot();
-        // If the current layer lived here, clear it so the next pass opens a new one.
-        if (currentLayerTrackId === track.id) currentLayerTrackId = null;
-        store.removeTrack(track.id);
-        showToast(`Deleted ${track.name} — Ctrl+Z to restore`, 2500);
-        bgDirty = true;
-        return;
-      }
-      if (target.classList.contains('track-midi-arm')) {
-        const current = store.getState().midiArmedTrackId;
-        // If switching arm or disarming while notes are still held, finalize
-        // those in-flight voices first so we don't lose recorded samples (the
-        // arm change would orphan the planchettes otherwise).
-        if (current !== null) finalizeAllInFlightMidiVoices();
-        // Toggle: arm this track if not already armed; disarm if it was.
-        store.setMidiArmedTrackId(current === track.id ? null : track.id);
-        return;
-      }
-      if (target.classList.contains('track-edit-tone')) {
-        const currentTone = comp.toneLibrary.find(t => t.id === track.toneId);
-        if (currentTone) {
-          openToneBuilder(currentTone).then(result => {
-            if (result.action === 'save') {
-              history.snapshot();
-              store.mutate(c => {
-                const idx = c.toneLibrary.findIndex(t => t.id === result.tone.id);
-                if (idx >= 0) c.toneLibrary[idx] = result.tone;
-              });
-            }
+// One delegated handler for every row. It resolves the track from the live
+// composition at click time — rows can outlive an undo, which swaps in new
+// track objects without changing what the rows show.
+trackListEl.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+  const row = target.closest<HTMLElement>('.track-item');
+  if (!row) return;
+  const comp = store.getComposition();
+  const track = comp.tracks.find(t => t.id === row.dataset.trackId);
+  if (!track) return;
+
+  if (target.classList.contains('track-mute')) {
+    history.snapshot();
+    store.mutate(() => { track.muted = !track.muted; });
+    return;
+  }
+  if (target.classList.contains('track-solo')) {
+    history.snapshot();
+    store.mutate(() => { track.solo = !track.solo; });
+    return;
+  }
+  if (target.classList.contains('track-delete')) {
+    // In-flight MIDI voices on this track would otherwise keep capturing
+    // into a track that no longer exists.
+    if (store.getState().midiArmedTrackId === track.id) finalizeAllInFlightMidiVoices();
+    history.snapshot();
+    // If the current layer lived here, clear it so the next pass opens a new one.
+    if (currentLayerTrackId === track.id) currentLayerTrackId = null;
+    store.removeTrack(track.id);
+    showToast(`Deleted ${track.name} — Ctrl+Z to restore`, 2500);
+    bgDirty = true;
+    return;
+  }
+  if (target.classList.contains('track-midi-arm')) {
+    const current = store.getState().midiArmedTrackId;
+    // If switching arm or disarming while notes are still held, finalize
+    // those in-flight voices first so we don't lose recorded samples (the
+    // arm change would orphan the planchettes otherwise).
+    if (current !== null) finalizeAllInFlightMidiVoices();
+    // Toggle: arm this track if not already armed; disarm if it was.
+    store.setMidiArmedTrackId(current === track.id ? null : track.id);
+    return;
+  }
+  if (target.classList.contains('track-edit-tone')) {
+    const currentTone = comp.toneLibrary.find(t => t.id === track.toneId);
+    if (currentTone) {
+      openToneBuilder(currentTone).then(result => {
+        if (result.action === 'save') {
+          history.snapshot();
+          store.mutate(c => {
+            const idx = c.toneLibrary.findIndex(t => t.id === result.tone.id);
+            if (idx >= 0) c.toneLibrary[idx] = result.tone;
           });
         }
-        return;
-      }
-      if (target.classList.contains('tone-name-clickable')) {
-        openTonePicker(comp.toneLibrary, track.toneId, target).then(picked => {
-          if (picked) {
-            history.snapshot();
-            store.mutate(() => { track.toneId = picked.id; });
-          }
-        });
-        return;
-      }
-      store.setSelectedTrack(track.id);
-      // Select all curves in this track. The tool stays as it is — clicking a
-      // track used to force Select, which left Draw looking active but dead
-      // (GlissNotes). The transform box belongs to Select, so it's built only
-      // there; switching to Select later builds it from the selection.
-      if (track.curves.length > 0) {
-        store.setSelectedCurves(track.curves.map(c => c.id));
-        if (store.getState().activeTool === 'select') rebuildTransformBox(interaction, track);
-      }
-    });
-
-    trackList.appendChild(div);
+      });
+    }
+    return;
   }
-}
+  if (target.classList.contains('tone-name-clickable')) {
+    const trackId = track.id;
+    openTonePicker(comp.toneLibrary, track.toneId, target).then(picked => {
+      if (!picked) return;
+      history.snapshot();
+      store.mutate(c => {
+        const live = c.tracks.find(t => t.id === trackId);
+        if (live) live.toneId = picked.id;
+      });
+    });
+    return;
+  }
+  store.setSelectedTrack(track.id);
+  // Select all curves in this track. The tool stays as it is — clicking a
+  // track used to force Select, which left Draw looking active but dead
+  // (GlissNotes). The transform box belongs to Select, so it's built only
+  // there; switching to Select later builds it from the selection.
+  if (track.curves.length > 0) {
+    store.setSelectedCurves(track.curves.map(c => c.id));
+    if (store.getState().activeTool === 'select') rebuildTransformBox(interaction, track);
+  }
+});
 
 document.getElementById('add-track-btn')!.addEventListener('click', async () => {
   const comp = store.getComposition();
@@ -3314,7 +3284,7 @@ function tickComposePerform() {
   // suppressing condition lifts, instead of an immediate auto-stop.
   if (anyArmed && g.phase === 'playing' && playback.isPlaying()) {
     const rightmost = getCompositionLength(st.composition);
-    if (playback.isLoopEnabled() || playbackBeat < rightmost) {
+    if (store.getState().loopEnabled || playbackBeat < rightmost) {
       composeEngine.markActivity(performance.now());
     }
   }
@@ -3385,7 +3355,7 @@ function startComposePerformPlayback() {
   // With Loop on: respect the composition's loop range so the performance wraps and
   // the engine's loop-wrap detection fires (planchette flash + finalize current curve).
   // With Loop off: extend end far past content so the canvas keeps scrolling during recording.
-  if (playback.isLoopEnabled()) {
+  if (store.getState().loopEnabled) {
     const lStart = comp.loopStartBeats;
     const lEnd = comp.loopEndBeats;
     if (startBeat < lStart || startBeat >= lEnd) startBeat = lStart;
@@ -3437,7 +3407,7 @@ function composeToggleArmed() {
     store.setPerformArmed(true);
     store.setPerformPhase('playing');
     composeEngine.startSession(performance.now());
-    if (!playback.isLoopEnabled()) {
+    if (!store.getState().loopEnabled) {
       playback.setPlayRange(0, OPEN_END_BEAT);
     }
     return;
@@ -3477,7 +3447,7 @@ function toggleRecordNextPass() {
 
   // A "pass" is defined by the loop, so turn Loop on rather than refusing —
   // but say so, since it changes the transport out from under the user.
-  if (!playback.isLoopEnabled()) {
+  if (!store.getState().loopEnabled) {
     applyLoopEnabled(true);
     showToast('Record next Pass: Loop On', 2000);
   }
@@ -3531,7 +3501,7 @@ function jamToggle() {
   store.setJamActive(true);
   if (playback.isPlaying()) {
     // Convert running playback into a jam: open the end (Loop off) and keep rolling.
-    if (!playback.isLoopEnabled()) playback.setPlayRange(0, OPEN_END_BEAT);
+    if (!store.getState().loopEnabled) playback.setPlayRange(0, OPEN_END_BEAT);
   } else {
     const comp = store.getComposition();
     const r = canvasContainer.getBoundingClientRect();
@@ -3540,7 +3510,7 @@ function jamToggle() {
     let startBeat = Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
     let endBeat = OPEN_END_BEAT;
     let loopStart = 0;
-    if (playback.isLoopEnabled()) {
+    if (store.getState().loopEnabled) {
       const lStart = comp.loopStartBeats;
       const lEnd = comp.loopEndBeats;
       if (startBeat < lStart || startBeat >= lEnd) startBeat = lStart;
@@ -4036,7 +4006,7 @@ function render() {
   }
 
   // Loop markers (behind the playhead so it stays on top)
-  if (playback.isLoopEnabled()) {
+  if (store.getState().loopEnabled) {
     renderLoopMarkers(fgCtx, viewport, comp.loopStartBeats, comp.loopEndBeats, rect.height);
   }
 
@@ -4199,7 +4169,8 @@ function render() {
 
 /**
  * Sync derived values from the composition: canvas extent (viewport pan bound)
- * and the M:SS length display next to the title. Called on every store change.
+ * and the M:SS length display next to the title. Runs from an effect whenever
+ * the composition changes.
  */
 function syncCompositionDerived() {
   const comp = store.getComposition();
@@ -4234,72 +4205,82 @@ if (import.meta.env.DEV) {
   };
 }
 
-// ── Store subscription ──────────────────────────────────────────
-store.subscribe(() => {
-  bgDirty = true;
-  const comp = store.getComposition();
-  // Undo / redo / file open replace the composition object outright, so keep the
-  // scheduler pointed at the live one — otherwise every edit after an undo taken
-  // mid-playback would be inaudible until the next play().
-  if (playback.isPlaying()) playback.setComposition(comp);
-  updateBpm(comp.bpm);
-  const tsValue = `${comp.beatsPerMeasure}/${comp.timeSignatureDenominator}`;
-  if (timeSigSelect.value !== tsValue) timeSigSelect.value = tsValue;
-  const appState = store.getState();
-  if (metronomeToggle.checked !== appState.metronomeEnabled) {
-    metronomeToggle.checked = appState.metronomeEnabled;
-  }
-  setIconTogglePressed(snapToggleBtn, appState.snapEnabled);
-  setIconTogglePressed(loopToggleBtn, playback.isLoopEnabled());
-  if (magneticToggle.checked !== appState.magneticEnabled) {
-    magneticToggle.checked = appState.magneticEnabled;
-  }
-  if (Number(magneticStrengthSlider.value) !== appState.magneticStrength) {
-    magneticStrengthSlider.value = String(appState.magneticStrength);
-    magneticStrengthValue.textContent = appState.magneticStrength.toFixed(2);
-  }
-  if (Number(magneticSpringSlider.value) !== appState.magneticSpringK) {
-    magneticSpringSlider.value = String(appState.magneticSpringK);
-    magneticSpringValue.textContent = String(Math.round(appState.magneticSpringK));
-  }
-  if (Number(magneticDampingSlider.value) !== appState.magneticDamping) {
-    magneticDampingSlider.value = String(appState.magneticDamping);
-    magneticDampingValue.textContent = formatDamping(appState.magneticDamping);
-  }
-  // The tool can change from several places (hotkeys, track click, Ctrl-hold
-  // in interaction.ts), so the panel follows the store rather than each caller
-  // remembering to update it (BACKLOG 14.2).
-  toolPanel.updateTool(appState.activeTool);
-  metronome.setEnabled(appState.metronomeEnabled);
-  metronome.setVolume(appState.metronomeVolume);
-  syncCompositionDerived();
-  renderTrackList();
-  renderPropertyPanel(document.getElementById('prop-content')!);
-  renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
-  updateRecordButtonVisuals();
-  // Keep Play/Pause buttons in sync with playback state — covers transitions that
-  // don't flow through startPlayback() (e.g. record countdown → playing).
-  updatePlayState(store.getState().playback.state === 'playing');
+// ── Store → UI bindings (BACKLOG 15.1) ──────────────────────────
+// Each binding re-runs only when the state it reads changes. This replaces a
+// single subscriber that re-synced every control and rebuilt the track list and
+// both property panels on every store change, including every drag mousemove.
 
-  // Keep the active loop/auto-stop range in sync with the composition's loop markers
-  // (so dragging a marker mid-play takes effect on the next wrap).
-  // Skip entirely while recording: the recording play-range is an open-ended
-  // endBeat set by startComposePerformPlayback() so the canvas can scroll past
-  // composition end; shrinking it here would auto-stop mid-record. An un-looped
-  // jam is open-ended the same way — clamping it to the composition length
-  // stopped the transport at the end of existing content (BACKLOG 14.7).
-  const perf = store.getState().performance;
-  if (playback.isPlaying() && !perf.recordArmed) {
-    if (playback.isLoopEnabled()) {
-      playback.setPlayRange(comp.loopStartBeats, comp.loopEndBeats);
-    } else if (!perf.jamActive) {
-      playback.setPlayRange(0, getCompositionLength(comp));
-    }
-  }
+// Background layer (staff + rulers) depends on tempo, meter and key only;
+// viewport and tuning changes mark it dirty where they happen.
+watch(
+  () => {
+    const st = store.getState();
+    const c = st.composition;
+    return `${c.bpm}|${c.beatsPerMeasure}/${c.timeSignatureDenominator}|${st.scaleRoot}|${st.scaleId}|${st.hidePitchLines}`;
+  },
+  () => { bgDirty = true; },
+);
+
+// Undo / redo / file open replace the composition object outright, so keep the
+// scheduler pointed at the live one — otherwise every edit after an undo taken
+// mid-playback would be inaudible until the next play().
+watch(() => store.getComposition(), comp => {
+  if (playback.isPlaying()) playback.setComposition(comp);
 });
 
+watch(() => store.getComposition().bpm, updateBpm);
+watch(
+  () => `${store.getComposition().beatsPerMeasure}/${store.getComposition().timeSignatureDenominator}`,
+  ts => { timeSigSelect.value = ts; },
+);
+
+// The tool can change from several places (hotkeys, track click, Ctrl-hold in
+// interaction.ts), so the panel follows the store (BACKLOG 14.2).
+watch(() => store.getState().activeTool, tool => toolPanel.updateTool(tool));
+
+// These read exactly what they show and skip DOM work when it hasn't changed.
+const propContentEl = document.getElementById('prop-content')!;
+const toolPropContentEl = document.getElementById('tool-prop-content')!;
+effect(() => syncCompositionDerived());
+effect(() => renderTrackList());
+effect(() => renderPropertyPanel(propContentEl));
+effect(() => renderToolPropertyPanel(toolPropContentEl));
+effect(() => updateRecordButtonVisuals());
+
+// Keep Play/Pause buttons in sync with playback state — covers transitions that
+// don't flow through startPlayback() (e.g. record countdown → playing).
+watch(() => store.getState().playback.state === 'playing', updatePlayState);
+
+// Keep the active play range in sync with loop state and the loop markers, so
+// toggling Loop or dragging a marker mid-play takes effect on the next wrap.
+//  - Recording owns its range (open-ended, set by startComposePerformPlayback)
+//    and is left alone; shrinking it would auto-stop mid-record.
+//  - An un-looped jam is open-ended too (BACKLOG 14.7); turning Loop off
+//    mid-jam reopens it rather than clamping to the end of existing content.
+watch(
+  () => {
+    const st = store.getState();
+    if (st.playback.state !== 'playing') return 'idle';
+    const c = st.composition;
+    const perf = st.performance;
+    return [st.loopEnabled, c.loopStartBeats, c.loopEndBeats, getCompositionLength(c), perf.recordArmed, perf.jamActive].join('|');
+  },
+  () => {
+    const st = store.getState();
+    const perf = st.performance;
+    if (!playback.isPlaying() || perf.recordArmed) return;
+    const comp = st.composition;
+    if (st.loopEnabled) {
+      playback.setPlayRange(comp.loopStartBeats, comp.loopEndBeats);
+    } else if (perf.jamActive) {
+      playback.setPlayRange(0, OPEN_END_BEAT);
+    } else {
+      playback.setPlayRange(0, getCompositionLength(comp));
+    }
+  },
+);
+
 // ── Initialization ──────────────────────────────────────────────
-syncCompositionDerived();
 window.addEventListener('resize', () => { resizeCanvases(); updateZoom(); });
 // Keep the canvases correctly sized whenever their containers change size for
 // ANY reason — window resize, the param-graph resize handle, drawer layout, or
@@ -4334,10 +4315,6 @@ resizeCanvases();
   bgDirty = true;
 }
 
-renderTrackList();
-renderPropertyPanel(document.getElementById('prop-content')!);
-renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
-updateRecordButtonVisuals();
 
 // ── Collapsible panel sections ──────────────────────────────────
 // Each .panel-header toggles the visibility of its sibling content
