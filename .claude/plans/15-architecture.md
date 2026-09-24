@@ -17,7 +17,7 @@ In-flight plan for BACKLOG Phase 15 (target in [DESIGN.md › Target architectur
 | C | 15.6, 15.5 | One snap-config builder; render loop made read-only; `fgDirty` + `Path2D` cache — DONE (branch `phase-15c-render-loop`) | Small, independent; unblocks 12.1 |
 | D | 15.3 | Command registry (keyboard / buttons / menus / help table) — DONE (branch `phase-15d-commands`) | Needs A and B to exist so commands have somewhere to dispatch |
 | E | 15.4 | Preact panels, one at a time, starting with those Phase 16 won't reshape — part 1 DONE (branch `phase-15e-preact-panels`: track list, property panels) | After A so components read signals directly |
-| F | 15.7 | AudioWorklet live voice | Independent; can move earlier if 14.3's interim glide proves insufficient |
+| F | 15.7 | AudioWorklet live voice — DONE (branch `phase-15f-worklet-voice`) | Independent; can move earlier if 14.3's interim glide proves insufficient |
 | — | 15.8 | Kernel tests | Accompany every step rather than a step of their own |
 
 ## Step A — signals-backed store (15.1) — DONE (branch `phase-15a-signals-store`)

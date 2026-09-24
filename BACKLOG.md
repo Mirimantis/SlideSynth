@@ -39,7 +39,7 @@ The [queued features](#queued-features-paused) resume after Phase 16. Several of
 - [x] **14.3 Live pitch is stepped** *(S, audio, PR #72)*
   - `ToneSynth.setFrequency` uses `setValueAtTime` at mouse/frame rate, so live glides and magnetic vibrato are a ~60 Hz staircase.
   - **Interim fix:** use `setTargetAtTime` or a short linear ramp to the next expected update. Verify by ear on a bright saw tone.
-  - The full fix is the AudioWorklet voice (15.7).
+  - The full fix is the AudioWorklet voice (15.7), now done; this glide remains as its fallback.
 - [x] **14.4 Space-hold preview snaps differently from drawing** *(XS, bug, PR #72)*
   - The free-planchette preview builds its own snap config without guides or projection targets.
   - **Fix now:** use `buildSnapConfig`. The structural fix is 15.6.
@@ -155,10 +155,21 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - Prerequisite for 12.1, which defines how gravity sources combine.
   - **Done (PR #76):** `snapConfigFor(state, { zoomX, atBeat, excludeGuideId })` in `src/state/snap-config.ts` (pure, tested), with `currentSnapConfig` over the live store. Every caller uses it.
   - *Behaviour change:* with Prism projection on, performing snaps to the echo pitches at the rail's beat, as drawing does. Before, perform ignored projection.
-- [ ] **15.7 AudioWorklet live voice** *(L)*
+- [x] **15.7 AudioWorklet live voice** *(L)*
   - The live perform voice becomes an AudioWorklet that receives pitch and gain targets and smooths them at audio rate.
   - Later, the magnetic integrator can move there too, decoupling physics from `requestAnimationFrame`.
   - Measure against the Perf HUD before and after.
+  - **Done (this PR):**
+    - The worklet is a *control-signal* source, not a synth. It smooths pitch (one-pole in log-frequency, so glides are even in cents) and gain (linear ramps) per sample. Its two outputs drive the tone's native oscillators' `frequency` and the output gain. So live notes keep exactly the timbre of playback and WAV export, and the automation timeline no longer fills with an event per mouse move.
+    - Files:
+      - `audio/live-voice-dsp.ts`: pure, tested.
+      - `live-voice.worklet.ts`: the processor, bundled via `?worker&url`.
+      - `live-voice.ts`: builds voices, with a fallback to the 14.3 main-thread glide if AudioWorklet is unavailable or not loaded yet on the very first note.
+      - `tone-synth.ts`: its graph is split out as `createToneGraph`, shared by both.
+    - Every live voice goes through it: perform, Space preview, Prism harmonies, MIDI notes. Scheduled playback and the scrub preview stay on AudioParam automation.
+    - The Perf HUD's Audio row shows the path: `live: audio thread` (or `main thread` / `loading`).
+    - *Measured:* main-thread cost per pitch update is a few µs either way (≈3.5 µs for a worklet message vs. ≈1–6 µs per oscillator for `setTargetAtTime`). Frame times are unchanged, so the win is in the audio, not the frame budget. Measured pitch on the real path matches the planchette exactly (C4 261.63 Hz, A4 440.00 Hz, a performed 622.2 Hz).
+    - *Not done here:* moving the magnetic integrator onto the audio thread. It still runs per frame on the main thread; the worklet is the place for it.
 - [ ] **15.8 Kernel test coverage** *(M)*
   - Unit tests for snap (`snap.ts`), magnetic physics (`snap-magnetic.ts`), `bezier-math`, `curve-sampler` and the scheduler's timing math, plus 15.2's state machine.
   - These become the cross-runtime conformance suite in Phase 17.

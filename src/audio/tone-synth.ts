@@ -30,7 +30,7 @@ export interface ToneSynth {
   stop(time?: number): void;
 }
 
-// Live counts for the Perf HUD. Incremented in createToneSynth, decremented
+// Live counts for the Perf HUD. Incremented in createToneGraph, decremented
 // on the first stop() call (subsequent stops are no-ops, so the counts can't
 // drift negative). The "oscillator" count is a sum of layer counts — it's a
 // rough proxy for audio-graph weight, not a guarantee that every osc is
@@ -59,12 +59,24 @@ function createDistortion(ctx: AudioContext, config: DistortionConfig): WaveShap
   return shaper;
 }
 
+/** A tone's audio graph: its oscillators (one per layer) and the output gain
+ *  they end in. Shared by the scheduled ToneSynth and the live voice
+ *  (live-voice.ts), so both make exactly the same sound. */
+export interface ToneGraph {
+  readonly oscillators: readonly OscillatorNode[];
+  /** Volume envelope; starts at 0. */
+  readonly outputGain: GainNode;
+  start(time?: number): void;
+  /** Stop the oscillators. Safe to call more than once. */
+  stop(time?: number): void;
+}
+
 /**
  * Build a synthesis graph from a ToneDefinition.
  * Multiple oscillator layers are mixed through individual gain nodes,
  * then optionally through a distortion waveshaper, into a final output gain.
  */
-export function createToneSynth(tone: ToneDefinition): ToneSynth {
+export function createToneGraph(tone: ToneDefinition): ToneGraph {
   const ctx = getAudioContext();
 
   // Output gain (volume envelope)
@@ -111,6 +123,32 @@ export function createToneSynth(tone: ToneDefinition): ToneSynth {
   let stopped = false;
 
   return {
+    oscillators,
+    outputGain,
+    start(time?: number) {
+      const t = time ?? ctx.currentTime;
+      for (const osc of oscillators) osc.start(t);
+    },
+    stop(time?: number) {
+      const t = time ?? ctx.currentTime;
+      for (const osc of oscillators) osc.stop(t);
+      if (!stopped) {
+        stopped = true;
+        activeSynths -= 1;
+        activeOscillators -= oscillators.length;
+      }
+    },
+  };
+}
+
+/** A tone voice driven by AudioParam automation: scheduled playback, WAV
+ *  export, and the scrub preview. */
+export function createToneSynth(tone: ToneDefinition): ToneSynth {
+  const ctx = getAudioContext();
+  const graph = createToneGraph(tone);
+  const { oscillators, outputGain } = graph;
+
+  return {
     setFrequency(hz: number, time?: number) {
       const t = time ?? ctx.currentTime;
       for (const osc of oscillators) {
@@ -143,23 +181,7 @@ export function createToneSynth(tone: ToneDefinition): ToneSynth {
       outputGain.connect(dest);
     },
 
-    start(time?: number) {
-      const t = time ?? ctx.currentTime;
-      for (const osc of oscillators) {
-        osc.start(t);
-      }
-    },
-
-    stop(time?: number) {
-      const t = time ?? ctx.currentTime;
-      for (const osc of oscillators) {
-        osc.stop(t);
-      }
-      if (!stopped) {
-        stopped = true;
-        activeSynths -= 1;
-        activeOscillators -= oscillators.length;
-      }
-    },
+    start: graph.start,
+    stop: graph.stop,
   };
 }
