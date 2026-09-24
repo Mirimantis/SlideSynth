@@ -1,4 +1,5 @@
-import type { BezierCurve, LanePoint, Lane, Vec2, BoundingBox, TransformHandle } from '../types';
+import type { BezierCurve, Composition, LanePoint, Lane, Vec2, BoundingBox, TransformHandle } from '../types';
+import type { PointSelection } from './point-selection';
 import { generateId } from './tone';
 import { subdivideCubic, distToPoint } from '../utils/bezier-math';
 import {
@@ -36,6 +37,25 @@ export function addPointToCurve(curve: BezierCurve, point: LanePoint): number {
  *  with < 2 points gets deleted" policy, so no minPoints guard here.) */
 export function removePointFromCurve(curve: BezierCurve, index: number): void {
   pitchPoints(curve).splice(index, 1);
+}
+
+/** Delete every selected point (BACKLOG 8.3 multi-point delete). A curve left
+ *  with fewer than 2 points is removed entirely — it has no segment to render
+ *  or play. Mutates the composition in place; the caller notifies the store. */
+export function deleteSelectedPoints(comp: Composition, sel: PointSelection): void {
+  for (const track of comp.tracks) {
+    for (let ci = track.curves.length - 1; ci >= 0; ci--) {
+      const curve = track.curves[ci]!;
+      const indices = sel.get(curve.id);
+      if (!indices) continue;
+      const points = pitchPoints(curve);
+      // Descending, so each splice leaves the indices still to come untouched.
+      for (const idx of [...indices].sort((a, b) => b - a)) {
+        if (idx >= 0 && idx < points.length) points.splice(idx, 1);
+      }
+      if (points.length < 2) track.curves.splice(ci, 1);
+    }
+  }
 }
 
 /** Move a pitch point's anchor, clamping X to maintain monotonic order. */
@@ -331,7 +351,7 @@ export function computeMultiCurveBBox(curves: BezierCurve[]): BoundingBox {
  *  to no valid points. */
 export function computePointSubsetBBox(
   curves: BezierCurve[],
-  pointIndicesPerCurve: Map<string, Set<number>>,
+  pointIndicesPerCurve: ReadonlyMap<string, ReadonlySet<number>>,
 ): BoundingBox {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   let any = false;
@@ -541,7 +561,7 @@ export function applyTransformToCurve(
   handle: TransformHandle,
   dragStart: Vec2,
   dragCurrent: Vec2,
-  pointIndices?: Set<number> | null,
+  pointIndices?: ReadonlySet<number> | null,
   originalNonPitchLanes?: Lane[] | null,
 ): void {
   const points = pitchPoints(curve);

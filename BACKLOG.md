@@ -78,7 +78,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - The snap drawer and preset dropdown didn't follow undo or file open.
     - Turning Loop off mid-Jam stopped the transport at the end of existing content.
   - *Deferred to 15.2:* replacing the stringly `curveId:idx` point keys with a structured selection type. That code lives in the interaction handlers 15.2 rewrites.
-- [ ] **15.2 Transport / perform state machine** *(L)*
+- [x] **15.2 Transport / perform state machine** *(L)*
   - One module with a single mode value and named transitions, replacing the ~8 flags spread across the store, the playback engine and `main.ts`: `phase`, `recordArmed`, `jamActive`, `passRecordState`, `lmbSounding`, `midiArmedTrackId`, loop-enabled and Lock Rail.
   - `composeToggleArmed`, `jamToggle`, `toggleRecordNextPass`, `composePerformStop` and the loop-wrap handler become transitions, with unit tests covering every transition.
   - The canvas gets **one input router** that asks the state machine whether a press performs or edits. This replaces today's capture-phase listener in `main.ts` racing the bubbling handlers in `interaction.ts`.
@@ -90,13 +90,23 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
       - `src/state/transport.ts` is a pure `transition(state, event)` over one `TransportState` (mode × clock × capture), with the whole transition table under test.
       - One `transport(event)` controller in `main.ts` runs each change's side effects. It replaces `composeToggleArmed`, `jamToggle`, `toggleRecordNextPass`, `startComposePerformPlayback`, `composePerformStop` and `startPlayback`.
       - Buttons, hotkeys, the count-in, loop wraps, the AFK timer and the engine running out all dispatch events.
-    - **Part 2 — still open:** the single input router, Pointer Events, and structured point-selection keys.
+    - **Part 2 — input router (done, this PR):**
+      - `src/canvas/input-router.ts` holds one set of Pointer Events listeners per canvas (staff and Parameters Graph). It decides once per press whether perform, pan or the edit tools own the gesture; `routePress` is pure and tested.
+      - Pointer capture keeps a press with its owner on or off the canvas, replacing the window-level mouse listeners.
+      - Selected points are a typed `PointSelection` (curve id → indices) instead of `"curveId:idx"` strings. Multi-point delete moved into `deleteSelectedPoints` in `model/curve.ts`.
+      - Both canvases get `touch-action: none` so pen and touch drags reach the router.
   - *Fixed in part 1:*
     - Plain Play never entered the perform phase, so a phrase held across the loop seam wasn't sealed there, and an armed MIDI track captured nothing during plain Play (help already said it would).
     - Pause or Space during a queued pass left the pass queued on a paused transport.
     - Opening a file or importing MIDI mid-session left Jam / Record flags set.
     - Scrubbing the ruler during looped playback resumed without the loop.
   - *Behaviour change:* Shift+R during an open-ended recording used to queue a pass that later disarmed the recording. It now does nothing, with a toast; R still takes over a queued pass.
+  - *Fixed in part 2 (both confirmed on the old code):*
+    - Alt-dragging a transform box both duplicated the curves and panned the view.
+    - Releasing a tool drag outside the canvas left it stuck; later hovering with no button held kept moving the point.
+  - *Behaviour changes in part 2:*
+    - Alt+left while performing pans, instead of panning and sounding a note at once.
+    - Alt+left on the Parameters Graph now pans too, like the staff.
 - [ ] **15.3 Break up `main.ts`** *(L)*
   - **Layout:** move the HTML template into components (15.4).
   - **Keyboard map:** turn it into a **command registry**, one table of named commands with their bindings. Buttons, menus, the context menu and the help.html shortcut table all read from it.
@@ -232,7 +242,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
   - Decode CC and channel pressure as a new `DynamicsSource`, with MIDI-learn so any controller maps.
   - Optional; never a prerequisite for anything.
 - [ ] **11.3 Pen pressure / tilt** *(M)*
-  - The Pointer Events migration itself moves to 15.2. What remains: pressure feeds the bus, tilt is captured for later use, plus pen-vs-mouse detection and a sensitivity curve.
+  - The canvases already run on Pointer Events (15.2). What remains: pressure feeds the bus, tilt is captured for later use, plus pen-vs-mouse detection and a sensitivity curve. `PointerEvent.pressure` / `tiltX` / `tiltY` reach the perform handlers in `main.ts` via the input router.
 - [ ] **11.4 Gamepad analog input** *(S–M)*
   - Poll the Gamepad API in the frame loop, with a "pick your control" mapping step.
 - [ ] **11.5 Cursor Y-velocity as a dynamics source** *(M)*

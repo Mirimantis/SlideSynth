@@ -8,6 +8,7 @@ import {
 } from '../model/lane';
 import { pitchPoints } from '../model/curve';
 import { distToPoint } from '../utils/bezier-math';
+import type { GestureHandlers } from './input-router';
 
 const HIT_RADIUS_PX = 8;
 
@@ -21,6 +22,9 @@ export interface ParamInteraction {
   selectedIndex(): number | null;
   /** Clear the selected param point (e.g. when the selected curve changes). */
   resetSelection(): void;
+  /** Pointer handlers for this canvas's input router (BACKLOG 15.2): a left
+   *  press on the graph and its drag. */
+  input: GestureHandlers;
 }
 
 /**
@@ -86,7 +90,7 @@ export function createParamInteraction(
     return null;
   }
 
-  canvas.addEventListener('mousedown', (e) => {
+  function onDown(e: PointerEvent): void {
     if (e.button !== 0) return;
     const curve = getSelectedCurve();
     if (!curve) return;
@@ -149,9 +153,9 @@ export function createParamInteraction(
     } else {
       selectedIndex = null;
     }
-  });
+  }
 
-  window.addEventListener('mousemove', (e) => {
+  function onMove(e: PointerEvent): void {
     if (drag === null || selectedIndex === null) return;
     const curve = getSelectedCurve();
     const lane = curve ? getLane(curve, 'volume') : undefined;
@@ -178,9 +182,7 @@ export function createParamInteraction(
         setLaneHandle(lane, selectedIndex!, which, { x: w.beat - pt.position.x, y: w.value - pt.position.y });
       });
     }
-  });
-
-  window.addEventListener('mouseup', () => { drag = null; });
+  }
 
   canvas.addEventListener('dblclick', (e) => {
     const curve = getSelectedCurve();
@@ -218,5 +220,10 @@ export function createParamInteraction(
   return {
     selectedIndex: () => selectedIndex,
     resetSelection: () => { selectedIndex = null; },
+    input: {
+      down: onDown,
+      move: onMove,
+      up: () => { drag = null; },
+    },
   };
 }

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { curveFromRecording, pitchPoints, applyTransformToCurve, deepCopyPoints, type RecordedSample } from './curve';
+import { curveFromRecording, pitchPoints, applyTransformToCurve, deepCopyPoints, deleteSelectedPoints, type RecordedSample } from './curve';
+import { createComposition } from './composition';
+import { createLane, createLanePoint } from './lane';
+import { pointSelectionOf } from './point-selection';
 import { getLane, deepCopyLanes } from './lane';
 
 describe('curveFromRecording — volume lane density', () => {
@@ -155,5 +158,32 @@ describe('applyTransformToCurve — non-pitch lanes stay time-locked', () => {
     const volumeLane = getLane(curve, 'volume')!;
     expect(volumeLane.points[0]!.position.x).toBe(0);
     expect(volumeLane.points[1]!.position.x).toBe(4);
+  });
+});
+
+describe('deleteSelectedPoints (BACKLOG 8.3)', () => {
+  function seed() {
+    const comp = createComposition();
+    const track = comp.tracks[0]!;
+    const mk = (id: string, n: number) => {
+      const lane = createLane('pitch');
+      lane.points = Array.from({ length: n }, (_, i) => createLanePoint(i, 6000 + i * 10));
+      return { id, lanes: [lane] };
+    };
+    track.curves = [mk('a', 4), mk('b', 3)];
+    return comp;
+  }
+
+  it('removes the selected points on each curve, highest index first', () => {
+    const comp = seed();
+    deleteSelectedPoints(comp, pointSelectionOf([{ curveId: 'a', index: 1 }, { curveId: 'a', index: 3 }]));
+    const a = comp.tracks[0]!.curves.find(c => c.id === 'a')!;
+    expect(pitchPoints(a).map(p => p.position.x)).toEqual([0, 2]);
+  });
+
+  it('removes a curve left with fewer than two points', () => {
+    const comp = seed();
+    deleteSelectedPoints(comp, pointSelectionOf([{ curveId: 'b', index: 0 }, { curveId: 'b', index: 2 }]));
+    expect(comp.tracks[0]!.curves.map(c => c.id)).toEqual(['a']);
   });
 });
