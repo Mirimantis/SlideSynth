@@ -4,9 +4,24 @@ import { centsToNoteName, CENTS_PER_SEMITONE } from '../constants';
 import { getMovableSelection } from '../model/curve-groups';
 import { pitchPoints } from '../model/curve';
 import { openTonePicker } from './tone-picker';
+import { escapeHtml, setHtmlIfChanged } from '../utils/dom-helpers';
+import type { Track } from '../types';
+
+const NEW_TRACK_VALUE = '__new__';
+
+function liveTrack(trackId: string): Track | undefined {
+  return store.getComposition().tracks.find(t => t.id === trackId);
+}
 
 /**
  * Render the property panel contents based on current selection.
+ *
+ * Runs from an effect on every relevant store change (BACKLOG 15.1). The DOM is
+ * replaced only when what the panel shows changes, and listeners look state up
+ * by id when they fire — never capture objects from this render, which can be
+ * skipped after an undo swaps those objects out. Live-edited values (the track
+ * volume slider) are kept out of the HTML and synced separately, so dragging a
+ * slider never rebuilds the panel under the pointer.
  */
 export function renderPropertyPanel(container: HTMLElement): void {
   const state = store.getState();
@@ -17,6 +32,7 @@ export function renderPropertyPanel(container: HTMLElement): void {
   if (state.selectedGuideId) {
     const guide = comp.guides.find(g => g.id === state.selectedGuideId);
     if (guide) {
+      const guideId = guide.id;
       const positionLabel = guide.orientation === 'x'
         ? `${guide.position.toFixed(3)} beats`
         : `${centsToNoteName(guide.position)} (${guide.position.toFixed(1)} ¢)`;
@@ -24,7 +40,7 @@ export function renderPropertyPanel(container: HTMLElement): void {
       // disabled and the Delete button hidden. Lock toggle in the Snap section
       // is the way out.
       const locked = state.guidesLocked;
-      container.innerHTML = `
+      const html = `
         <div class="prop-section">
           <div class="prop-label">Snap Guide${locked ? ' (locked)' : ''}</div>
           <div class="prop-value">${guide.orientation === 'x' ? 'Vertical (beat)' : 'Horizontal (pitch)'}</div>
@@ -35,18 +51,18 @@ export function renderPropertyPanel(container: HTMLElement): void {
         </div>
         <div class="prop-section">
           <div class="prop-label">Label</div>
-          <input type="text" id="prop-guide-label" value="${escapeAttr(guide.label)}" placeholder="(empty)" style="width: 100%; box-sizing: border-box;" ${locked ? 'disabled' : ''} />
+          <input type="text" id="prop-guide-label" value="${escapeHtml(guide.label)}" placeholder="(empty)" style="width: 100%; box-sizing: border-box;" ${locked ? 'disabled' : ''} />
         </div>
         ${locked ? '' : `
         <div class="prop-section">
           <button id="prop-guide-delete" class="snap-preset-btn" title="Delete this guide">Delete Guide</button>
         </div>`}
       `;
-      const labelInput = container.querySelector('#prop-guide-label') as HTMLInputElement;
-      if (!locked) {
+      if (setHtmlIfChanged(container, html) && !locked) {
+        const labelInput = container.querySelector('#prop-guide-label') as HTMLInputElement;
         labelInput.addEventListener('change', () => {
           history.snapshot();
-          store.updateGuide(guide.id, { label: labelInput.value });
+          store.updateGuide(guideId, { label: labelInput.value });
         });
         labelInput.addEventListener('keydown', (e) => {
           // Mirror comp-name pattern: Enter commits + blurs, Escape reverts + blurs.
@@ -55,13 +71,13 @@ export function renderPropertyPanel(container: HTMLElement): void {
             labelInput.blur();
           } else if (e.key === 'Escape') {
             e.preventDefault();
-            labelInput.value = guide.label;
+            labelInput.value = store.getComposition().guides.find(g => g.id === guideId)?.label ?? '';
             labelInput.blur();
           }
         });
         container.querySelector('#prop-guide-delete')?.addEventListener('click', () => {
           history.snapshot();
-          store.removeGuide(guide.id);
+          store.removeGuide(guideId);
         });
       }
       return;
@@ -70,9 +86,10 @@ export function renderPropertyPanel(container: HTMLElement): void {
 
   const track = comp.tracks.find(t => t.id === state.selectedTrackId);
   if (!track) {
-    container.innerHTML = '<p class="placeholder-text">No track selected</p>';
+    setHtmlIfChanged(container, '<p class="placeholder-text">No track selected</p>');
     return;
   }
+  const trackId = track.id;
 
   const singleCurveId = store.getSelectedCurveId();
   const curve = singleCurveId ? track.curves.find(c => c.id === singleCurveId) : null;
@@ -80,13 +97,13 @@ export function renderPropertyPanel(container: HTMLElement): void {
     // Show track info — and a CURVE subsection with a "Move to track" picker
     // when the selection forms a single movable unit (8.2).
     const tone = comp.toneLibrary.find(t => t.id === track.toneId);
+    const color = escapeHtml(tone?.color ?? '#888');
     const movable = getMovableSelection(state);
-    const NEW_TRACK_VALUE = '__new__';
     const otherTracks = movable ? comp.tracks.filter(t => t.id !== track.id) : [];
     const moveOptionsHtml = movable
       ? [
           `<option value="" disabled selected>-- Select --</option>`,
-          ...otherTracks.map(t => `<option value="${escapeAttr(t.id)}">${escapeAttr(t.name)}</option>`),
+          ...otherTracks.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`),
           ...(otherTracks.length > 0 ? ['<option disabled>──────────</option>'] : []),
           `<option value="${NEW_TRACK_VALUE}">+ New track</option>`,
         ].join('')
@@ -99,19 +116,20 @@ export function renderPropertyPanel(container: HTMLElement): void {
       </div>
       <div class="prop-section">
         <div class="prop-label">Move to track</div>
-        <select id="prop-move-track" style="width: 100%; box-sizing: border-box;">${moveOptionsHtml}</select>
+        <select id="prop-move-track" data-curve-ids="${escapeHtml(movable.curveIds.join(','))}" style="width: 100%; box-sizing: border-box;">${moveOptionsHtml}</select>
       </div>
       <div class="panel-header" style="margin-top:8px">Track</div>`
       : '';
-    container.innerHTML = `
+    // The volume slider's value and readout are filled in below, not here.
+    const html = `
       ${curveSectionHtml}
       <div class="prop-section">
         <div class="prop-label">Track</div>
-        <div class="prop-value">${track.name}</div>
+        <div class="prop-value">${escapeHtml(track.name)}</div>
       </div>
       <div class="prop-section">
         <div class="prop-label">Tone</div>
-        <div class="prop-value prop-tone-clickable" id="prop-tone-name" style="color:${tone?.color ?? '#888'}" title="Click to change tone">${tone?.name ?? '?'}</div>
+        <div class="prop-value prop-tone-clickable" id="prop-tone-name" style="color:${color}" title="Click to change tone">${escapeHtml(tone?.name ?? '?')}</div>
       </div>
       <div class="prop-section">
         <div class="prop-label">Curves</div>
@@ -119,18 +137,18 @@ export function renderPropertyPanel(container: HTMLElement): void {
       </div>
       <div class="prop-section">
         <div class="prop-label">Track Volume</div>
-        <input type="range" id="prop-track-vol" min="0" max="1" step="0.05" value="${track.volume}" />
-        <span class="prop-val-text">${track.volume.toFixed(2)}</span>
+        <input type="range" id="prop-track-vol" data-track-id="${escapeHtml(trackId)}" min="0" max="1" step="0.05" />
+        <span class="prop-val-text"></span>
       </div>
       <p class="placeholder-text" style="margin-top:12px">Select a point to edit its properties</p>
     `;
 
-    if (movable) {
-      const moveSelect = container.querySelector('#prop-move-track') as HTMLSelectElement;
-      moveSelect.addEventListener('change', () => {
+    if (setHtmlIfChanged(container, html)) {
+      const moveSelect = container.querySelector('#prop-move-track') as HTMLSelectElement | null;
+      moveSelect?.addEventListener('change', () => {
         const target = moveSelect.value;
         if (!target) return;
-        const ids = movable.curveIds;
+        const ids = (moveSelect.dataset.curveIds ?? '').split(',').filter(Boolean);
         history.snapshot();
         if (target === NEW_TRACK_VALUE) {
           store.moveCurvesToNewTrack(ids);
@@ -139,33 +157,47 @@ export function renderPropertyPanel(container: HTMLElement): void {
         }
         // Re-render will replace this panel; no need to reset the dropdown.
       });
+
+      const volSlider = container.querySelector('#prop-track-vol') as HTMLInputElement;
+      volSlider.addEventListener('mousedown', () => {
+        history.snapshot();
+      });
+      volSlider.addEventListener('input', () => {
+        const v = Number(volSlider.value);
+        store.mutate(() => {
+          const t = liveTrack(trackId);
+          if (t) t.volume = v;
+        });
+      });
+
+      container.querySelector('#prop-tone-name')?.addEventListener('click', (e) => {
+        const el = e.target as HTMLElement;
+        const t = liveTrack(trackId);
+        if (!t) return;
+        openTonePicker(store.getComposition().toneLibrary, t.toneId, el).then(picked => {
+          if (!picked) return;
+          history.snapshot();
+          store.mutate(() => {
+            const live = liveTrack(trackId);
+            if (live) live.toneId = picked.id;
+          });
+        });
+      });
     }
 
-    container.querySelector('#prop-track-vol')?.addEventListener('mousedown', () => {
-      history.snapshot();
-    });
-    container.querySelector('#prop-track-vol')?.addEventListener('input', (e) => {
-      const v = Number((e.target as HTMLInputElement).value);
-      store.mutate(() => { track.volume = v; });
-      const span = container.querySelector('.prop-val-text');
-      if (span) span.textContent = v.toFixed(2);
-    });
-
-    container.querySelector('#prop-tone-name')?.addEventListener('click', (e) => {
-      const el = e.target as HTMLElement;
-      openTonePicker(comp.toneLibrary, track.toneId, el).then(picked => {
-        if (picked) {
-          history.snapshot();
-          store.mutate(() => { track.toneId = picked.id; });
-        }
-      });
-    });
+    // Sync the live-edited value every run (undo, redo, other edits). Setting
+    // a slider being dragged to its own current value is harmless.
+    const volSlider = container.querySelector('#prop-track-vol') as HTMLInputElement | null;
+    const volText = container.querySelector('.prop-val-text');
+    if (volSlider && Number(volSlider.value) !== track.volume) volSlider.value = String(track.volume);
+    const volLabel = track.volume.toFixed(2);
+    if (volText && volText.textContent !== volLabel) volText.textContent = volLabel;
     return;
   }
 
   const point = pitchPoints(curve)[state.selectedPointIndex];
   if (!point) {
-    container.innerHTML = '<p class="placeholder-text">Invalid selection</p>';
+    setHtmlIfChanged(container, '<p class="placeholder-text">Invalid selection</p>');
     return;
   }
 
@@ -173,7 +205,7 @@ export function renderPropertyPanel(container: HTMLElement): void {
   const noteName = centsToNoteName(point.position.y);
   const cents = Math.round(point.position.y - nearestLine);
 
-  container.innerHTML = `
+  setHtmlIfChanged(container, `
     <div class="prop-section">
       <div class="prop-label">Point ${state.selectedPointIndex + 1} of ${pitchPoints(curve).length}</div>
     </div>
@@ -194,9 +226,5 @@ export function renderPropertyPanel(container: HTMLElement): void {
       <div class="prop-label">Handle Out</div>
       <div class="prop-value">${point.handleOut ? `(${point.handleOut.x.toFixed(2)}, ${point.handleOut.y.toFixed(2)})` : 'none'}</div>
     </div>
-  `;
-}
-
-function escapeAttr(s: string): string {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[c]!));
+  `);
 }

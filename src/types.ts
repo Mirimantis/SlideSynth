@@ -231,8 +231,11 @@ export interface AppState {
   performance: PerformanceState;
   viewport: ViewportState;
   playback: PlaybackInfo;
-  // Snap-section UI mirrors — canonical values live on Composition.snap (v2+).
-  // Setters write through to both the AppState mirror and the composition.
+  /** Loop playback on/off. Runtime state (not persisted); the playback engine
+   *  follows it (BACKLOG 15.1 — it used to own the flag itself). */
+  loopEnabled: boolean;
+  // Snap-section fields — read-only views of Composition.snap (BACKLOG 15.1:
+  // derived, no longer mirrored copies). Change them through the store setters.
   snapEnabled: boolean;
   scaleRoot: number | null;    // 0-11, or null = no scale
   scaleId: string | null;      // ScaleDefinition.id, or null
