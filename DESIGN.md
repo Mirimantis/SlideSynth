@@ -1,299 +1,257 @@
-# Glissandograph - Design Document
+# Glissandograph — Design Document
 
-## Overview
+What the app is, why it exists, how it is built today, and the architecture and interface it is moving toward. **Planned work lives only in [BACKLOG.md](BACKLOG.md)** — this document describes design, not schedule. User-facing behavior and the keyboard-shortcut reference live in [help.html](help.html).
 
-Glissandograph is a browser-based music composition app where users draw Bezier curves on a chromatic staff to create smooth, continuous pitch modulation — like a trombone or theremin. Instead of placing discrete notes, users sketch tonal lines with control points that define pitch, timing, and volume simultaneously.
+> **Direction (2026-09-24).** A full-project review found the product vision and data model sound, but the code fractured (a ~4,400-line `main.ts`, an implicit perform state machine, a notify-everything store with hand-synced UI) and the interface overloaded with modes. New feature work is paused until the stabilize → consolidate → simplify phases in the backlog (Phases 14–16) land. The [Target architecture](#target-architecture) and [Interface principles](#interface-principles) sections below are the new direction.
 
-## Core Concept
+---
 
-Traditional music notation uses discrete note symbols. Glissandograph replaces this with **vector curves**: the user draws Bezier paths across a chromatic staff using a pen tool (similar to Illustrator). The vertical position of the curve controls pitch continuously, enabling smooth glides between notes. Each curve also carries a **volume lane** — an independent Bezier envelope for fade/swell dynamics (see Data Models).
-
-## North Star & Product Architecture
+## North Star
 
 > **Pitch is a continuous field. "Notes" are optional landmarks within it — gravity wells you can lean on or ignore.**
 
-Magnetic snap is this inversion made tangible: adjustable gravity, not a mandatory grid. Scale lines, just-intonation targets, and (future) snap-to-sounding-harmony are all gravity-well configurations over the same field. The instrument's ancestor is **the voice**, not the keyboard — pitch *and* volume shaped continuously through one sustained tone; loop layers assemble a choir.
+Most music tools treat pitch as categories with continuous motion bolted on: discrete note numbers, pitch-bend as an afterthought. Glissandograph inverts this. The user draws or performs Bezier curves on a pitch/time canvas; the curve *is* the sound — pitch and volume shaped continuously, like a trombone, theremin or voice.
 
-**The browser app is the studio.** Planned future ports are *players/performers* consuming the same files, not second editors (none are being built yet — full thinking in [performance-jam-looper-plan.md](performance-jam-looper-plan.md)):
+**Magnetic snap is the inversion made tangible:** adjustable gravity, not a mandatory grid. Scale lines, just-intonation targets, user guides and (future) the currently sounding harmony are all gravity-well configurations over the same field.
 
-- **VST plugin** — an MPE / note-expression *generator* driving downstream synths.
-- **VCV Rack module** — a CV source (pitch → 1V/oct via `V = (cents − 6000)/1200`; lanes → CV outs; poly cables give a natural 16-track ceiling), with player-performer scope.
-- **Motorized-fader hardware** — the gravity wells rendered as force (magnetic strength = motor force), talking a snap-target-map protocol over Web Serial.
+**The instrument's ancestor is the voice, not the keyboard.** Expression lives in the swell — pitch *and* volume shaped within one sustained tone. Each loop layer is a voice; the looper assembles a choir.
 
-**Guardrails honored now** so those ports stay cheap to start:
+Musical practices the design honors:
 
-1. **Frozen cents anchor:** canonical pitch is cents from C-1 (MIDI 0 ≈ 8.1758 Hz); the anchor never changes. Concert pitch (Tune A4) rides on top and never rewrites stored curves.
+- **Voice, not piano** — performed dynamics within a note matter more than note onsets.
+- **Just intonation over drones** — pure thirds and fifths ring in a way equal temperament can't; the Harmonic Prism's JI ratios and microtonal scales are the app's biggest sonic lever.
+- **Register separation** — drone low, harmony mid, lead high.
+
+### What is the product, and what is scaffolding
+
+- **The portable kernel (the product):** live gestural pitch, magnetic snap, Harmonic Prism chords, live looping of the above. This is what future plugin and hardware ports exist for.
+- **Prototype scaffolding:** the timeline/score editor, WAV export, MIDI import. Useful, but not where polish should go first.
+
+**The browser app is the studio.** Planned ports (VST, VCV Rack, motorized-fader hardware — see [Ports & hardware](#ports--hardware-thinking)) are *players/performers* that consume the same files, not second editors.
+
+---
+
+## Guardrails
+
+Honored now so future ports stay cheap:
+
+1. **Frozen cents anchor.** Canonical pitch is cents from C-1 (MIDI 0 ≈ 8.1758 Hz). 100 ¢ = semitone, ¢ ÷ 100 = MIDI note number, A4 = 6900 ¢. The anchor never changes. Concert pitch (Tune A4, stored as `tuningOffsetCents`) rides on top and never rewrites stored curves.
 2. **Musical time in beats**, never seconds.
-3. **Generic lanes:** every automatable variable is the same lane primitive; the reserved per-lane `gravity` field round-trips verbatim.
-4. **Round-trip rule:** re-saving a file must preserve unknown sections verbatim so files survive crossing runtimes (top-level envelope gap tracked as BACKLOG 12.3).
+3. **Generic lanes.** Every automatable variable is the same lane primitive; the reserved per-lane `gravity` field round-trips verbatim.
+4. **Round-trip rule.** Re-saving a file must preserve unknown sections verbatim so files survive crossing runtimes (top-level envelope gap: BACKLOG 12.3).
 5. **The `tuning` + `snap` envelope sections are the portable "gravity map"** — the same payload the hardware protocol and plugin ports will consume.
 6. **Timbre is browser-only.** The shared contract is gesture + gravity map + structure; host-specific settings belong in namespaced advisory blocks.
+7. **Store heard pitch as ground truth.** Curves hold the post-snap pitch that was actually heard, so playback is identical everywhere; snap config drives editing and feel, not reproduction.
 
-## Tech Stack
+---
 
-| Layer | Choice | Why |
-|-------|--------|-----|
-| Language | TypeScript (strict) | Type safety for complex audio math, Bezier calculations, and data models |
-| Build | Vite (`vanilla-ts`) | Near-zero config, fast HMR, native ES modules. No framework overhead for a canvas-heavy app |
-| Rendering | HTML5 Canvas (2D) | Full control over zoom, pan, custom grid rendering, curve drawing. Outperforms SVG for many elements with real-time interaction |
-| Audio | Web Audio API (native) | OscillatorNode, GainNode, WaveShaperNode, AudioParam scheduling for smooth pitch/volume modulation |
-| WAV Export | Manual PCM encoding | 44-byte RIFF header + 16-bit PCM samples. No library needed |
-| Testing | Vitest | Ships with Vite, zero config |
+## Technology
 
-**Why no React/Vue/Svelte?** The UI is ~90% canvas. The only DOM elements are the toolbar, tone builder dialog, tone picker popup, and track/property panels. These are simple enough that vanilla DOM manipulation is cleaner than a framework fighting with imperative canvas code.
+| Layer | Choice | Notes |
+|-------|--------|-------|
+| Language | TypeScript (strict) | Kept — see below |
+| Build | Vite | Dev server on port 5187 |
+| Rendering | HTML5 Canvas 2D | Background (staff, rulers) and foreground (curves, playhead, interaction) canvases, plus a Parameters Graph canvas |
+| Audio | Web Audio API | Oscillator/gain graphs per voice; `AudioParam` automation; `OfflineAudioContext` for WAV export |
+| UI chrome | Vanilla DOM today | Moving to a small reactive layer — see [Target architecture](#target-architecture) |
+| Tests | Vitest | |
+| Input | Mouse, Web MIDI | Pointer Events (pen), Gamepad and Web Serial planned |
 
-**Note on MIDI:** MIDI *export* doesn't exist yet, but the cents canon makes it near-mechanical (¢ ÷ 100 = MIDI note + bend fraction) — planned as an MPE-style export (BACKLOG 9.4). WAV export remains the exact-reproduction output. MIDI *import* is supported (notes → Bezier curves, pitch bend folded in), and *live MIDI input* records to curves, including the pitch-bend wheel.
+### Why TypeScript and the web stay
 
-## Architecture Decisions
+The 2026-09-24 review asked whether TypeScript was the right base. It is. The fracture is architectural and would exist in any language. The web is the right home for the studio: zero-install (the free app is the adoption funnel for the hardware), Web MIDI and Web Serial for the prototype hardware, fast iteration.
 
-### 1. Dual Canvas Strategy
+The two real platform limits have targeted answers that don't require leaving the web:
 
-Two `<canvas>` elements stacked via CSS absolute positioning:
-- **Background canvas:** Staff grid lines, note labels, beat markers. Only redrawn on zoom/pan changes.
-- **Foreground canvas:** Bezier curves, control handles, playhead, selection visuals. Redrawn per animation frame.
+- **Control rate.** Live pitch is driven from the main thread at mouse/frame rate. The answer is an **AudioWorklet** voice that smooths pitch and gain at audio rate (and can later run the magnetic integrator there) — BACKLOG 15.7.
+- **Code sharing with C++ ports.** VST and VCV Rack are C++. The answer is to keep the kernel (cents math, curve evaluation, snap + magnetic physics, `.gliss` codec) **pure and fully tested** now, so porting it is translation rather than excavation, and to decide C++ vs. Rust→WASM vs. an independently implemented spec only when the first port begins — BACKLOG Phase 17.
 
-This avoids the main performance bottleneck: redrawing hundreds of grid lines 60 times per second when only the curves or playhead change.
+### Why the "no framework" decision is being revisited
 
-### 2. Voice-Pool Playback per Track
+The original rationale was that the UI is ~90% canvas with only a handful of DOM controls. That no longer holds: the chrome has ~36 buttons, ~29 inputs, ~11 selects, drawers and dialogs, all synced to state by hand. Hand-syncing is the source of real bugs (e.g. the tool panel showing Draw while the active tool is Select). The canvas stays imperative; the panels move to a small reactive component layer (recommended default: Preact + `@preact/signals`, confirmed at the start of BACKLOG 15.4).
 
-Rather than creating/destroying OscillatorNodes per note (which causes audio clicks), each track maintains a **pool of persistent synth voices** sized to its maximum simultaneous curve overlap (`reconcileTrackPools` + `computeVoiceAssignment` in [src/audio/playback.ts](src/audio/playback.ts)). Curves are assigned to voice slots; pitch and volume are controlled entirely through `AudioParam` scheduling, with gain ramped to zero between curves. Loop restarts **reuse** the pool instead of tearing it down — no allocation spike at the wrap, which matters for live looping. This produces the smooth continuous sound that is the core value of Glissandograph.
+---
 
-### 3. Lookahead Audio Scheduler
+## Current architecture (as of 2026-09-24)
 
-A `setInterval` fires every 25ms and schedules AudioParam changes 100ms into the future. For each active curve, the curve sampler generates ~200 pitch/volume samples per second from Bezier evaluation, which are scheduled via `setValueAtTime` and `linearRampToValueAtTime`.
+An honest description of the code as it stands, including the problems Phase 15 addresses.
 
-### 4. Monotonic-X Constraint
-
-Control point positions must have strictly increasing X values (time only moves forward). Handles are clamped if they would cause X-reversal in the evaluated curve. This keeps curves well-defined for audio sampling and matches musical intuition (you can't go back in time).
-
-### 5. WAV Export via OfflineAudioContext
-
-The `OfflineAudioContext` API renders the Web Audio graph in non-real-time. This means WAV export reuses the **exact same synthesis and scheduling code** as real-time playback — no separate rendering pipeline. The result is encoded as 16-bit PCM WAV at 44100Hz stereo.
-
-### 6. State Management Without a Library
-
-A simple pub/sub store with `getState()`, `mutate(fn)`, and `subscribe(callback)` in ~120 lines. The state shape is well-defined and the mutation surface is limited. Undo/redo is implemented via snapshot-based state stacking (see below).
-
-### Undo/Redo via Snapshot Stacking
-
-A `UndoHistory` singleton takes deep clones of the `Composition` (via `JSON.parse(JSON.stringify())`) before each undoable operation. Clones are stored in an undo stack (max 50). On undo, current state is pushed to the redo stack and the previous snapshot is restored via `store.loadComposition()`. Drag operations are batched: the snapshot is taken on `mousedown`, so the entire drag counts as one undo step. Keyboard shortcuts: Ctrl+Z (undo), Ctrl+Shift+Z / Ctrl+Y (redo). UI buttons are also provided in the toolbar.
-
-### 7. Bounded Viewport
-
-The viewport clamps pan/scroll to stay within the composition bounds: beat 0 to `totalBeats` on the X axis, and C0 (MIDI 12) to C9 (MIDI 120) on the Y axis — 9 octaves. This prevents users from getting lost in infinite empty space. The composition length is user-configurable (default 120 beats = 1 minute at 120 BPM, max 3000 beats).
-
-## Data Models
-
-### ToneDefinition
-Each tone defines a synthesizer voice that can be modulated to any pitch:
-- **Waveform layers:** One or more oscillators (sine, square, sawtooth, triangle) with individual gain and detune
-- **Distortion:** Optional waveshaper with configurable drive amount and oversample setting
-- **Visual identity:** Color (CSS) and dash pattern for rendering on the staff
-
-Four preset tones are included: Pure Sine, Bright Square, Warm Pad, and Buzzy Saw.
-
-### Lane & LanePoint
-Every automatable variable is the same primitive — a Bezier graph-editor curve — differing only in its Y value-domain:
-- **Lane:** `type` (`'pitch' | 'volume'`, more reserved), `unit` (`'cents' | 'normalized'`), `range` (Y-domain clamp), ordered `points`, and an optional `gravity` field reserved for per-lane gravity-well maps (round-trips verbatim).
-- **LanePoint:** `position` `(x, y)` where x = time in beats and y = the lane's value, plus incoming/outgoing handles (relative) defining curve shape.
-- **Pitch canon:** the pitch lane's y is **cents from a frozen anchor at C-1** (MIDI 0 ≈ 8.1758 Hz): 100 ¢ = semitone, ¢ ÷ 100 = MIDI note number, A4=440 sits at 6900 ¢. Concert pitch (Tune A4, stored as `tuningOffsetCents`) rides on top without changing stored curves.
-
-### BezierCurve
-A `lanes[]` array where `lanes[0]` is always the pitch lane (constructor-enforced), plus an optional `groupId` for chord groups (Harmonic Prism). Within a lane, between consecutive points P[i] and P[i+1], a cubic Bezier segment is defined by:
-- P0 = P[i].position
-- P1 = P[i].position + P[i].handleOut
-- P2 = P[i+1].position + P[i+1].handleIn
-- P3 = P[i+1].position
-
-### Track
-Groups curves that share a tone. Has mute, solo, and volume controls.
-
-### Composition
-Top-level document: BPM, beats per measure, total length in beats, array of tracks, and a tone library.
-
-## Staff Configuration
-
-- **Note range:** C0–C9 (9 octaves, 108 chromatic note lines)
-- **Grid snap:** Adaptive subdivisions on X; on Y, snap targets come from the selected scale (~27 scales incl. microtonal/24-TET), chromatic fallback, user-placed guides (additive), or Harmonic Prism projection echoes (exclusive while active)
-- **Magnetic snap:** an alternative spring-physics mode — elastic cursor coupling plus proximity attraction toward snap lines, with user-tunable strength/spring/damping; enables on-pitch vibrato against a gravity well
-- **Free placement:** Press **S** to toggle snap on/off (shown as a toolbar button)
-- **Zoom:** Independent X (time) and Y (pitch) zoom via scroll wheel (Ctrl+wheel for Y)
-
-## UI Layout
+### Module map
 
 ```
-+---------------------------------------------------------------+
-| [TOOLBAR] Play|Pause|Stop [Loop]  BPM:[120]  Length:[120] 1:00|
-| Tool:[Draw|Select|Del]  ZoomX:[--o--]  ZoomY:[--o--]  [Snap] |
-| [Save] [Load] [WAV] [MIDI]  [Undo] [Redo]                    |
-+----------+-------------------------------------------+---------+
-|  TRACKS  |            CANVAS (dual layer)            |  PROPS  |
-|  200px   |  --- C5 --------------------------------  |  200px  |
-| [Track1] |      ~~~~curve~~~~                        | Pitch:  |
-|  # Sine  |  --- B4 --------------------------------  | Vol:    |
-|  [M][S]  |           ~~~~curve~~~~                   | Time:   |
-| [Track2] |  --- A4 --------------------------------  |         |
-|  # Saw   |     |playhead                             |         |
-|  [M][S]  |  ---|-----|-----|-----|-----|              |         |
-| [+Track] |  |1     |2     |3     |4     |5           |         |
-| [+Tone]  |                                           |         |
-+----------+-------------------------------------------+---------+
+src/
+├── main.ts          # ~4,400 lines: DOM layout template, all UI wiring, keyboard map,
+│                    #   perform/record/jam state machine, render loop, store subscription
+├── types.ts         # Shared interfaces (Composition, Lane, AppState, …)
+├── constants.ts     # Pitch range, zoom limits, cents/frequency conversion, timing constants
+├── state/           # store.ts (pub/sub singleton), history.ts (snapshot undo), clipboard.ts
+├── model/           # curve, lane, track, tone, composition, curve-groups, layer, pass-log, point-selection
+├── audio/           # engine, tone-synth, playback (voice-pool scheduler), curve-sampler, preview (live voices),
+│                    #   metronome, midi-input, dynamics-bus, voice-allocation
+├── canvas/          # viewport, interaction (tool mouse handling, ~1,400 lines), performance-engine
+│                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), and one renderer per layer
+├── ui/              # toolbar, tool-panel, drawer, prism-panel, property panels, tone builder/picker, dialogs, HUDs
+├── export/          # json-export (.gliss envelope + migrations), wav-export, midi-import
+└── utils/           # bezier-math, snap, snap-magnetic, snap-presets, scales, harmonics, svg helpers
 ```
 
-Layout uses CSS Grid: `grid-template-columns: 200px 1fr 200px`, `grid-template-rows: auto 1fr`.
+### Mechanisms that work well
 
-### Track Panel Features
-- Click a track to select it, select all its curves, and show a transform box around them (auto-switches to Select tool)
-- Click the tone name to open a **tone picker popup** for reassigning the track's tone
-- **M** button mutes a track; **S** button solos it (only solo tracks play when any track is soloed)
-- **T** button opens the tone builder to edit the track's current tone
-- **+ Track** button opens tone picker first, then creates a new track with the chosen tone
-- **+ Tone** button opens the tone builder to create a new tone from scratch
+- **Voice-pool playback.** Each track keeps a pool of persistent synth voices sized to its maximum simultaneous curve overlap (`reconcileTrackPools` + `computeVoiceAssignment` in [src/audio/playback.ts](src/audio/playback.ts)). Loop restarts reuse the pool — no allocation spike at the wrap.
+- **Lookahead scheduler.** A 25 ms `setInterval` schedules `AudioParam` changes 100 ms ahead; curves are sampled at 200 samples/s.
+- **Monotonic-X constraint.** Anchor X strictly increases and handles are clamped so curves stay functions of time.
+- **WAV export** renders through `OfflineAudioContext` using the same synthesis and scheduling code as live playback.
+- **Snapshot undo** — deep clones of the composition, max 50; a drag is one step. Each kept loop pass is exactly one undo entry; "drop last pass" (U) is itself an undoable forward delete.
+- **Rolling phrase buffer** — 30 s of performed gesture in musical time, so "keep that" (K) commits a phrase after the fact.
+- **Versioned file format** with a migration chain and golden-file tests.
 
-### Curve Selection and Transform
-- **Select tool:** Click a curve segment to select it and activate its transform box
-- **Multi-select:** Hold **Shift** and click additional curves to add/remove them from the selection
-- **Transform box:** Surrounds all selected curves with resize handles (edges, corners) and translate (drag body)
-- **Octave shift buttons:** ▲/▼ arrows on the transform box shift all selected curves ±12 semitones
-- Clicking a point on a selected curve (single-select only) enables point editing with handle display
-- Clicking an unselected curve inside a transform box selects it instead of starting a translate drag
-- **Ctrl held** in Draw mode temporarily switches to Select for quick Ctrl+click selection
-- **Delete/Backspace** with curves selected (no point selected) deletes all selected curves
+### Known structural problems (the review's findings)
 
-### Tone Picker
-A popup anchored to the click target, listing all tones in the library with:
-- Color swatch and dash pattern preview (rendered on a mini canvas)
-- Tone name and waveform layer summary
-- Click to select; click outside or press Escape to cancel
+1. **`main.ts` does everything** — layout HTML, wiring, keyboard map, perform logic, render loop, and inline model edits (e.g. multi-point delete in the key handler).
+2. **The perform state machine is implicit.** Play / jam / record / pass-record / MIDI-arm state is spread across ~8 flags in the store, the playback engine and module-level variables, each transition function setting its own combination. Two canvas mouse handlers use two different definitions of "is the left button performing?" (`isComposePerformActive` in `main.ts` vs. `isComposePerformLocked` in `interaction.ts`) — with Lock Rail off, a Draw click during Jam both sounds a note and places a curve point.
+3. **Coarse store notification + hand-synced UI.** Every store change rebuilds the track list and both property panels via `innerHTML`, including on every mousemove of a drag. Widgets that don't subscribe drift out of sync.
+4. **Duplicated state.** Snap settings exist in both `AppState` and `composition.snap`; loop-enabled lives in the playback engine; the snap config is built in three places that disagree (the Space-hold preview ignores guides and projection).
+5. **The render loop mutates the model** — it attaches volume lanes, moves volume points and clears the Prism projection source.
+6. **Live pitch is stepped.** `setFrequency` uses `setValueAtTime` at event/frame rate, so live glides and magnetic vibrato are a ~60 Hz staircase — at odds with the product's core value.
+7. **The kernel is untested.** Snap, magnetic physics, bezier math, the curve sampler and the scheduler have no tests.
 
-### Property Panel
-Context-sensitive right panel:
-- **When no point is selected:** Shows track info (name, tone, volume slider)
-- **When a control point is selected:** Shows point details (time in beats, pitch as note name + cents deviation, volume slider, handle coordinates)
+---
 
-## Playback Features
+## Target architecture
 
-- **Play/Pause/Stop** transport controls
-- **Loop toggle:** When enabled, playback restarts from beat 0 when reaching the end of the composition
-- **Composition length:** Configurable total beats (default 120, min 4, max 3000). Playback stops (or loops) at this boundary.
-- **Playhead:** Visual indicator on the canvas showing current playback position. Visible during playback and when paused at a non-zero position.
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| Space | Toggle play/pause |
-| D | Switch to Draw tool |
-| V | Switch to Select tool |
-| X | Switch to Delete tool |
-| S | Toggle grid snap on/off |
-| L | Toggle loop on/off |
-| Ctrl+Z | Undo |
-| Ctrl+Shift+Z / Ctrl+Y | Redo |
-| Delete / Backspace | Delete selected point, or all selected curves (if no point selected) |
-| Enter / Escape | Finish current drawing |
-| Ctrl (held in Draw mode) | Temporarily switch to Select tool |
-| Shift+Click (Select tool) | Add/remove curve from multi-selection |
-| Alt+Click drag | Pan the canvas |
-| Middle-click drag | Pan the canvas |
-| Scroll wheel | Zoom X axis |
-| Ctrl+Scroll wheel | Zoom Y axis |
-
-## Export
-
-### `.gliss` (Save/Load)
-Compositions are serialized as a versioned JSON envelope saved with the `.gliss` extension: `{ app: "glissandograph", formatVersion, kind, meta?, tuning?, snap?, composition }`. `tuning` and `snap` live at the top level so preset tooling and galleries can read them without parsing the whole piece — they are also the portable "gravity map" (see North Star guardrails). A migration chain upgrades older saves (v1 flat JSON → … → v4 unified lanes + cents canon); legacy `.json` files are still accepted on open. Load replaces the current composition entirely.
-
-### WAV Export
-Uses `OfflineAudioContext` to render the full composition offline at 44100Hz stereo. The same synthesis code path (tone synth + curve sampler + scheduling) is used for both real-time playback and WAV export, guaranteeing identical output. The result is encoded as a standard 16-bit PCM WAV file.
-
-### MIDI Import
-MIDI files (`.mid`, `.midi`) can be imported via the toolbar button. Each MIDI channel maps to a track, and each note event is converted to a two-point Bezier curve (note-on to note-off). Pitch bend events are applied to adjust the curve's Y position. Tracks are auto-assigned tones from the default library in round-robin fashion. Composition BPM and total length are derived from the MIDI file's tempo and duration.
-
-## Implementation Status
-
-Original build phases below (all complete). Ongoing work is tracked in [BACKLOG.md](BACKLOG.md); the long-range performance/jam/looper and ports direction lives in [performance-jam-looper-plan.md](performance-jam-looper-plan.md).
-
-| Phase | Focus | Status |
-|-------|-------|--------|
-| 1 | Scaffolding + First Sound | Complete |
-| 2 | Canvas Staff + Viewport | Complete |
-| 3 | Drawing Curves | Complete |
-| 4 | Playback Engine | Complete |
-| 5 | Tone Builder + Multi-Track | Complete |
-| 6 | JSON Save/Load + WAV Export | Complete |
-| 7 | MIDI Import | Complete |
-| 8 | Curve Select + Transform Box | Complete |
-| 9 | Undo/Redo | Complete |
-| 10 | Multi-Curve Selection | Complete |
-| 11 | UX Polish (extended range, snap toggle, shortcuts) | Complete |
-
-## File Structure
-
-Snapshot from the original build phases — the tree has since grown (lane model, magnetic snap, loop markers, MIDI input, Harmonic Prism panel, etc.); see `src/` for the current module list.
+The shape Phase 15 moves the code toward. The dependency direction is strictly downward:
 
 ```
-Glissandograph/
-├── index.html
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-├── .gitignore
-├── DESIGN.md
-├── src/
-│   ├── main.ts                    # Bootstrap, wire all modules together
-│   ├── types.ts                   # All shared interfaces
-│   ├── constants.ts               # Note range, zoom limits, presets, defaults
-│   ├── state/
-│   │   ├── store.ts               # Pub/sub state store with multi-curve selection
-│   │   └── history.ts             # Snapshot-based undo/redo (max 50 steps)
-│   ├── audio/
-│   │   ├── engine.ts              # AudioContext lifecycle, user-gesture guard
-│   │   ├── tone-synth.ts          # Build oscillator graph from ToneDefinition
-│   │   ├── playback.ts            # Lookahead scheduler with loop support
-│   │   └── curve-sampler.ts       # Bezier → pitch/volume sample arrays
-│   ├── canvas/
-│   │   ├── staff-renderer.ts      # Grid lines, note labels, beat markers
-│   │   ├── curve-renderer.ts      # Curves with color/dash, handles, multi-select rendering
-│   │   ├── interaction.ts         # Pen tool, select (multi-curve), drag, delete, transform
-│   │   ├── transform-box-renderer.ts  # Transform box with resize handles and octave buttons
-│   │   ├── viewport.ts            # Pan, zoom, coord transforms, clamping
-│   │   └── playhead.ts            # Animated playhead line
-│   ├── model/
-│   │   ├── tone.ts                # ToneDefinition defaults + presets
-│   │   ├── curve.ts               # BezierCurve/ControlPoint manipulation
-│   │   ├── track.ts               # Track creation
-│   │   └── composition.ts         # Top-level document model
-│   ├── export/
-│   │   ├── json-export.ts         # Serialize/deserialize, file download/open
-│   │   ├── wav-export.ts          # OfflineAudioContext → 16-bit PCM WAV
-│   │   └── midi-import.ts         # MIDI file → Composition conversion
-│   ├── ui/
-│   │   ├── toolbar.ts             # Transport, BPM, length, tools, zoom, snap
-│   │   ├── tone-builder.ts        # Tone definition modal dialog
-│   │   ├── tone-picker.ts         # Tone selection popup
-│   │   └── property-panel.ts      # Selected point/track properties
-│   └── utils/
-│       ├── bezier-math.ts         # Cubic Bezier eval, subdivision, hit-test
-│       ├── music-math.ts          # Note/frequency conversions
-│       ├── snap.ts                # Grid snapping (1/16 beat + note line)
-│       └── dom-helpers.ts         # Minimal DOM utilities
-├── styles/
-│   ├── main.css                   # App layout, toolbar, canvas
-│   ├── panels.css                 # Track panel, property panel
-│   └── dialogs.css                # Tone builder modal, tone picker popup
-└── test/
-    ├── bezier-math.test.ts
-    ├── music-math.test.ts
-    ├── curve-sampler.test.ts
-    └── snap.test.ts
+ui/ (reactive components: panels, dialogs, menus)      canvas/ (imperative renderers + one input router)
+                  \                                      /
+                   state/ (signals store, transport state machine, commands, history)
+                                     |
+                  audio/ (scheduler, AudioWorklet live voice)      export/ (codec, WAV, MIDI)
+                                     \                            /
+                          core/ (pure: cents math, curve eval, snap + magnetic physics, gravity map)
 ```
 
-## Key Risks and Mitigations
+Rules:
 
-| Risk | Mitigation |
-|------|------------|
-| AudioParam stepping on rapid pitch changes | Use `linearRampToValueAtTime`, sample at 200pts/sec, test steep curves early |
-| Canvas perf with many curves | Dual-canvas split, dirty-rect optimization if needed |
-| Monotonic-X handle clamping confuses users | Visual feedback when handles are constrained |
-| Browser requires user gesture for AudioContext | `ensureResumed()` guard on first playback interaction |
+1. **`core/` is pure.** No DOM, store, audio or canvas imports. It is fully unit-tested and is the future cross-runtime conformance suite.
+2. **One state store with fine-grained subscriptions** (signals). Document state (the composition) is separate from workspace preferences and from runtime state. No mirrored fields — derived values are computed, not copied.
+3. **One explicit transport/perform state machine** with a single mode value and named transitions, unit-tested. Every "is the canvas performing or editing?" question asks it.
+4. **One input router per canvas.** The canvas has a single pointer handler that routes to perform, tool, ruler or guide handling based on the state machine — no competing capture/bubble listeners.
+5. **Commands, not scattered handlers.** Every user action (keyboard, button, menu, context menu) is a named command in one registry; the shortcut table in help.html and the context menu read from it.
+6. **Mutations live in `model/` and `state/`.** UI and input handlers call commands; they don't splice arrays.
+7. **Render is read-only.** The render loop never changes the model. Foreground redraw is dirty-flagged and curves are cached as `Path2D`.
+8. **One snap-config builder** used by drawing, dragging, preview, perform and guides.
+9. **Audio-rate live voice.** The live voice is an AudioWorklet receiving pitch/gain targets and smoothing them at audio rate.
+10. **`main.ts` is a bootstrap** that creates the store, audio, canvas and UI and wires them together — a few hundred lines at most.
+
+---
+
+## Interface principles
+
+The UI grew one drawer and toggle per feature and now overlaps heavily: tool × Prism draw × Prism projection × Lock Rail × play/jam/record/pass-record/MIDI-arm × layer × loop × snap × magnetic × Space tap-vs-hold. Worst, the left mouse button silently switches from editing to performing whenever playback runs with Lock Rail on. Phase 16 is a design pass (spec here before code) guided by:
+
+1. **Group controls by task, not by when they were built.** The gravity map is the North Star, so key, scale, Tune A4, snap, magnetic feel, presets and guides belong in one **Gravity** panel — not split across the top-bar Snap button, the Snap drawer and the Tuning drawer.
+2. **One capture model.** Retrospective Keep makes a separate Jam mode largely redundant: if the rolling buffer always runs while the transport rolls, Jam is just Play, Keep is always available, and Record means "keep everything." Record-next-pass, Layer and MIDI-arm become options of one capture control rather than peers.
+3. **No hidden modes.** If the left button performs instead of edits, the UI says so visibly (an explicit Perform state), rather than it being implied by Lock Rail + transport state.
+4. **Frequent things visible, rare things tucked away.** Tools are an always-visible strip, not a drawer. Device and preference settings (MIDI device, dynamics source, metronome volume) move to a Settings dialog. HUD toggles, guide visibility and the manual go in a **View** menu.
+5. **Each control exists once.** Loop currently appears in both the top bar and the Transport drawer.
+6. **Name things unambiguously.** "Tuning" names both the drawer (key/A4) and a Harmonic Prism field (JI vs. ET chord ratios). Track-row buttons are single letters (M S I T X).
+7. **Avoid timing-dependent keys** where possible (Space is tap = transport, hold > 250 ms = preview).
+
+### Current layout (for reference)
+
+- **Top bar:** composition name, length, File menu, Undo/Redo, Lock Rail toggle, transport (Play, Pause, Stop, Record, Jam, Keep), Snap and Loop toggles.
+- **Left icon rail → drawers:** Transport (Loop, Layer, Pitch HUD, Perf HUD, BPM, time signature, metronome, dynamics source, MIDI device), Tools (Draw, Select, Delete, Slice), Snap (preset, magnetic Force/Spring/Damping, guides), Harmonic Prism, Tuning (Key/scale, Tune A4).
+- **Centre:** staff canvas with top and bottom rulers and zoom sliders; the Parameters Graph (volume lane of the selected curve) below it, resizable.
+- **Right panel:** Tool Properties, Object Properties, Tracks (+ Track, + Tone).
+
+---
+
+## Data model
+
+- **ToneDefinition** — one or more oscillator layers (sine/square/sawtooth/triangle, gain, detune), optional waveshaper distortion, plus a colour and dash pattern for drawing. Four presets ship.
+- **Lane / LanePoint** — the universal automation primitive: `type` (`pitch` | `volume`, more reserved), `unit`, `range`, ordered `points`, optional `gravity` (round-trips verbatim). A point is a position `(beats, value)` plus relative in/out handles; consecutive points form cubic Bezier segments.
+- **BezierCurve** — `lanes[]` with `lanes[0]` always pitch (constructor-enforced), optional `groupId` (chord clusters and freehand groups) and `voiceIndex` (Harmonic Prism voice).
+- **Track** — tone reference, curves, mute, solo, volume. Loop layers are tracks; Layer mode stops opening new layers once the composition has 16 tracks.
+- **Composition** — name, BPM, time signature, tracks, tone library, loop range, snap settings, guides, `tuningOffsetCents`.
+- **Pitch range** C0–C9 (1,200–12,000 ¢).
+
+---
+
+## File format — `.gliss`
+
+JSON inside a versioned envelope, saved with the `.gliss` extension:
+
+```
+{
+  "app": "glissandograph",        // type marker — a format contract, never renamed
+  "formatVersion": 1,             // cross-app contract; loaders migrate older files
+  "kind": "composition",          // advisory self-description
+  "meta":        { ... },         // optional: title, author, license, timestamps (opt-in only; never auto-stamp identity)
+  "tuning":      { ... },         // optional: reference pitch + scale as explicit cents/ratios
+  "snap":        { ... },         // optional: snap targets, strengths, guides — the gravity map
+  "composition": { ... }          // tracks, curves, loops, bpm, …
+}
+```
+
+`formatVersion` 1 wraps internal composition v4. A migration chain upgrades older saves (v1 flat JSON → per-point volume → volume lane → unified `lanes[]` + cents canon); legacy `.json` files still open. `tuning` and `snap` sit at the top level so preset tools and galleries can read them without parsing the piece.
+
+**Presets: one schema, two extensions, two verbs (planned, BACKLOG 12.2).** `.glisskit` shares the schema. The extension picks the default verb: `.gliss` → **Open** (replace the workspace), `.glisskit` → **Import settings** (read only `tuning`/`snap`). A File ▸ Import settings… action works on any conforming file. On extension/`kind` mismatch, the extension wins.
+
+**Shareable files** embed presets self-contained (with an optional `id`/`name` label) rather than referencing them by name, and store tuning as explicit cents/ratios plus reference pitch.
+
+### Cross-runtime portability
+
+- **Guaranteed-portable core:** `meta`, `tuning`, `snap`, structure (tracks, loops, BPM in beats) and the canonical pitch + dynamics curves.
+- **Host-specific blocks:** `hostSettings: { browser, vst, vcv }` — advisory, namespaced, ignored by other hosts, preserved on re-save.
+- **Graceful degradation:** heavy layering can exceed MPE's ~15 or VCV's 16 channels, and timbre doesn't survive into a generator host. Each host should report what it couldn't represent.
+- **One spec, ideally one codec** — not three independent parsers that drift.
+
+### Raw takes (design framing for BACKLOG 12.4)
+
+The Bezier is the editable, lossy "JPEG"; the high-rate capture stream is the "negative." Keeping raw takes preserves vibrato texture and human timing, and enables re-fitting and high-fidelity MPE export. Rough size: ~1 KB/s per voice as lean JSON at 60 Hz; delta encoding + gzip gives 5–10×. Endpoint: a zip-style container with lazily loaded blobs, deferred until sizes justify it. Raw takes must never enter the undo-clone path (BACKLOG 9.3 first).
+
+---
+
+## Ports & hardware (THINKING)
+
+Architecture notes only — not ready to build. The corresponding roadmap entries are in the BACKLOG **Horizon** section.
+
+### VST plugin
+
+An **MPE / note-expression generator** driving downstream synths. MIDI is blocks-plus-bend by design, so continuous pitch maps to note + per-note bend; the cents canon makes that mechanical. Player/performer scope, like VCV.
+
+### VCV Rack module
+
+A CV source — pitch CV is the continuous field with no blocks.
+
+- **Canvas:** a custom NanoVG widget on a fixed 3U panel.
+- **Timeline:** an internal playhead in `process()`.
+- **Outputs:** lanes map 1:1 to CV outputs. Pitch is 1 V/oct via `V = (cents − 6000) / 1200` (0 V = middle C).
+- **Gate:** one per track, high while the track sounds.
+- **Clock/reset I/O:** so short compositions can sit inside looping patches.
+- **Polyphony:** poly cables (16 channels) give a natural 16-track ceiling.
+
+**Scope: player/performer.** Include performance-adjacent edits (mute/solo, loop region, snap strength and tuning, curve nudge/scale, light dynamics); leave from-scratch authoring to the browser studio. The editing UI is bespoke per host; the engine is the shared core. Likely GPL, in line with the Rack ecosystem.
+
+### Motorized-fader hardware
+
+The North Star made physical: a motorized slide potentiometer renders the gravity wells as **force** (magnetic strength = motor force). You feel the snap instead of seeing it.
+
+- **The haptic loop runs on the microcontroller,** not the browser: read position → restoring force toward the nearest target → drive the motor, at hundreds of Hz.
+- **Protocol:** the host sends a map of snap targets + strengths (re-sent when scale or harmony changes); the device streams position = pitch back. The same protocol serves the plugin ports — **keep the preset schema and the device protocol as one representation.**
+- **Prototype:** Adafruit Feather RP2040.
+  - One core runs the force loop in fixed-point math; the other handles USB.
+  - It enumerates as a class-compliant composite USB device (MIDI + CDC serial), so the browser talks to it over Web Serial.
+  - The motor is powered from the 5 V USB rail through a current-limited H-bridge.
+  - Upgrade path: RP2350, which adds an FPU.
+- **Interactions it unlocks:**
+  - felt detents and felt harmony;
+  - motorized playback of a loop layer, with touch-override punch-in;
+  - a felt metronome pulse;
+  - soft end-stops.
+- **Central risk:** detent fidelity. Slide-pot motors are built for position recall, not force rendering. Prototype the feel first.
+- **Constraints:**
+  - One fader is one voice, which reinforces loop-to-choir; a bank of faders could be a chord.
+  - ADC resolution over 9 octaves may force a shiftable pitch window.
+  - Commercial units may want contactless magnetic position sensing.
