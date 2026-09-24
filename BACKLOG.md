@@ -107,9 +107,21 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - *Behaviour changes in part 2:*
     - Alt+left while performing pans, instead of panning and sounding a note at once.
     - Alt+left on the Parameters Graph now pans too, like the staff.
-- [ ] **15.3 Break up `main.ts`** *(L)*
+- [ ] **15.3 Break up `main.ts`** *(L; keyboard map done in PR #77)*
   - **Layout:** move the HTML template into components (15.4).
   - **Keyboard map:** turn it into a **command registry**, one table of named commands with their bindings. Buttons, menus, the context menu and the help.html shortcut table all read from it.
+    - **Done (PR #77):**
+      - `src/commands/catalog.ts` is the one table: id, label, key chords, description. It's pure data.
+      - `keys.ts` parses and matches chords; it's pure and tested.
+      - `registry.ts` binds what each command does. It requires a handler for every catalog entry, and runs one keyboard listener with the typing guard, hold/release, and auto-repeat rules.
+      - `edit-commands.ts` holds the Edit commands that used to be inline in `main.ts`: undo/redo, clipboard, join, group, smooth/sharpen, and the Delete cascade that was split between `main.ts` and `interaction.ts`.
+      - What reads the catalog: the tool buttons, toolbar and transport buttons, File menu, context menu and all their tooltips. The help page's shortcut table is generated from it (`src/help/shortcut-table.ts`), and `help.html` is now part of the production build (it wasn't before).
+    - *Behaviour changes:*
+      - The D / V / X / C tool keys now do exactly what the tool buttons do: switching away from Draw ends the curve in progress and stops a Space preview. Like the buttons, they're off while the left button performs.
+      - Escape backs out one level. When it stops a count-in, recording or jam, it no longer also closes the transform box.
+      - Bindings match modifiers exactly (Shift+J no longer toggles Jam; Shift+Delete no longer deletes). Letters follow the keyboard layout's printed letter.
+      - A disabled command's Ctrl chord still stays away from the browser (Ctrl+J with nothing selected no longer risks opening Downloads).
+      - The Prism drawer tooltip wrongly said H projects; it now names both H and Ctrl+H.
   - **Render loop:** move it to a canvas module.
   - **Model edits:** inline edits in handlers (e.g. multi-point delete in the key handler) move into `model/`.
   - **Target:** `main.ts` is a bootstrap of a few hundred lines.
