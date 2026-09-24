@@ -68,6 +68,7 @@ import iconKeep from './assets/icons/keep.svg?raw';
 import iconLoop from './assets/icons/loop.svg?raw';
 import { canOpenLayer, createLayerTrack, newestLayerTrack, nextPassRecordState, LAYER_TRACK_LIMIT } from './model/layer';
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
+import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
 import type { AppState, ToolMode, Lane, LanePoint, BezierCurve } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -662,6 +663,7 @@ const interaction = createInteraction(fgCanvas, viewport, {
     if (which === 'start') store.setLoopStart(beats);
     else store.setLoopEnd(beats);
   },
+  isPerformInputActive: () => isComposePerformActive(),
 });
 
 // ── Playback engine ─────────────────────────────────────────────
@@ -897,16 +899,9 @@ const afkWarningCountdown = document.getElementById('afk-warning-countdown') as 
  *  pauses. */
 const AFK_WARNING_LEAD_MS = 30_000;
 
-/** Scroll Canvas effective value — forced on while recording (Perform with capture)
- *  and while jamming (the free-running clock is a scrolling-view experience). */
+/** Scroll Canvas effective value — see state/perform-mode.ts. */
 function effectiveScrollCanvas(): boolean {
-  const st = store.getState();
-  return st.scrollCanvasEnabled
-    || st.performance.recordArmed
-    || st.performance.jamActive
-    // Queued pass-record counts too, so the view doesn't switch modes at the
-    // moment capture starts (BACKLOG 10.5).
-    || st.performance.passRecordState !== 'off';
+  return effectiveScrollCanvasFor(store.getState());
 }
 /** Minimum offsetX for clamping — negative when Scroll Canvas is on so beat 0 can
  * reach the rail at canvas centre. */
@@ -915,9 +910,10 @@ function minPanOffsetX(canvasWidth: number): number {
     ? -(canvasWidth * RAIL_SCREEN_X_RATIO) / viewport.state.zoomX
     : 0;
 }
-/** True when a Scroll-Canvas Playback state hijacks LMB for Perform. */
+/** True when a Scroll-Canvas Playback state hijacks LMB for Perform. The tool
+ *  handlers in interaction.ts ask this same function (BACKLOG 14.1). */
 function isComposePerformActive(): boolean {
-  return playback.isPlaying() && effectiveScrollCanvas();
+  return isPerformInputActive(store.getState(), playback.isPlaying());
 }
 
 function updatePlayState(playing: boolean) {
@@ -2199,20 +2195,16 @@ window.addEventListener('keydown', (e) => {
     }
     case 'd':
       store.setTool('draw');
-      toolPanel.updateTool('draw');
       interaction.transformBox = null;
       break;
     case 'v':
       store.setTool('select');
-      toolPanel.updateTool('select');
       break;
     case 'x':
       store.setTool('delete');
-      toolPanel.updateTool('delete');
       break;
     case 'c':
       store.setTool('scissors');
-      toolPanel.updateTool('scissors');
       interaction.transformBox = null;
       store.setSelectedCurve(null);
       store.setSelectedPoint(null);
@@ -4072,7 +4064,7 @@ function render() {
   // Playhead vs Rail.
   // Scroll Canvas ON (or Record forcing it on): the playhead becomes a stationary rail
   // at canvas-centre — visible in Idle too, so pressing Play starts from where the user
-  // already sees the rail. Rendering mirrors Gliss exactly (rail + planchette dot + pulse).
+  // already sees the rail (rail + planchette dot + pulse).
   // Scroll Canvas OFF: classic moving playhead at the stored position.
   const railVisible = effectiveScrollCanvas();
   const freePlanchetteVisible = !playback.isPlaying()
@@ -4146,14 +4138,9 @@ function render() {
   if (freePlanchetteVisible && interaction.cursorWorld) {
     const cursorWorld = interaction.cursorWorld;
     const cursorScreenX = viewport.worldToScreen(cursorWorld.x, 0).sx;
-    const snapConfig = {
-      enabled: state.snapEnabled,
-      subdivisionsPerBeat: getAdaptiveSubdivisions(viewport.state.zoomX),
-      scaleRoot: state.scaleRoot,
-      scale: state.scaleId ? getScaleById(state.scaleId) ?? null : null,
-      hidePitchLines: state.hidePitchLines,
-    };
-    const snapped = snapToGrid(0, cursorWorld.y, snapConfig);
+    // Same snap config the preview tone is tuned with (guides and Prism
+    // echoes included), so the dot sits where the pitch you hear is (14.4).
+    const snapped = snapToGrid(0, cursorWorld.y, buildSnapConfig(viewport.state.zoomX, cursorWorld.x));
     renderFreePlanchette(
       fgCtx, viewport, cursorScreenX, snapped.wy,
       cursorWorld.y, rect.height,
@@ -4282,6 +4269,10 @@ store.subscribe(() => {
     magneticDampingSlider.value = String(appState.magneticDamping);
     magneticDampingValue.textContent = formatDamping(appState.magneticDamping);
   }
+  // The tool can change from several places (hotkeys, track click, Ctrl-hold
+  // in interaction.ts), so the panel follows the store rather than each caller
+  // remembering to update it (BACKLOG 14.2).
+  toolPanel.updateTool(appState.activeTool);
   metronome.setEnabled(appState.metronomeEnabled);
   metronome.setVolume(appState.metronomeVolume);
   syncCompositionDerived();
@@ -4290,20 +4281,21 @@ store.subscribe(() => {
   renderToolPropertyPanel(document.getElementById('tool-prop-content')!);
   updateRecordButtonVisuals();
   // Keep Play/Pause buttons in sync with playback state — covers transitions that
-  // don't flow through startPlayback() (e.g. gliss countdown → playing).
+  // don't flow through startPlayback() (e.g. record countdown → playing).
   updatePlayState(store.getState().playback.state === 'playing');
 
   // Keep the active loop/auto-stop range in sync with the composition's loop markers
   // (so dragging a marker mid-play takes effect on the next wrap).
-  // Skip in glissandograph mode (its play range is owned by gliss.startPlayback()).
-  // Also skip while Compose is recording — the recording play-range is a large
-  // "effectively infinite" endBeat set by startComposePerformPlayback() so the canvas
-  // can scroll past composition end; shrinking it here would auto-stop mid-record.
-  if (playback.isPlaying()
-      && !store.getState().performance.recordArmed) {
+  // Skip entirely while recording: the recording play-range is an open-ended
+  // endBeat set by startComposePerformPlayback() so the canvas can scroll past
+  // composition end; shrinking it here would auto-stop mid-record. An un-looped
+  // jam is open-ended the same way — clamping it to the composition length
+  // stopped the transport at the end of existing content (BACKLOG 14.7).
+  const perf = store.getState().performance;
+  if (playback.isPlaying() && !perf.recordArmed) {
     if (playback.isLoopEnabled()) {
       playback.setPlayRange(comp.loopStartBeats, comp.loopEndBeats);
-    } else {
+    } else if (!perf.jamActive) {
       playback.setPlayRange(0, getCompositionLength(comp));
     }
   }

@@ -19,6 +19,11 @@ const DYNAMICS_EPSILON = 0.005;
 /** Ramp length for a dynamics update — long enough to avoid zipper noise,
  *  short enough that the swell tracks the key. */
 const DYNAMICS_RAMP = 0.02;
+/** Time constant for live pitch updates (BACKLOG 14.3). Updates arrive at
+ *  mouse / frame rate (~8–17 ms apart); gliding toward each one instead of
+ *  stepping smooths the staircase while adding only a few ms of lag. Interim
+ *  until the AudioWorklet voice (BACKLOG 15.7) smooths at audio rate. */
+const LIVE_PITCH_GLIDE_S = 0.008;
 
 const DEFAULT_VOICE: VoiceId = 'primary';
 
@@ -120,7 +125,7 @@ export function createPreviewManager(): PreviewManager {
     updateDrawPitch(noteNumber: number, voiceId: VoiceId = DEFAULT_VOICE) {
       const synth = drawSynths.get(voiceId);
       if (synth) {
-        synth.setFrequency(centsToFrequency(noteNumber));
+        synth.glideFrequency(centsToFrequency(noteNumber), LIVE_PITCH_GLIDE_S);
       }
     },
 

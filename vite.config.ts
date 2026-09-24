@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, configDefaults } from 'vitest/config';
 
 export default defineConfig({
   root: '.',
@@ -7,5 +7,10 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+  },
+  test: {
+    // Agent worktrees live under .claude/worktrees and carry their own copies
+    // of the test files — never run those from the main checkout (BACKLOG 14.5).
+    exclude: [...configDefaults.exclude, '.claude/**'],
   },
 });
