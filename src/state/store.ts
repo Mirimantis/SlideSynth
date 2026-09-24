@@ -1,10 +1,11 @@
-import type { AppState, BezierCurve, Composition, GuideDefinition, PerformancePhase, PassRecordState, PlanchetteState, SnapSettings, ToolMode, PlaybackState, ViewportState, HarmonicPrismMode, DynamicsSource } from '../types';
+import type { AppState, BezierCurve, Composition, GuideDefinition, PlanchetteState, SnapSettings, ToolMode, TransportState, ViewportState, HarmonicPrismMode, DynamicsSource } from '../types';
 import { DYNAMICS_SOURCES } from '../types';
 import { createComposition } from '../model/composition';
 import { createTrack } from '../model/track';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 import { batch, signal, type Signal } from './reactive';
+import { TRANSPORT_STOPPED } from './transport';
 
 // ── How the store works (BACKLOG 15.1) ─────────────────────────────
 // Reads are unchanged: `store.getState().x`. Underneath, every top-level field
@@ -205,12 +206,8 @@ function createInitialState(): RawState {
     selectedPointKeys: new Set(),
     selectedGuideId: null,
     activeTool: 'draw',
+    transport: { ...TRANSPORT_STOPPED },
     performance: {
-      phase: 'idle',
-      recordArmed: false,
-      passRecordState: 'off',
-      jamActive: false,
-      countdownStartedAt: 0,
       lmbSounding: false,
       planchettes: [createInitialPrimaryPlanchette(null)],
       currentRecordedCurveIds: { primary: null },
@@ -222,7 +219,6 @@ function createInitialState(): RawState {
       zoomY: DEFAULT_ZOOM_Y,
     },
     playback: {
-      state: 'stopped',
       positionBeats: 0,
     },
     loopEnabled: false,
@@ -464,29 +460,15 @@ class Store {
     this.touch('activeTool');
   }
 
-  setPerformPhase(phase: PerformancePhase) {
-    this.state.performance.phase = phase;
-    this.touch('performance');
-  }
-
-  setPerformArmed(on: boolean) {
-    this.state.performance.recordArmed = on;
-    this.touch('performance');
-  }
-
-  /** Deliberate one-pass record state (BACKLOG 10.5). */
-  setPassRecordState(state: PassRecordState) {
-    if (this.state.performance.passRecordState === state) return;
-    this.state.performance.passRecordState = state;
-    this.touch('performance');
-  }
-
-  /** Toggle the free-running jam clock (BACKLOG 10.1). Distinct from
-   *  setPerformArmed — jam rolls the transport without capturing. */
-  setJamActive(on: boolean) {
-    if (this.state.performance.jamActive === on) return;
-    this.state.performance.jamActive = on;
-    this.touch('performance');
+  /** Replace the transport state (BACKLOG 15.2). Only the transport
+   *  controller in main.ts calls this, with a state produced by
+   *  `transition()` in ./transport. */
+  setTransport(next: TransportState) {
+    const t = this.state.transport;
+    if (t.mode === next.mode && t.clock === next.clock && t.capture === next.capture
+        && t.countdownStartedAt === next.countdownStartedAt) return;
+    this.state.transport = { ...next };
+    this.touch('transport');
   }
 
   /** Arm a track for MIDI input recording. Mutually exclusive — passing a
@@ -500,11 +482,6 @@ class Store {
 
   setPerformLmbSounding(on: boolean) {
     this.state.performance.lmbSounding = on;
-    this.touch('performance');
-  }
-
-  setPerformCountdownStartedAt(t: number) {
-    this.state.performance.countdownStartedAt = t;
     this.touch('performance');
   }
 
@@ -718,11 +695,6 @@ class Store {
     this.state.composition.beatsPerMeasure = numerator;
     this.state.composition.timeSignatureDenominator = denominator;
     this.touch('composition');
-  }
-
-  setPlaybackState(ps: PlaybackState) {
-    this.state.playback.state = ps;
-    this.touch('playback');
   }
 
   setPlaybackPosition(beats: number) {

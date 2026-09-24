@@ -85,6 +85,18 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - Do the Pointer Events migration here; it is the first half of 11.3.
   - Replace the stringly `curveId:idx` point-selection keys with a structured type (deferred from 15.1).
   - Phase 16 may simplify the mode set, so keep the transitions easy to reshape.
+  - *Shipping in two parts.*
+    - **Part 1 — state machine (done, this PR):**
+      - `src/state/transport.ts` is a pure `transition(state, event)` over one `TransportState` (mode × clock × capture), with the whole transition table under test.
+      - One `transport(event)` controller in `main.ts` runs each change's side effects. It replaces `composeToggleArmed`, `jamToggle`, `toggleRecordNextPass`, `startComposePerformPlayback`, `composePerformStop` and `startPlayback`.
+      - Buttons, hotkeys, the count-in, loop wraps, the AFK timer and the engine running out all dispatch events.
+    - **Part 2 — still open:** the single input router, Pointer Events, and structured point-selection keys.
+  - *Fixed in part 1:*
+    - Plain Play never entered the perform phase, so a phrase held across the loop seam wasn't sealed there, and an armed MIDI track captured nothing during plain Play (help already said it would).
+    - Pause or Space during a queued pass left the pass queued on a paused transport.
+    - Opening a file or importing MIDI mid-session left Jam / Record flags set.
+    - Scrubbing the ruler during looped playback resumed without the loop.
+  - *Behaviour change:* Shift+R during an open-ended recording used to queue a pass that later disarmed the recording. It now does nothing, with a toast; R still takes over a queued pass.
 - [ ] **15.3 Break up `main.ts`** *(L)*
   - **Layout:** move the HTML template into components (15.4).
   - **Keyboard map:** turn it into a **command registry**, one table of named commands with their bindings. Buttons, menus, the context menu and the help.html shortcut table all read from it.

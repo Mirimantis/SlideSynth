@@ -65,10 +65,10 @@ describe('store reactivity (BACKLOG 15.1)', () => {
 
   it('state objects keep stable references across setters', () => {
     const perf = store.getState().performance;
-    store.setJamActive(true);
+    store.setPerformLmbSounding(true);
     expect(store.getState().performance).toBe(perf);
-    expect(perf.jamActive).toBe(true);
-    store.setJamActive(false);
+    expect(perf.lmbSounding).toBe(true);
+    store.setPerformLmbSounding(false);
   });
 
   it('getState() values cannot be assigned directly', () => {

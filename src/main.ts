@@ -66,12 +66,13 @@ import iconRecord from './assets/icons/record.svg?raw';
 import iconJam from './assets/icons/jam.svg?raw';
 import iconKeep from './assets/icons/keep.svg?raw';
 import iconLoop from './assets/icons/loop.svg?raw';
-import { canOpenLayer, createLayerTrack, newestLayerTrack, nextPassRecordState, LAYER_TRACK_LIMIT } from './model/layer';
+import { canOpenLayer, createLayerTrack, newestLayerTrack, LAYER_TRACK_LIMIT } from './model/layer';
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
 import { effect, watch } from './state/reactive';
 import { escapeHtml, setHtmlIfChanged } from './utils/dom-helpers';
-import type { AppState, ToolMode, BezierCurve } from './types';
+import type { AppState, ToolMode, BezierCurve, TransportState } from './types';
+import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, isJamming, passRecordState, performPhase } from './state/transport';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -542,7 +543,7 @@ let spaceHoldTimer: number | null = null;
 function activateSpacePreview() {
   spaceHoldTimer = null;
   const state = store.getState();
-  if (state.performance.recordArmed) return;
+  if (isRecordArmed(state.transport)) return;
   const inDrawContext = state.activeTool === 'draw'
     && interaction.cursorInCanvas
     && interaction.cursorScreenY >= RULER_HEIGHT
@@ -573,21 +574,13 @@ function activateSpacePreview() {
   }
 }
 
-/** Short-tap action: stop recording/jam if active, else toggle play/pause. */
+/** Short-tap action: pause plain playback (a jam or recording stops instead),
+ *  cancel a count-in, or start playing. */
 function handleSpaceTap() {
-  const state = store.getState();
-  if (state.performance.recordArmed || state.performance.jamActive) {
-    composePerformStop();
-    store.setPlaybackState('stopped');
-    return;
-  }
-  if (playback.isPlaying()) {
-    playback.pause();
-    store.setPlaybackState('paused');
-    updatePlayState(false);
-  } else {
-    startPlayback();
-  }
+  const t = store.getState().transport;
+  if (isRolling(t)) transport({ type: 'pause' });
+  else if (t.mode === 'countdown') transport({ type: 'escape' });
+  else transport({ type: 'play' });
 }
 
 // ── Interaction ─────────────────────────────────────────────────
@@ -610,7 +603,7 @@ const interaction = createInteraction(fgCanvas, viewport, {
       // Audible ruler-scrub: play the whole composition at the playhead so the user
       // can hear what's under the cursor as they drag. Skip while Record is armed
       // (the armed session already owns audio).
-      if (!store.getState().performance.recordArmed && !preview.isScrubPreviewActive()) {
+      if (!isRecordArmed(store.getState().transport) && !preview.isScrubPreviewActive()) {
         preview.startScrubPreview(store.getComposition());
         preview.updateScrubPosition(beats, store.getComposition());
         rulerScrubPreviewActive = true;
@@ -626,9 +619,9 @@ const interaction = createInteraction(fgCanvas, viewport, {
         preview.stopScrubPreview();
         rulerScrubPreviewActive = false;
       }
-      if (scrubWasPlaying) {
-        playback.play(store.getComposition(), beats);
-      }
+      // Resume through the same range logic as Play, so a scrub during
+      // looped playback keeps looping.
+      if (scrubWasPlaying) playEngineFrom(store.getState().transport, beats);
     }
   },
   onCursorMove(worldX, worldY, _screenY) {
@@ -664,15 +657,11 @@ const interaction = createInteraction(fgCanvas, viewport, {
 // ── Playback engine ─────────────────────────────────────────────
 const playback = createPlaybackEngine((beats) => {
   store.setPlaybackPosition(beats);
-  // Detect when playback auto-stopped (reached end without loop).
-  if (!playback.isPlaying() && store.getState().playback.state === 'playing') {
-    store.setPlaybackState('stopped');
-    updatePlayState(false);
-    // Return Performance state to idle.
-    if (store.getState().performance.phase === 'playing') {
-      store.setPerformPhase('idle');
-      store.setPerformArmed(false);
-    }
+  // The engine ran out of range (end of content, Loop off): end the session.
+  // Ignored while a transport change is being applied — starting or stopping
+  // the engine reports positions too, and those aren't the engine running out.
+  if (!applyingTransport && !playback.isPlaying() && isRolling(store.getState().transport)) {
+    transport({ type: 'stop' });
   }
 });
 
@@ -902,7 +891,7 @@ function minPanOffsetX(canvasWidth: number): number {
 /** True when a Scroll-Canvas Playback state hijacks LMB for Perform. The tool
  *  handlers in interaction.ts ask this same function (BACKLOG 14.1). */
 function isComposePerformActive(): boolean {
-  return isPerformInputActive(store.getState(), playback.isPlaying());
+  return isPerformInputActive(store.getState());
 }
 
 function updatePlayState(playing: boolean) {
@@ -912,25 +901,24 @@ function updatePlayState(playing: boolean) {
 
 function updateRecordButtonVisuals() {
   const st = store.getState();
-  const g = st.performance;
+  const t = st.transport;
 
   btnRecord.removeAttribute('hidden');
   // Queued (10.5) is its own state: waiting for the loop point, not yet capturing.
-  const queued = g.passRecordState === 'queued';
-  btnRecord.classList.toggle('queued', queued);
-  btnRecord.classList.toggle('armed', !queued && g.recordArmed && g.phase !== 'playing');
-  btnRecord.classList.toggle('recording', !queued && g.recordArmed && g.phase === 'playing');
+  btnRecord.classList.toggle('queued', passRecordState(t) === 'queued');
+  btnRecord.classList.toggle('armed', t.mode === 'countdown');
+  btnRecord.classList.toggle('recording', isCapturing(t));
   btnRecord.disabled = st.selectedTrackId === null;
 
-  btnJam.classList.toggle('jamming', g.jamActive);
+  btnJam.classList.toggle('jamming', isJamming(t));
   // A record session owns the transport; jam can't start (or stop) under it.
-  btnJam.disabled = g.recordArmed || g.phase === 'countdown';
+  btnJam.disabled = isRecordArmed(t);
 
   lockRailToggle.checked = st.scrollCanvasEnabled;
   layerToggle.checked = st.layerModeEnabled;
 
   // Lock loop toggle while recording — both controls that expose it.
-  const loopLocked = g.recordArmed && g.phase === 'playing';
+  const loopLocked = isCapturing(t);
   loopToggle.disabled = loopLocked;
   loopToggleBtn.disabled = loopLocked;
 }
@@ -969,90 +957,25 @@ function updateBpm(bpm: number) {
   bpmInput.value = String(bpm);
 }
 
-/** Resolve the current loop range from the composition. */
-function getLoopRange(): { start: number; end: number } {
-  const comp = store.getComposition();
-  return { start: comp.loopStartBeats, end: comp.loopEndBeats };
-}
+btnPlay.addEventListener('click', () => transport({ type: 'play' }));
 
-/** Start playback. When Loop is on, use the composition's loop markers as the play range. */
-function startPlayback() {
-  if (previewActive) { preview.stopAll(); previewActive = false; }
-  const state = store.getState();
-  // When Scroll Canvas is on, the user sees a stationary rail — Play should start
-  // from whatever beat sits under the rail right now, not from the stored position.
-  // With the toggle off, fall back to the classic stored playhead position.
-  const r = canvasContainer.getBoundingClientRect();
-  const railBeat = Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
-  const pos = state.scrollCanvasEnabled ? railBeat : state.playback.positionBeats;
-  let startBeat: number;
-  let endBeat: number | undefined;
-  let loopStart: number | undefined;
-  if (store.getState().loopEnabled) {
-    const range = getLoopRange();
-    // Resume from current position if it's inside the loop; else start at loopStart.
-    startBeat = (pos > range.start && pos < range.end) ? pos : range.start;
-    endBeat = range.end;
-    loopStart = range.start;
-  } else {
-    startBeat = pos;
-    endBeat = undefined;
-    loopStart = 0;
-  }
-  playback.play(state.composition, startBeat, endBeat, loopStart);
-  if (!playback.isPlaying()) return;
-  store.setPlaybackState('playing');
-  updatePlayState(true);
-  // Snap the viewport on the first frame of scrolling playback so there's no flash
-  // of the old static offset before the render loop takes over.
-  if (state.scrollCanvasEnabled) {
-    const r = canvasContainer.getBoundingClientRect();
-    scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
-    bgDirty = true;
-  }
-}
-
-btnPlay.addEventListener('click', () => {
-  startPlayback();
-});
-
-btnPause.addEventListener('click', () => {
-  // During recording, pause means "end the recording session" —
-  // otherwise the record would silently continue on next play. Same for jam:
-  // a free-running clock has no meaningful paused state to resume into.
-  const g = store.getState().performance;
-  if (g.recordArmed || g.jamActive) {
-    composePerformStop();
-    return;
-  }
-  playback.pause();
-  store.setPlaybackState('paused');
-  updatePlayState(false);
-});
+// Pause: plain playback pauses; a jam, recording or queued pass ends instead —
+// a free-running clock or a capture has no meaningful paused state to resume.
+btnPause.addEventListener('click', () => transport({ type: 'pause' }));
 
 btnStop.addEventListener('click', () => {
-  // Cleanly end any active Perform/Record session AND stop playback.
-  const g = store.getState().performance;
-  if (g.phase !== 'idle' || g.recordArmed) {
-    composePerformStop();
-  } else {
-    playback.stop();
-  }
-  store.setPlaybackState('stopped');
+  transport({ type: 'stop' });
+  // Stop also rewinds the classic playhead, even when already stopped.
   store.setPlaybackPosition(0);
-  updatePlayState(false);
 });
 
 btnRecord.addEventListener('click', (e) => {
-  if (store.getState().selectedTrackId === null) return; // no track to record onto
   // Shift+click mirrors Shift+R — one obvious place for both record styles.
   if (e.shiftKey) toggleRecordNextPass();
-  else composeToggleArmed();
+  else toggleRecord();
 });
 
-btnJam.addEventListener('click', () => {
-  jamToggle();
-});
+btnJam.addEventListener('click', () => transport({ type: 'toggle-jam' }));
 
 btnKeep.addEventListener('click', () => {
   keepLastPhrase();
@@ -1790,10 +1713,11 @@ addFileMenuItem('Load Composition', async () => {
     // .gliss is the native format; .json accepts legacy flat saves.
     const json = await openFile('.gliss,.json');
     const comp = deserializeComposition(json);
+    // Stop first so anything a running session captured commits into the
+    // composition the undo snapshot below preserves.
+    transport({ type: 'stop' });
     history.snapshot();
-    playback.stop();
     store.loadComposition(comp);
-    updatePlayState(false);
     nameInput.value = comp.name || 'Untitled';
   } catch (e) {
     console.error('Failed to load:', e);
@@ -1804,10 +1728,9 @@ addFileMenuItem('Import MIDI', async () => {
   try {
     const buffer = await openBinaryFile('.mid,.midi');
     const comp = midiToComposition(buffer);
+    transport({ type: 'stop' });
     history.snapshot();
-    playback.stop();
     store.loadComposition(comp);
-    updatePlayState(false);
     nameInput.value = comp.name || 'Untitled';
   } catch (e) {
     console.error('MIDI import failed:', e);
@@ -1974,16 +1897,15 @@ window.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     if (e.repeat) return;
-    if (store.getState().selectedTrackId === null) return;
     // Shift+R = deliberate one-pass record (10.5); plain R = open-ended record.
     if (e.shiftKey) toggleRecordNextPass();
-    else composeToggleArmed();
+    else toggleRecord();
     return;
   }
   if (e.key.toLowerCase() === 'j' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     if (e.repeat) return;
-    jamToggle();
+    transport({ type: 'toggle-jam' });
     return;
   }
   if (e.key.toLowerCase() === 'k' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -2009,12 +1931,12 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape') {
-    const g = store.getState().performance;
-    if (g.phase === 'countdown' || g.recordArmed || g.jamActive) {
+    // Escape stops a count-in, a recording or a jam; otherwise it falls
+    // through to clearing Prism projection.
+    const before = store.getState().transport;
+    transport({ type: 'escape' });
+    if (store.getState().transport !== before) {
       e.preventDefault();
-      composePerformStop();
-      store.setPlaybackState('stopped');
-      updatePlayState(false);
       return;
     }
     // Clear Harmonic Prism projection if it's the only thing active.
@@ -2644,7 +2566,7 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
   // instrument: scroll-canvas playback (jam / perform / record) or an armed
   // session hovering before playback starts (idle-armed, countdown). Edit
   // tools and the free-planchette draw preview keep instant snap.
-  const performContext = isComposePerformActive() || st.performance.recordArmed;
+  const performContext = isComposePerformActive() || isRecordArmed(st.transport);
 
   // Magnetic mode: spring-mass physics. The attractor only acts when the
   // cursor is inside its well; outside, the particle falls back to
@@ -2850,7 +2772,7 @@ function parseHarmonyIndex(voiceId: string): number | null {
 function syncHarmonyPlanchettes() {
   const st = store.getState();
   const wantHarmonies = st.harmonicPrism.drawMode &&
-    (playback.isPlaying() || st.performance.recordArmed);
+    (playback.isPlaying() || isRecordArmed(st.transport));
 
   if (!wantHarmonies) {
     for (const p of st.performance.planchettes) {
@@ -2945,7 +2867,9 @@ function captureComposeRecordingSample() {
   // perform context and a running transport. Silent cursor movement is never
   // captured: "what was just played" means what was heard.
   const lmbActive = composeEngine.isLmbDown();
-  const midiActive = st.midiArmedTrackId !== null && g.phase === 'playing';
+  // Any rolling transport captures an armed MIDI track — plain Play included,
+  // which used to spawn the note planchettes but never record them (15.2).
+  const midiActive = st.midiArmedTrackId !== null && isRolling(st.transport);
   if (!lmbActive && !midiActive) return;
   const beat = playback.getPositionBeats();
   // Capture every active voice (primary + any chord-cluster harmonies + every
@@ -3271,10 +3195,10 @@ function curveDurationBeats(curve: import('./types').BezierCurve): number {
 
 function tickComposePerform() {
   const st = store.getState();
-  const g = st.performance;
-  // Treat MIDI-armed as record-armed for engine purposes (countdown, AFK gate)
-  // so the player gets the same affordances when arming via MIDI alone.
-  const anyArmed = g.recordArmed || st.midiArmedTrackId !== null;
+  const t = st.transport;
+  // Treat MIDI-armed as record-armed for engine purposes (AFK gate) so the
+  // player gets the same affordances when arming via MIDI alone.
+  const anyArmed = isRecordArmed(t) || st.midiArmedTrackId !== null;
   const playbackBeat = playback.getPositionBeats();
 
   // Keep the AFK timer fresh while there's a meaningful reason to keep waiting:
@@ -3282,9 +3206,9 @@ function tickComposePerform() {
   // crossed the rightmost control point yet (still future content to record over).
   // Refresh per tick so the user gets a full afkTimeoutMs window after the
   // suppressing condition lifts, instead of an immediate auto-stop.
-  if (anyArmed && g.phase === 'playing' && playback.isPlaying()) {
+  if (anyArmed && isRolling(t) && playback.isPlaying()) {
     const rightmost = getCompositionLength(st.composition);
-    if (store.getState().loopEnabled || playbackBeat < rightmost) {
+    if (st.loopEnabled || playbackBeat < rightmost) {
       composeEngine.markActivity(performance.now());
     }
   }
@@ -3293,17 +3217,17 @@ function tickComposePerform() {
   // un-armed jam gets the long jam timeout; anything else never auto-stops.
   const idleTimeoutMs = anyArmed
     ? composeEngine.getAfkTimeoutMs()
-    : (g.jamActive ? JAM_IDLE_TIMEOUT_MS : Infinity);
+    : (isJamming(t) ? JAM_IDLE_TIMEOUT_MS : Infinity);
 
   composeEngine.tick({
     now: performance.now(),
     audioNow: getAudioContext().currentTime,
     isPlaying: playback.isPlaying(),
-    phase: g.phase,
+    phase: performPhase(t),
     idleTimeoutMs,
-    countdownStartedAt: g.countdownStartedAt,
+    countdownStartedAt: t.countdownStartedAt,
     playbackBeat,
-    onCountdownElapsed: startComposePerformPlayback,
+    onCountdownElapsed: () => transport({ type: 'countdown-elapsed' }),
     onLoopWrap: () => {
       // Seal phrases at the seam so none ever spans the loop boundary — a
       // phrase containing the wrap would carry a backwards beat jump and
@@ -3312,7 +3236,7 @@ function tickComposePerform() {
       // gesture across the seam keeps as two contiguous curves. This is the
       // un-armed mirror of the armed 8.21 behaviour below.
       closeLmbPhrases();
-      if (g.recordArmed && composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
+      if (isCapturing(store.getState().transport) && composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
       // Loop wrap during sustained MIDI notes splits the curves at the wrap so
       // recordings don't cross the loop boundary as a single curve. Keep the
       // planchettes around so capture continues for still-held keys on the
@@ -3321,17 +3245,10 @@ function tickComposePerform() {
       // already does. (BACKLOG 8.21)
       finalizeAllInFlightMidiVoices({ keepPlanchette: true });
 
-      // Deliberate one-pass record (BACKLOG 10.5): a queued arm starts here,
-      // a pass in progress ends here. Runs after the commits above so the
-      // finishing pass's material is captured before we disarm.
-      const passState = store.getState().performance.passRecordState;
-      if (passState !== 'off') {
-        const next = nextPassRecordState(passState);
-        store.setPassRecordState(next);
-        store.setPerformArmed(next === 'recording');
-        if (next === 'recording') showToast('Recording this pass', 1500);
-        else showToast('Pass recorded', 2000);
-      }
+      // Deliberate one-pass record (BACKLOG 10.5): a queued pass starts here,
+      // a pass in progress ends here. After the commits above, so the
+      // finishing pass's material is captured before capture stops.
+      transport({ type: 'loop-wrap' });
 
       // One pass = one layer (BACKLOG 10.3): closing the layer here means the
       // next commit opens a fresh one. Deliberately AFTER the commits above —
@@ -3339,211 +3256,152 @@ function tickComposePerform() {
       // NEXT pass's layer, and anything kept during that pass would join it.
       currentLayerTrackId = null;
     },
-    onAfkTimeout: composePerformStop,
+    onAfkTimeout: () => transport({ type: 'stop' }),
   });
 }
 
-function startComposePerformPlayback() {
-  const st = store.getState();
-  const comp = st.composition;
-  // Record forces Scroll Canvas on, so the rail is visible. Start from whichever beat
-  // the user sees under the rail right now rather than the stored position.
-  const r = canvasContainer.getBoundingClientRect();
-  let startBeat = Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
-  let endBeat: number;
-  let loopStart = 0;
-  // With Loop on: respect the composition's loop range so the performance wraps and
-  // the engine's loop-wrap detection fires (planchette flash + finalize current curve).
-  // With Loop off: extend end far past content so the canvas keeps scrolling during recording.
-  if (store.getState().loopEnabled) {
-    const lStart = comp.loopStartBeats;
-    const lEnd = comp.loopEndBeats;
-    if (startBeat < lStart || startBeat >= lEnd) startBeat = lStart;
-    endBeat = lEnd;
-    loopStart = lStart;
-  } else {
-    endBeat = OPEN_END_BEAT;
+// ── Transport controller (BACKLOG 15.2) ─────────────────────────
+// Every transport change goes through `transport(event)`: the pure state
+// machine in state/transport.ts picks the next state, the store takes it, and
+// `applyTransportEffects` does what the change means for audio, capture and
+// the view. Buttons, hotkeys, the count-in, loop wraps, the AFK timer and the
+// playback engine running out all dispatch events rather than setting flags.
+
+/** True while `transport()` applies a change — see the playback engine's
+ *  position callback. */
+let applyingTransport = false;
+
+function transport(event: TransportEvent): void {
+  const prev = store.getState().transport;
+  const next = transition(prev, event);
+  if (next === prev) return;
+  // Commit first: the effects (and anything they trigger) read the new mode.
+  store.setTransport(next);
+  applyingTransport = true;
+  try {
+    applyTransportEffects(prev, next, event);
+  } finally {
+    applyingTransport = false;
   }
-  playback.play(comp, startBeat, endBeat, loopStart);
-  store.setPlaybackState('playing');
-  store.setPerformPhase('playing');
-  composeEngine.startSession(performance.now());
-  resetLayerSession();
-  updatePlayState(true);
-  // Snap viewport immediately to avoid first-frame flash.
-  scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
-  bgDirty = true;
 }
 
-function composeToggleArmed() {
-  if (store.getState().selectedTrackId === null) return;
-  const g = store.getState().performance;
-
-  // Plain R takes over from a queued one-pass arm (10.5) rather than running
-  // both — otherwise the pass's end-of-loop disarm would silently stop an
-  // open-ended recording the user started afterwards.
-  if (g.passRecordState !== 'off') store.setPassRecordState('off');
-
-  // Recording → full stop: commit any in-progress curve, stop playback, return to idle.
-  if (g.phase === 'playing' && g.recordArmed) {
-    composePerformStop();
-    store.setPlaybackState('stopped');
-    return;
+function applyTransportEffects(prev: TransportState, next: TransportState, event: TransportEvent): void {
+  switch (next.mode) {
+    case 'stopped':
+      endPerformSession(prev);
+      return;
+    case 'paused':
+      playback.pause();
+      return;
+    case 'countdown':
+      ensureResumed();
+      composeEngine.startSession(performance.now());
+      return;
+    case 'playing':
+      break;
   }
 
-  // Countdown → cancel back to idle.
-  if (g.phase === 'countdown') {
-    store.setPerformArmed(false);
-    store.setPerformCountdownStartedAt(0);
-    store.setPerformPhase('idle');
-    return;
-  }
-
-  // Playback already running (classic or Perform) → arm immediately, no countdown.
-  // Set perform phase to 'playing' so the render loop captures samples. Extend the
-  // play range if looping is off so recording can continue past composition end.
-  if (playback.isPlaying()) {
+  if (prev.mode !== 'playing') {
+    // Starting to roll: from stopped, paused, or the end of a count-in.
     ensureResumed();
-    store.setPerformArmed(true);
-    store.setPerformPhase('playing');
-    composeEngine.startSession(performance.now());
-    if (!store.getState().loopEnabled) {
-      playback.setPlayRange(0, OPEN_END_BEAT);
+    if (!startRolling(next)) {
+      store.setTransport(TRANSPORT_STOPPED);
+      endPerformSession(next);
+      return;
     }
+    composeEngine.startSession(performance.now());
+    resetLayerSession();
+    if (next.capture === 'pass-recording') showToast('Recording this pass', 1500);
     return;
   }
 
-  // Truly idle → start countdown + Perform-playback flow.
-  ensureResumed();
-  store.setPerformArmed(true);
-  store.setPerformCountdownStartedAt(getAudioContext().currentTime);
-  store.setPerformPhase('countdown');
-  composeEngine.startSession(performance.now());
-}
-
-/**
- * Deliberate "record next full pass" (BACKLOG 10.5) — the structured
- * counterpart to retrospective keep. Arms exactly one loop pass: recording
- * starts at the loop point and auto-commits and disarms at the next one.
- */
-function toggleRecordNextPass() {
-  const g = store.getState().performance;
-
-  // Already armed or running → cancel. Anything captured so far commits, the
-  // same as stopping an ordinary recording.
-  if (g.passRecordState !== 'off') {
-    if (g.passRecordState === 'recording') {
+  // Already rolling: the clock or capture changed. The play-range watch at the
+  // end of the file re-opens the range for jams and recordings.
+  if (prev.clock !== next.clock) {
+    // Jam converts a running playback: a fresh session, so its idle timer
+    // starts now and the next pass opens a new layer.
+    ensureResumed();
+    composeEngine.startSession(performance.now());
+    resetLayerSession();
+  }
+  if (next.capture === 'armed' && prev.capture !== 'armed') {
+    ensureResumed();
+    composeEngine.startSession(performance.now());
+  }
+  if (next.capture === 'pass-queued' && prev.capture === 'none') {
+    composeEngine.startSession(performance.now());
+    showToast('Armed — recording starts at the loop point', 2500);
+  }
+  if (event.type === 'loop-wrap') {
+    if (next.capture === 'pass-recording') showToast('Recording this pass', 1500);
+    else if (prev.capture === 'pass-recording') showToast('Pass recorded', 2000);
+  }
+  if (event.type === 'toggle-pass-record' && next.capture === 'none') {
+    // Cancelling a pass commits whatever it already captured, like stopping
+    // an ordinary recording.
+    if (prev.capture === 'pass-recording') {
       if (composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
       finalizeAllInFlightMidiVoices({ keepPlanchette: true });
     }
-    store.setPassRecordState('off');
-    store.setPerformArmed(false);
     showToast('Pass record cancelled', 2000);
-    return;
   }
-
-  if (store.getState().selectedTrackId === null) return;
-  ensureResumed();
-
-  // A "pass" is defined by the loop, so turn Loop on rather than refusing —
-  // but say so, since it changes the transport out from under the user.
-  if (!store.getState().loopEnabled) {
-    applyLoopEnabled(true);
-    showToast('Record next Pass: Loop On', 2000);
-  }
-
-  const comp = store.getComposition();
-  if (!playback.isPlaying()) {
-    // From idle: start at the loop point and record that first cycle — it *is*
-    // the full pass, so recording is live immediately rather than queued.
-    const r = canvasContainer.getBoundingClientRect();
-    playback.play(comp, comp.loopStartBeats, comp.loopEndBeats, comp.loopStartBeats);
-    if (!playback.isPlaying()) {
-      showToast('Set a loop range first', 2500);
-      return;
-    }
-    store.setPlaybackState('playing');
-    store.setPerformPhase('playing');
-    store.setPassRecordState('recording');
-    store.setPerformArmed(true);
-    composeEngine.startSession(performance.now());
-    resetLayerSession();
-    updatePlayState(true);
-    scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
-    bgDirty = true;
-    showToast('Recording this pass', 1500);
-    return;
-  }
-
-  // Transport already running → queue it; the wrap handler starts the capture
-  // so the pass is always whole.
-  store.setPerformPhase('playing');
-  composeEngine.startSession(performance.now());
-  store.setPassRecordState('queued');
-  showToast('Armed — recording starts at the loop point', 2500);
 }
 
-/** Toggle the free-running jam clock (BACKLOG 10.1). Starts instantly — no
- *  countdown, nothing armed: the transport rolls open-ended (or around the
- *  loop range when Loop is on), LMB perform sounds tones, magnetic snap is
- *  live, and nothing is recorded until the user arms Record mid-jam. */
-function jamToggle() {
-  const g = store.getState().performance;
-  if (g.jamActive) {
-    composePerformStop();
-    store.setPlaybackState('stopped');
-    return;
-  }
-  // A record session owns the transport — don't fight it.
-  if (g.recordArmed || g.phase === 'countdown') return;
+/** The engine's play range `[wrapTo, end]` for a rolling transport. Loop on:
+ *  the loop markers. Loop off: plain Play ends with the content; jams and every
+ *  kind of capture keep scrolling open-ended. */
+function playRangeFor(t: TransportState): [number, number] {
+  const st = store.getState();
+  const c = st.composition;
+  if (st.loopEnabled) return [c.loopStartBeats, c.loopEndBeats];
+  const openEnded = t.clock === 'jam' || t.capture !== 'none';
+  return [0, openEnded ? OPEN_END_BEAT : getCompositionLength(c)];
+}
 
-  ensureResumed();
-  store.setJamActive(true);
-  if (playback.isPlaying()) {
-    // Convert running playback into a jam: open the end (Loop off) and keep rolling.
-    if (!store.getState().loopEnabled) playback.setPlayRange(0, OPEN_END_BEAT);
-  } else {
-    const comp = store.getComposition();
-    const r = canvasContainer.getBoundingClientRect();
-    // Jam forces the scrolling view (effectiveScrollCanvas), so start from the
-    // beat the user sees under the rail — same convention as Record.
-    let startBeat = Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
-    let endBeat = OPEN_END_BEAT;
-    let loopStart = 0;
-    if (store.getState().loopEnabled) {
-      const lStart = comp.loopStartBeats;
-      const lEnd = comp.loopEndBeats;
-      if (startBeat < lStart || startBeat >= lEnd) startBeat = lStart;
-      endBeat = lEnd;
-      loopStart = lStart;
-    }
-    playback.play(comp, startBeat, endBeat, loopStart);
-    // play() can decline (empty range, bad bounds). Without this guard the UI
-    // would show a lit Jam button and a "playing" transport while the clock
-    // never actually runs — mirrors the same check in startPlayback().
-    if (!playback.isPlaying()) {
-      store.setJamActive(false);
-      return;
-    }
-    store.setPlaybackState('playing');
-    updatePlayState(true);
-    // Snap viewport immediately to avoid first-frame flash.
+/** Run the engine from `pos` for transport `t` — pulled into the loop when
+ *  Loop is on. False if the engine declined (empty or inverted range). */
+function playEngineFrom(t: TransportState, pos: number): boolean {
+  const st = store.getState();
+  const [wrapTo, end] = playRangeFor(t);
+  const startBeat = st.loopEnabled && (pos < wrapTo || pos >= end) ? wrapTo : pos;
+  playback.play(st.composition, startBeat, end, wrapTo);
+  return playback.isPlaying();
+}
+
+/**
+ * Start the transport for a session that's beginning to roll. Play starts where
+ * the user is looking: under the rail in the scrolling view, else at the stored
+ * playhead. A loop pass always starts at loop-in so the pass is whole. Returns
+ * false if the engine declined.
+ */
+function startRolling(next: TransportState): boolean {
+  if (previewActive) { preview.stopAll(); previewActive = false; }
+  const st = store.getState();
+  const r = canvasContainer.getBoundingClientRect();
+  const railBeat = Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
+  const pos = next.capture === 'pass-recording'
+    ? st.composition.loopStartBeats
+    : effectiveScrollCanvas() ? railBeat : st.playback.positionBeats;
+  if (!playEngineFrom(next, pos)) {
+    if (next.capture === 'pass-recording') showToast('Set a loop range first', 2500);
+    return false;
+  }
+  // Snap the viewport on the first frame of scrolling playback so there's no
+  // flash of the old static offset before the render loop takes over.
+  if (effectiveScrollCanvas()) {
     scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
     bgDirty = true;
   }
-  // Phase 'playing' turns on the engine tick's loop-wrap detection (planchette
-  // flash when jamming over a loop) and the idle-timeout check.
-  store.setPerformPhase('playing');
-  composeEngine.startSession(performance.now());
-  resetLayerSession();
+  return true;
 }
 
-function composePerformStop() {
-  const g = store.getState().performance;
+/** Tear down whatever session `prev` was running: commit what it captured,
+ *  silence it, and stop the transport. */
+function endPerformSession(prev: TransportState): void {
   // Seal in-flight phrases before teardown so a gesture interrupted by Stop
   // stays keepable (the buffer survives the session — BACKLOG 10.2).
   closeLmbPhrases();
-  if (g.phase === 'playing' && g.recordArmed && composeEngine.isLmbDown()) {
+  if (isCapturing(prev) && composeEngine.isLmbDown()) {
     finalizeComposeRecordedCurves();
   }
   // Finalize any in-flight MIDI voices before tearing down — otherwise their
@@ -3553,18 +3411,40 @@ function composePerformStop() {
     stopComposePerformSounding();
   }
   preview.stopDrawPreview('primary');
-  if (playback.isPlaying()) playback.stop();
+  playback.stop();
   composeEngine.stopSession();
   // The next session starts from rest, not from wherever the swell was left.
   dynamics.reset();
-  store.setPerformPhase('idle');
-  store.setPerformArmed(false);
-  store.setJamActive(false);
-  store.setPassRecordState('off');
   resetLayerSession();
-  store.setPerformCountdownStartedAt(0);
   store.setPerformLmbSounding(false);
-  updatePlayState(false);
+}
+
+/** R / the Record button. Needs a track to record onto. */
+function toggleRecord(): void {
+  if (store.getState().selectedTrackId === null) return;
+  transport({ type: 'toggle-record', audioNow: getAudioContext().currentTime });
+}
+
+/** Shift+R / Shift+click Record: record exactly the next full loop pass
+ *  (BACKLOG 10.5) — the structured counterpart to retrospective keep. */
+function toggleRecordNextPass(): void {
+  const st = store.getState();
+  const t = st.transport;
+  const cancelling = t.capture === 'pass-queued' || t.capture === 'pass-recording';
+  if (!cancelling) {
+    if (st.selectedTrackId === null) return;
+    if (isRolling(t) && t.capture === 'armed') {
+      showToast('Already recording — press R to stop', 2000);
+      return;
+    }
+    // A "pass" is defined by the loop, so turn Loop on rather than refusing —
+    // but say so, since it changes the transport out from under the user.
+    if (!st.loopEnabled) {
+      applyLoopEnabled(true);
+      showToast('Record next Pass: Loop On', 2000);
+    }
+  }
+  transport({ type: 'toggle-pass-record' });
 }
 
 // Canvas mousedown: intercept LMB for Perform when active.
@@ -3677,7 +3557,7 @@ window.addEventListener('mouseup', (e) => {
   // toggles off, neither of which happens at LMB-up — so the array is stable here.
   // Close first: the phrase must be sealed before either path claims it.
   closeLmbPhrases();
-  if (store.getState().performance.recordArmed) {
+  if (isCapturing(store.getState().transport)) {
     finalizeComposeRecordedCurves();
   }
   // Un-armed perform no longer discards the buffer — the closed phrase stays
@@ -3703,7 +3583,8 @@ function updatePitchHudDom(state: AppState) {
 }
 
 function updateCountdownOverlayDom(state: AppState) {
-  if (state.performance.phase !== 'countdown') {
+  const t = state.transport;
+  if (t.mode !== 'countdown') {
     if (!countdownOverlay.hasAttribute('hidden')) {
       countdownOverlay.setAttribute('hidden', '');
       countdownOverlay.textContent = '';
@@ -3712,8 +3593,8 @@ function updateCountdownOverlayDom(state: AppState) {
   }
   const label = composeEngine.getCountdownLabel(
     getAudioContext().currentTime,
-    state.performance.phase,
-    state.performance.countdownStartedAt,
+    performPhase(t),
+    t.countdownStartedAt,
   );
   if (countdownOverlay.textContent !== label) countdownOverlay.textContent = label;
   countdownOverlay.removeAttribute('hidden');
@@ -3726,9 +3607,9 @@ function updateCountdownOverlayDom(state: AppState) {
  *  inherited automatically — `tickComposePerform` calls `markActivity` every
  *  frame in those cases, so `getIdleMs` stays near zero. */
 function updateAfkWarningDom(state: AppState) {
-  const g = state.performance;
-  const armed = g.recordArmed || state.midiArmedTrackId !== null;
-  const shouldShow = (armed || g.jamActive) && g.phase === 'playing' && playback.isPlaying();
+  const t = state.transport;
+  const armed = isRecordArmed(t) || state.midiArmedTrackId !== null;
+  const shouldShow = (armed || isJamming(t)) && isRolling(t) && playback.isPlaying();
   if (!shouldShow) {
     if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
     return;
@@ -3972,9 +3853,8 @@ function render() {
   // Hidden during Playback / Record / countdown — the rail planchettes show
   // the active or imminent tone positions instead, and a stationary chord
   // preview at the cursor would be visually conflicting.
-  const isPerformActiveOrPending = playback.isPlaying()
-    || state.performance.phase !== 'idle'
-    || state.performance.recordArmed;
+  const isPerformActiveOrPending = state.transport.mode === 'playing'
+    || state.transport.mode === 'countdown';
   if (state.activeTool === 'draw'
       && state.harmonicPrism.drawMode
       && interaction.cursorWorld
@@ -4046,7 +3926,7 @@ function render() {
   const railPlanchetteVisible = railVisible
     && !freePlanchetteVisible
     && (playback.isPlaying()
-        || state.performance.recordArmed
+        || isRecordArmed(state.transport)
         || composeEngine.isLmbDown());
   if (railVisible) {
     if (freePlanchetteVisible) {
@@ -4200,6 +4080,9 @@ if (import.meta.env.DEV) {
     // wrap (the wrap fires from the render loop, which a background tab pins
     // at zero frames).
     dropLastPass, resetLayerSession, passLog,
+    // The transport controller and the per-frame perform tick (count-in, loop
+    // wrap, AFK), so transport flows can be driven with the render loop frozen.
+    transport, tickComposePerform,
     // Live voice counts — the observable for "removing a track stops its sound".
     getActiveSynthCount, getActiveOscillatorCount,
   };
@@ -4247,36 +4130,25 @@ effect(() => renderPropertyPanel(propContentEl));
 effect(() => renderToolPropertyPanel(toolPropContentEl));
 effect(() => updateRecordButtonVisuals());
 
-// Keep Play/Pause buttons in sync with playback state — covers transitions that
-// don't flow through startPlayback() (e.g. record countdown → playing).
-watch(() => store.getState().playback.state === 'playing', updatePlayState);
+// Play/Pause buttons follow the transport.
+watch(() => isRolling(store.getState().transport), updatePlayState);
 
-// Keep the active play range in sync with loop state and the loop markers, so
-// toggling Loop or dragging a marker mid-play takes effect on the next wrap.
-//  - Recording owns its range (open-ended, set by startComposePerformPlayback)
-//    and is left alone; shrinking it would auto-stop mid-record.
-//  - An un-looped jam is open-ended too (BACKLOG 14.7); turning Loop off
-//    mid-jam reopens it rather than clamping to the end of existing content.
+// Keep the engine's play range in step with the transport, Loop and the loop
+// markers, so toggling Loop, dragging a marker, or arming mid-play takes
+// effect on the next wrap. Loop on: the markers. Loop off: plain Play ends with
+// the content; jams and every kind of capture stay open-ended (14.7) — which
+// is also what re-opens the range when R arms a running playback.
 watch(
   () => {
     const st = store.getState();
-    if (st.playback.state !== 'playing') return 'idle';
+    const t = st.transport;
+    if (!isRolling(t)) return 'idle';
     const c = st.composition;
-    const perf = st.performance;
-    return [st.loopEnabled, c.loopStartBeats, c.loopEndBeats, getCompositionLength(c), perf.recordArmed, perf.jamActive].join('|');
+    return [st.loopEnabled, c.loopStartBeats, c.loopEndBeats, getCompositionLength(c), t.clock, t.capture].join('|');
   },
   () => {
-    const st = store.getState();
-    const perf = st.performance;
-    if (!playback.isPlaying() || perf.recordArmed) return;
-    const comp = st.composition;
-    if (st.loopEnabled) {
-      playback.setPlayRange(comp.loopStartBeats, comp.loopEndBeats);
-    } else if (perf.jamActive) {
-      playback.setPlayRange(0, OPEN_END_BEAT);
-    } else {
-      playback.setPlayRange(0, getCompositionLength(comp));
-    }
+    if (!playback.isPlaying()) return;
+    playback.setPlayRange(...playRangeFor(store.getState().transport));
   },
 );
 

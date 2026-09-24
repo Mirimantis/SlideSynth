@@ -142,11 +142,33 @@ export interface ViewportState {
 
 // ── Playback ────────────────────────────────────────────────────
 
-export type PlaybackState = 'stopped' | 'playing' | 'paused';
-
 export interface PlaybackInfo {
-  state: PlaybackState;
+  /** Stored playhead: where Play starts in the classic (unlocked-rail) view,
+   *  and what ruler scrubbing moves. Whether the transport is running lives in
+   *  `AppState.transport`. */
   positionBeats: number;
+}
+
+// ── Transport (BACKLOG 15.2) ────────────────────────────────────
+
+/** What the transport is doing. See src/state/transport.ts for the rules. */
+export type TransportMode = 'stopped' | 'paused' | 'countdown' | 'playing';
+
+/** Which clock a rolling transport runs: plain Play (ends with the content, or
+ *  loops) or the free-running, open-ended jam clock (BACKLOG 10.1). */
+export type TransportClock = 'play' | 'jam';
+
+/** What a rolling transport is recording: nothing (the rolling buffer still
+ *  runs for Keep), an open-ended record, or one loop pass (BACKLOG 10.5) that
+ *  is waiting for the loop point or in progress. */
+export type CaptureMode = 'none' | 'armed' | 'pass-queued' | 'pass-recording';
+
+export interface TransportState {
+  mode: TransportMode;
+  clock: TransportClock;
+  capture: CaptureMode;
+  /** AudioContext time the record count-in started (countdown only). */
+  countdownStartedAt: number;
 }
 
 // ── Tool ────────────────────────────────────────────────────────
@@ -161,6 +183,8 @@ export const XY_TOOLS: readonly ToolMode[] = ['draw', 'select', 'delete', 'sciss
 // Voice identifier — MVP only uses 'primary'. Harmonic Prism adds 'harmony-0', 'harmony-1', etc.
 export type VoiceId = string;
 
+/** Derived from the transport for the performance engine's tick
+ *  (see `performPhase` in src/state/transport.ts). */
 export type PerformancePhase = 'idle' | 'countdown' | 'playing';
 
 export interface PlanchetteState {
@@ -171,21 +195,13 @@ export interface PlanchetteState {
   lastCrossedAt: number;
 }
 
-/** Deliberate "record next full pass" (BACKLOG 10.5). `queued` waits for the
- *  next loop point; `recording` is the pass in progress, which auto-commits and
- *  disarms at the following one. */
+/** Deliberate "record next full pass" (BACKLOG 10.5), as the Record button
+ *  shows it. Derived from `TransportState.capture`. */
 export type PassRecordState = 'off' | 'queued' | 'recording';
 
+/** Live-performance voices. The transport/capture mode lives in
+ *  `AppState.transport` (BACKLOG 15.2). */
 export interface PerformanceState {
-  phase: PerformancePhase;
-  recordArmed: boolean;
-  /** Deliberate one-pass record (BACKLOG 10.5). Runtime only. */
-  passRecordState: PassRecordState;
-  /** Free-running jam clock active (BACKLOG 10.1): transport rolls open-ended,
-   *  nothing armed, LMB perform sounds without capturing. Runtime-only — never
-   *  persisted to the composition. */
-  jamActive: boolean;
-  countdownStartedAt: number;
   lmbSounding: boolean;
   planchettes: PlanchetteState[];
   currentRecordedCurveIds: Record<VoiceId, string | null>;
@@ -228,6 +244,9 @@ export interface AppState {
    *    selection replace), and on selection-cancel paths. */
   selectedPointKeys: Set<string>;
   activeTool: ToolMode;
+  /** Transport + capture mode (BACKLOG 15.2) — the single source for "is it
+   *  playing / counting in / jamming / recording". Runtime only. */
+  transport: TransportState;
   performance: PerformanceState;
   viewport: ViewportState;
   playback: PlaybackInfo;

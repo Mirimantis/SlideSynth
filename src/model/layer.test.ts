@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Track } from '../types';
 import { createTrack } from './track';
 import {
-  nextLayerName, canOpenLayer, createLayerTrack, newestLayerTrack, nextPassRecordState,
+  nextLayerName, canOpenLayer, createLayerTrack, newestLayerTrack,
   LAYER_TRACK_LIMIT,
 } from './layer';
 
@@ -89,27 +89,5 @@ describe('newestLayerTrack', () => {
 
   it('returns null when no layers exist', () => {
     expect(newestLayerTrack([track('Lead')])).toBeNull();
-  });
-});
-
-describe('nextPassRecordState', () => {
-  it('starts recording at the loop point when queued', () => {
-    expect(nextPassRecordState('queued')).toBe('recording');
-  });
-
-  it('finishes the pass at the next loop point', () => {
-    expect(nextPassRecordState('recording')).toBe('off');
-  });
-
-  it('leaves an inactive pass record alone', () => {
-    expect(nextPassRecordState('off')).toBe('off');
-  });
-
-  it('completes a full queued -> recording -> off cycle', () => {
-    let s = nextPassRecordState('queued');
-    expect(s).toBe('recording');
-    s = nextPassRecordState(s);
-    expect(s).toBe('off');
-    expect(nextPassRecordState(s)).toBe('off');
   });
 });
