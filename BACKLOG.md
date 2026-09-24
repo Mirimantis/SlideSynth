@@ -137,7 +137,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - Also in this PR, a user request: each drawer is sized to its own controls instead of full height and a shared 240px width. Height is capped at the canvas (then it scrolls); width runs from 200px up to the canvas width.
       - The Prism label column widened so "Voice 1 (root)" no longer runs into its input.
       - The Prism toggles' tooltips come from the command catalog.
-  - **Still to migrate:** Prism panel, drawers' contents, toolbar, tone builder/picker and dialogs. Most of these are reshaped by Phase 16, so they move with it.
+  - **Still to migrate:** Prism panel, drawers' contents, toolbar, tone builder/picker and dialogs. Most of these are reshaped by Phase 16, so they move with it (16.2–16.5).
 - [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2, PR #76)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.
   - Add an `fgDirty` flag mirroring `bgDirty`, and cache each curve's tessellation as a `Path2D` keyed by curve identity. Idle CPU should then drop to near zero.
@@ -178,26 +178,75 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
 
 ## Phase 16 — Simplify the interface
 
-- [ ] **16.1 Interface design session** *(L, own planning session)*
+- [x] **16.1 Interface design session** *(L, own planning session)*
   - Produce a UI spec in [DESIGN.md › Interface principles](DESIGN.md#interface-principles) before any code.
-  - **Inputs from the review:**
+  - **Done (2026-09-24):** the spec is [DESIGN.md › Interface spec](DESIGN.md#interface-spec-phase-16-decided-2026-09-24). Decisions:
+    - **Perform is a tool** (P). The left button always does what the selected tool does. Lock Rail is retired as a mode: Perform always uses the rail view, and scrolling during playback is a View option for the edit tools. Perform while stopped auditions.
+    - **Jam folds into Play.** Play with the Perform tool is open-ended; with an edit tool it stops at the end of the content unless Loop is on. J is unbound.
+    - **Record is a split button** whose menu holds Record one pass, Drop last pass, New track per pass (was Layer) and Count-in.
+    - **Space is Play/Pause only.** Holding A auditions, and scrubbing is audible by default.
+    - **MIDI arm stays per track**, as an icon.
+    - **Scrubbing in the rail view scrolls the content live**, so the playhead is always the rail beat.
+    - **The drawers are replaced:**
+      - a tool strip;
+      - a Gravity panel (Snap + Tuning drawers);
+      - the Prism panel;
+      - Edit and View menus;
+      - a Settings dialog;
+      - Loop, tempo and metronome in the top bar.
+    - **Names:**
+      - Prism's "Tuning" becomes Intonation;
+      - Tool / Object Properties become Tool / Selection;
+      - track-row letters become icons plus a ⋯ menu.
+  - **Inputs from the review** (kept for the record):
     - **One capture model.** The rolling buffer always runs while the transport rolls, so Jam folds into Play, Keep is always available, and Record = keep everything. Record-next-pass, Layer and MIDI-arm become options of one capture control. Revisit 10.1–10.5's separate controls accordingly.
     - **Visible perform state.** If the left mouse button performs instead of edits, that is an explicit, visible Perform state, not something implied by Lock Rail + transport.
     - **A Gravity panel.** Key, scale, Tune A4, snap on/off, magnetic Force/Spring/Damping, presets and guides in one place. This takes the UI half of 13.8.
     - **Tools always visible** as a strip, not in a drawer.
-    - **A View menu** next to File: Pitch HUD, Perf HUD, guide visibility, user manual.
-    - **A Settings dialog:** MIDI device, dynamics source, metronome volume, other preferences.
+    - **A View menu** next to File: Pitch HUD, Perf HUD, guide visibility, user manual. *(Guide visibility went to the Gravity panel instead, because hiding guides also stops them pulling.)*
+    - **A Settings dialog:** MIDI device, dynamics source, metronome volume, other preferences. *(Dynamics source went to the Perform tool's settings instead.)*
     - **Each control exists once.** Loop is currently in both the top bar and the Transport drawer.
     - **Clear names.** Fix the "Tuning" collision: the drawer vs. the Prism JI/ET field. Replace the single-letter M S I T X track buttons.
     - **Space key.** Reconsider tap-vs-hold (250 ms) for transport vs. preview.
-    - **Scrubbing with Lock Rail on** *(found in 15.2 testing, deferred here 2026-09-24).* Scrubbing the top ruler moves the stored playhead, and audio preview and the Parameters Graph follow it. The main canvas draws only the fixed rail, though, so nothing visibly moves there, and Play starts from the rail beat, not the scrubbed one. The stored playhead is effectively meaningless in Lock Rail mode. Options considered:
-      - on release, scroll the canvas so the scrubbed beat sits under the rail, with a playhead line following the cursor while dragging;
-      - show a playhead line while dragging and leave the view alone.
-      Decide as part of the Lock Rail / visible-perform-state rework.
+    - **Scrubbing with Lock Rail on** (found in 15.2 testing). Scrubbing the top ruler moved only the stored playhead, which the Lock Rail view never shows, and Play started from the rail beat anyway.
     - **Group visibility** — see 13.12.
-- [ ] **16.2 Implement the interface spec** *(XL — split into items after 16.1)*
-  - Builds on 15.4's component layer.
-  - Update [help.html](help.html) in the same PRs.
+
+Implementation, in suggested order. Each item moves the chrome it touches onto Preact components (finishing 15.4's "still to migrate") and updates [help.html](help.html) in the same PR.
+
+- [ ] **16.2 Perform tool + one capture model** *(L)*
+  - **Perform tool:**
+    - Add the Perform tool (P).
+    - The input router asks the tool, not Lock Rail + transport, whether a press performs.
+    - Perform always uses the rail view.
+    - Perform while stopped auditions.
+    - R selects Perform.
+  - **Transport (`state/transport.ts`):**
+    - Fold the jam clock into Play. The clock is open-ended while the Perform tool is active.
+    - Remove J and the Jam button.
+    - Pause works during a Perform play.
+  - **Lock Rail:** retire the switch. Add *Scroll canvas during playback* as a workspace preference (a temporary toggle until 16.3 adds the View menu).
+  - **Scrubbing:** in the rail view, the ruler drag scrolls the content live under the rail.
+  - Migrate the saved `scrollCanvasEnabled` preference to the new view option.
+- [ ] **16.3 Top bar, menus and Settings** *(M–L)*
+  - **Top bar:** transport with the Record split button and its menu, Keep, Loop, BPM / time signature / metronome, the Snap switch.
+  - **Menus, generated from the command catalog:** Edit (new) and View.
+  - **Settings dialog:** MIDI device, metronome volume, audible scrub.
+  - The Transport drawer goes away.
+- [ ] **16.4 Tool strip, Gravity panel, Prism names** *(L)*
+  - **Tool strip:** the always-visible strip replaces the Tools drawer. It carries the Prism chord badge on Draw and Perform.
+  - **Gravity panel:** replaces the Snap and Tuning drawers.
+    - "Pull: Hard / Magnetic" replaces the Magnetic switch.
+    - The Key / Scale controls stay as they are until 13.8.
+  - **Prism panel:** "Tuning" becomes Intonation.
+- [ ] **16.5 Right panel, track rows, groups** *(M)*
+  - **Right panel:** the sections become Tool and Selection. The dynamics source moves into Perform's Tool section.
+  - **Track rows:** Mute, Solo and MIDI-arm become icons; Edit tone and Delete move to a ⋯ menu.
+  - **Groups:** 13.12's UI half — the group line and Ungroup button in Selection, Ungroup on the transform box, and the shared outline on the canvas.
+- [ ] **16.6 Space and audition** *(S)*
+  - Space becomes Play/Pause only.
+  - Holding A auditions: the Draw preview, and the guide pitch while dragging (absorbs 13.6).
+  - Scrubbing is audible by default; *Settings › Audible scrub* turns it off.
+  - Can go before or after 16.2–16.5.
 
 ---
 
@@ -234,8 +283,9 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
   - Drag down from the top ruler to create an X guide; drag out of the pitch ruler (13.4) to create a Y guide. Release back over the ruler to cancel.
   - Reuse the existing guide-drag path, including self-excluding snap.
   - A click without a drag still scrubs the playhead. The Add buttons stay as the keyboard-reachable path.
-- [ ] **13.6 Hold Space to audition a Y guide's pitch while dragging** *(S)*
+- [ ] **13.6 Audition a Y guide's pitch while dragging** *(S)*
   - Sounds the snapped pitch on the current track's tone. Sequence after 13.5.
+  - **Absorbed by 16.6** (2026-09-24): the key is hold A, not Space. Y guides can already be dragged, so this doesn't need to wait for 13.5.
 - [ ] **13.9 Octave highlight follows the key root** *(S)*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
@@ -256,7 +306,7 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
 
 Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand `Ctrl+G` groups). There is no group object: a group is just the curves that carry the same id. 13.13 and 13.14 would likely need one — a first-class group entity with an id, and room for its own lanes — which is a data-model change with a composition-version bump and migration.
 
-- [ ] **13.12 Make grouping visible, and ungrouping easy** *(S–M — UI half folds into Phase 16)*
+- [ ] **13.12 Make grouping visible, and ungrouping easy** *(S–M — UI half is 16.5)*
   - Found in 15.2 testing: Prism draw correctly places two offset curves as a group, but nothing on screen says they're grouped, so it read as a bug.
   - Show grouped status on the canvas, for example a shared outline or bracket when any member is hovered or selected, or a group badge on the selection. Show it in Object Properties too ("Group (3 curves)" exists only for the Move-to-track picker today).
   - Put Ungroup somewhere easier to reach than `Ctrl+Shift+G` and the right-click menu: a button in Object Properties when a group is selected, and on the transform box.

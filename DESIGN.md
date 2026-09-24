@@ -161,11 +161,84 @@ The UI grew one drawer and toggle per feature and now overlaps heavily: tool × 
 2. **One capture model.** Retrospective Keep makes a separate Jam mode largely redundant: if the rolling buffer always runs while the transport rolls, Jam is just Play, Keep is always available, and Record means "keep everything." Record-next-pass, Layer and MIDI-arm become options of one capture control rather than peers.
 3. **No hidden modes.** If the left button performs instead of edits, the UI says so visibly (an explicit Perform state), rather than it being implied by Lock Rail + transport state.
 4. **Frequent things visible, rare things tucked away.** Tools are an always-visible strip, not a drawer. Device and preference settings (MIDI device, dynamics source, metronome volume) move to a Settings dialog. HUD toggles, guide visibility and the manual go in a **View** menu.
-5. **Each control exists once.** Loop currently appears in both the top bar and the Transport drawer.
+5. **Each control exists once.** Loop currently appears in both the top bar and the Transport drawer. This applies to *settings and state*: a command such as Undo can have both a button and a menu item, because both run the same command and neither holds state.
 6. **Name things unambiguously.** "Tuning" names both the drawer (key/A4) and a Harmonic Prism field (JI vs. ET chord ratios). Track-row buttons are single letters (M S I T X).
-7. **Avoid timing-dependent keys** where possible (Space is tap = transport, hold > 250 ms = preview).
+7. **Avoid timing-dependent keys** where possible (Space is tap = transport, hold > 250 ms = preview). *(Resolved in the spec below: Space is transport only.)*
 
-### Current layout (for reference)
+### Interface spec (Phase 16, decided 2026-09-24)
+
+The outcome of the BACKLOG 16.1 design session. BACKLOG 16.2–16.6 implement it. Details not settled here are left to those items, as long as they keep to the principles above.
+
+#### The left button always does what the selected tool does
+
+- **Perform is a tool** (key **P**), the first in the tool strip, next to Draw (D), Select (V), Delete (X) and Slice (C). This replaces the hidden rule that a rolling transport with Lock Rail on makes the left button perform. The highlighted tool always says what the left button does.
+- **Perform uses the rail view.** Selecting Perform switches to the fixed-rail view, with the rail on the playhead. The planchette appears on the rail and follows the mouse's Y. The edit tools never show a planchette.
+- **Perform while stopped auditions.** Holding the left button sounds the planchette's pitch, with snap and magnetic feel live. Nothing is captured and the clock doesn't start.
+- **Perform while rolling** is today's perform: the left button sounds the note, and the rolling buffer captures it for Keep, or commits it when Record is on.
+- **Record selects Perform.** Pressing R or the Record button switches to the Perform tool if another tool is active. MIDI capture doesn't depend on the tool.
+- **Lock Rail is retired as a mode.** For the edit tools, whether the canvas scrolls during playback is a view option: *View › Scroll canvas during playback*. Off (the default) is the page view with a moving playhead. On, the edit tools work on the scrolling canvas. The Perform tool always scrolls.
+- **Scrubbing in the rail view scrolls the content live.** Dragging the ruler slides the canvas under the fixed rail. So in the rail view the playhead *is* the rail beat, and Play starts where you scrubbed. This closes the "stored playhead is meaningless in Lock Rail mode" gap. The page view keeps today's scrubbing.
+- Ctrl-hold temporary Select stays a Draw-only gesture.
+
+#### One capture model
+
+- **Jam folds into Play.** Play with the Perform tool runs open-ended (today's jam clock, including the 10-minute AFK stop). Play with an edit tool stops at the end of the content unless Loop is on. Selecting Perform mid-playback makes the clock open-ended; switching back to an edit tool doesn't end it. The J key and the Jam button are removed.
+- **Space is Play/Pause only**, with no hold behavior. Pausing a Perform play is a real pause, resumed with Space.
+- **Keep (K)** is always available while performing, and lights up when there's something keepable (unchanged).
+- **Record is one split button.** Clicking the button, or R, starts an open-ended recording. Its menu holds:
+  - *Record one loop pass* (Shift+R)
+  - *Drop last pass* (U)
+  - *New track per pass*: today's Layer switch
+  - *Count-in*: on by default; today's 3-second count-in from stopped
+- **MIDI arm stays per track** as an icon on the track row (a keyboard glyph). It's amber when armed and red while capturing. Mouse and MIDI can record into different tracks at once, as today.
+
+#### Keys that change
+
+| Key | Before | After |
+|-----|--------|-------|
+| **P** | — | Perform tool |
+| **J** | Jam | *(unbound)* |
+| **Space** | tap: Play/Pause; hold: preview | Play/Pause only |
+| **A** (hold) | — | Audition: in Draw, sounds the cursor's pitch (today's Space-hold draw preview, including its "Composition + tone" option). While dragging a Y guide, sounds the guide's pitch (13.6). |
+
+Scrubbing the ruler is audible by default, replacing the Space-hold scrub preview. *Settings › Audible scrub* turns it off.
+
+#### Layout
+
+- **Top bar**, left to right:
+  - composition name and length;
+  - **File**, **Edit**, **View** menus;
+  - Undo and Redo;
+  - transport: Stop, Play/Pause, Record (split), Keep, Loop;
+  - tempo: BPM, time signature, metronome on/off;
+  - **Snap** on/off (S);
+  - Settings (gear).
+- **Edit menu** *(new)*, generated from the command catalog: Undo, Redo, Cut, Copy, Paste, Duplicate, Continue curves, Delete, Join, Group, Ungroup, Smooth, Sharpen.
+- **View menu:** Pitch HUD, Perf HUD (!), Scroll canvas during playback, Go to start / end / playhead, User Manual (?).
+- **Settings dialog:** MIDI input device, metronome volume, audible scrub. Later: pen and gamepad mapping (11.3 / 11.4).
+- **Left strip:**
+  - the five tools, always visible;
+  - a divider;
+  - two panel icons: **Gravity** and **Harmonic Prism**. Each opens its panel over the canvas edge, as drawers do today. The Prism icon lights while Prism Draw or Projection is on.
+  - The Transport, Tools, Snap and Tuning drawers are gone.
+- **Gravity panel.** Everything that shapes where pitch is pulled:
+  - **Tuning:** today's Key and Scale dropdowns until 13.8 splits them into Tuning / Root / Scale; Tune A4 with its cents readout.
+  - **Pull:** Hard or Magnetic (replaces the Magnetic switch). Force, Spring and Damping apply to Magnetic only.
+  - **Preset:** select, save, delete. Presets hold feel only (13.2).
+  - **Guides:** show, lock, add X, add Y. Hiding guides also stops them pulling, so this lives here, not in View.
+  - Snap on/off is not repeated here; it is the top-bar switch.
+- **Harmonic Prism panel:** unchanged except for names. The chord "Tuning" field becomes **Intonation** (Just / Equal). While Prism Draw is on, the Draw and Perform tool icons carry a chord badge, so the mode is visible without opening the panel.
+- **Right panel:**
+  - **Tool** (was Tool Properties): the active tool's settings. Draw: preview mode, auto-smoothing, handle length. Perform: dynamics source, Fixed or Key swell (hold F).
+  - **Selection** (was Object Properties).
+  - **Tracks.**
+- **Track rows:** colour, name, tone (click for the tone picker), then Mute, Solo and MIDI-arm as icon toggles, then a ⋯ menu with Edit tone and Delete track. The single letters M S I T X are gone.
+- **Groups (13.12, UI half):**
+  - Selection shows "Group of *n* curves" with an Ungroup button.
+  - The transform box gets an Ungroup affordance.
+  - Group members share an outline on the canvas when any member is hovered or selected.
+
+### Layout before Phase 16 (for reference)
 
 - **Top bar:** composition name, length, File menu, Undo/Redo, Lock Rail toggle, transport (Play, Pause, Stop, Record, Jam, Keep), Snap and Loop toggles.
 - **Left icon rail → drawers:** Transport (Loop, Layer, Pitch HUD, Perf HUD, BPM, time signature, metronome, dynamics source, MIDI device), Tools (Draw, Select, Delete, Slice), Snap (preset, magnetic Force/Spring/Damping, guides), Harmonic Prism, Tuning (Key/scale, Tune A4).
