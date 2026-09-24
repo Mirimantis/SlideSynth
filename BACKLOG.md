@@ -86,7 +86,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - Replace the stringly `curveId:idx` point-selection keys with a structured type (deferred from 15.1).
   - Phase 16 may simplify the mode set, so keep the transitions easy to reshape.
   - *Shipping in two parts.*
-    - **Part 1 — state machine (done, this PR):**
+    - **Part 1 — state machine (done, PR #74):**
       - `src/state/transport.ts` is a pure `transition(state, event)` over one `TransportState` (mode × clock × capture), with the whole transition table under test.
       - One `transport(event)` controller in `main.ts` runs each change's side effects. It replaces `composeToggleArmed`, `jamToggle`, `toggleRecordNextPass`, `startComposePerformPlayback`, `composePerformStop` and `startPlayback`.
       - Buttons, hotkeys, the count-in, loop wraps, the AFK timer and the engine running out all dispatch events.
