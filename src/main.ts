@@ -2,7 +2,7 @@ import { createViewport } from './canvas/viewport';
 import { createParamViewport } from './canvas/param-viewport';
 import { renderParamGraph } from './canvas/param-graph-renderer';
 import { createParamInteraction } from './canvas/param-interaction';
-import { ensureLane, getLane, deepCopyLanes } from './model/lane';
+import { ensureLane, getLane } from './model/lane';
 import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, KEEP_BUFFER_MS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
@@ -45,7 +45,7 @@ import { history } from './state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
 import { getCompositionLength, measureLengthInBeats } from './model/composition';
-import { computeMultiCurveBBox, deepCopyPoints, joinCurves, sharpenCurveHandles, smoothCurveHandles, pitchPoints } from './model/curve';
+import { computeMultiCurveBBox, joinCurves, sharpenCurveHandles, smoothCurveHandles, pitchPoints } from './model/curve';
 import { assignGroup, dissolveGroup, allShareGroup, anyGrouped, createGroupId } from './model/curve-groups';
 import { chordOffsets } from './utils/harmonics';
 import { showToast } from './ui/toast';
@@ -69,7 +69,7 @@ import iconLoop from './assets/icons/loop.svg?raw';
 import { canOpenLayer, createLayerTrack, newestLayerTrack, nextPassRecordState, LAYER_TRACK_LIMIT } from './model/layer';
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
-import type { AppState, ToolMode, Lane, LanePoint, BezierCurve } from './types';
+import type { AppState, ToolMode, BezierCurve } from './types';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -778,6 +778,15 @@ function setIconTogglePressed(btn: HTMLButtonElement, on: boolean): void {
 }
 
 // ── Tool panel (Tools drawer) ──────────────────────────────────
+/** Entering Select with curves already selected (e.g. a track clicked while in
+ *  Draw) shows their transform box straight away. */
+function buildTransformBoxFromSelection(): void {
+  const st = store.getState();
+  if (st.selectedCurveIds.size === 0 || interaction.transformBox) return;
+  const track = st.composition.tracks.find(t => t.id === st.selectedTrackId);
+  if (track) rebuildTransformBox(interaction, track);
+}
+
 const toolPanelContainer = document.getElementById('tool-panel')!;
 const toolPanel = createToolPanel(toolPanelContainer, {
   onToolChange(tool: ToolMode) {
@@ -796,6 +805,8 @@ const toolPanel = createToolPanel(toolPanelContainer, {
     } else if (tool === 'draw') {
       // Clear the transform box but keep the curve selection so Draw extends it.
       interaction.transformBox = null;
+    } else if (tool === 'select') {
+      buildTransformBoxFromSelection();
     }
   },
 });
@@ -2199,6 +2210,7 @@ window.addEventListener('keydown', (e) => {
       break;
     case 'v':
       store.setTool('select');
+      buildTransformBoxFromSelection();
       break;
     case 'x':
       store.setTool('delete');
@@ -2474,28 +2486,13 @@ function renderTrackList() {
         return;
       }
       store.setSelectedTrack(track.id);
-      // Select all curves in this track and build a transform box
+      // Select all curves in this track. The tool stays as it is — clicking a
+      // track used to force Select, which left Draw looking active but dead
+      // (GlissNotes). The transform box belongs to Select, so it's built only
+      // there; switching to Select later builds it from the selection.
       if (track.curves.length > 0) {
-        const curveIds = track.curves.map(c => c.id);
-        store.setSelectedCurves(curveIds);
-        // Build transform box around all curves
-        const map = new Map<string, LanePoint[]>();
-        const nonPitchMap = new Map<string, Lane[]>();
-        for (const c of track.curves) {
-          map.set(c.id, deepCopyPoints(pitchPoints(c)));
-          nonPitchMap.set(c.id, deepCopyLanes(c.lanes.filter(l => l.type !== 'pitch')));
-        }
-        interaction.transformBox = {
-          curveIds,
-          originalPointsMap: map,
-          originalNonPitchLanesMap: nonPitchMap,
-          bbox: computeMultiCurveBBox(track.curves),
-          activeHandle: null,
-          dragStart: null,
-          pointIndicesPerCurve: null,
-        };
-        // Switch to select tool so the transform box is usable
-        store.setTool('select');
+        store.setSelectedCurves(track.curves.map(c => c.id));
+        if (store.getState().activeTool === 'select') rebuildTransformBox(interaction, track);
       }
     });
 
