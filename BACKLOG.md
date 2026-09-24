@@ -137,7 +137,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - Also in this PR, a user request: each drawer is sized to its own controls instead of full height and a shared 240px width. Height is capped at the canvas (then it scrolls); width runs from 200px up to the canvas width.
       - The Prism label column widened so "Voice 1 (root)" no longer runs into its input.
       - The Prism toggles' tooltips come from the command catalog.
-  - **Still to migrate:** Prism panel, drawers' contents, toolbar, tone builder/picker and dialogs. Most of these are reshaped by Phase 16, so they move with it.
+  - **Still to migrate:** Prism panel, drawers' contents, toolbar, tone builder/picker and dialogs. Most of these are reshaped by Phase 16, so they move with it (16.2–16.5).
 - [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2, PR #76)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.
   - Add an `fgDirty` flag mirroring `bgDirty`, and cache each curve's tessellation as a `Path2D` keyed by curve identity. Idle CPU should then drop to near zero.
@@ -178,26 +178,102 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
 
 ## Phase 16 — Simplify the interface
 
-- [ ] **16.1 Interface design session** *(L, own planning session)*
+- [x] **16.1 Interface structure session** *(L, own planning session, PR #80)*
   - Produce a UI spec in [DESIGN.md › Interface principles](DESIGN.md#interface-principles) before any code.
-  - **Inputs from the review:**
-    - **One capture model.** The rolling buffer always runs while the transport rolls, so Jam folds into Play, Keep is always available, and Record = keep everything. Record-next-pass, Layer and MIDI-arm become options of one capture control. Revisit 10.1–10.5's separate controls accordingly.
+  - **Done (2026-09-24, PR #80):** the spec is [DESIGN.md › Interface spec](DESIGN.md#interface-spec-phase-16-decided-2026-09-24). It blocks out every control as a working one. Perform's feel, the Tuning drawer and the visual theme each get their own session afterwards.
+  - **Decisions:**
+    - **Perform is an explicit mode that looks different.**
+      - It's entered from the tool strip or with P, for now. The Perform session (16.8) may change how you enter it.
+      - Perform uses the rail view, and auditions while the transport is stopped.
+      - Lock Rail is retired as a mode. Scrolling during playback becomes a View option for compose mode.
+    - **Jam folds into Play.** In Perform, Play is open-ended; in compose mode it stops at the end of the content unless Loop is on. J is unbound.
+    - **Record is a split button.** Its menu has Record one pass, Drop last pass, New track per pass (was Layer) and Count-in.
+    - **Space is Play/Pause only.** Holding A auditions, and scrubbing is audible by default.
+    - **MIDI arm stays on each track**, as an icon.
+    - **Scrubbing in the rail view scrolls the content live**, so the playhead is always the rail beat.
+    - **Top bar:** menus, small Undo/Redo icons, the transport, and Snap and Loop side by side. Tempo and the metronome move to a new Tempo drawer.
+    - **New menus and dialog:** an Edit menu (new), a View menu (the HUDs and scroll option), and a Settings dialog (MIDI device, audible scrub).
+    - **Drawers:**
+      - Snap and Tuning **stay separate**.
+      - The Tools drawer becomes an always-visible strip.
+      - The Transport drawer is split up.
+      - Magnetic is renamed **Gravity**.
+      - Prism's "Tuning" field becomes Intonation.
+    - **Right panel:** Tool / Object Properties become Tool / Selection, track-row letters become icons plus a ⋯ menu, and groups become visible (13.12).
+    - **Every colour moves to named theme tokens** before the theme session.
+  - **Inputs from the review** (kept for the record; the decisions above supersede them where they differ):
+    - **One capture model.** The rolling buffer always runs while the transport rolls, so Jam folds into Play, Keep is always available, and Record = keep everything. Record-next-pass, Layer and MIDI-arm become options of one capture control.
     - **Visible perform state.** If the left mouse button performs instead of edits, that is an explicit, visible Perform state, not something implied by Lock Rail + transport.
-    - **A Gravity panel.** Key, scale, Tune A4, snap on/off, magnetic Force/Spring/Damping, presets and guides in one place. This takes the UI half of 13.8.
+    - **A Gravity panel** merging snap and tuning. *(Rejected: they're used at different times.)*
     - **Tools always visible** as a strip, not in a drawer.
-    - **A View menu** next to File: Pitch HUD, Perf HUD, guide visibility, user manual.
-    - **A Settings dialog:** MIDI device, dynamics source, metronome volume, other preferences.
-    - **Each control exists once.** Loop is currently in both the top bar and the Transport drawer.
-    - **Clear names.** Fix the "Tuning" collision: the drawer vs. the Prism JI/ET field. Replace the single-letter M S I T X track buttons.
-    - **Space key.** Reconsider tap-vs-hold (250 ms) for transport vs. preview.
-    - **Scrubbing with Lock Rail on** *(found in 15.2 testing, deferred here 2026-09-24).* Scrubbing the top ruler moves the stored playhead, and audio preview and the Parameters Graph follow it. The main canvas draws only the fixed rail, though, so nothing visibly moves there, and Play starts from the rail beat, not the scrubbed one. The stored playhead is effectively meaningless in Lock Rail mode. Options considered:
-      - on release, scroll the canvas so the scrubbed beat sits under the rail, with a playhead line following the cursor while dragging;
-      - show a playhead line while dragging and leave the view alone.
-      Decide as part of the Lock Rail / visible-perform-state rework.
+    - **A View menu** next to File: Pitch HUD, Perf HUD, guide visibility, user manual. *(Guide visibility stays in the Snap drawer, because hiding guides also stops them pulling.)*
+    - **A Settings dialog:** MIDI device, dynamics source, metronome volume, other preferences. *(Dynamics went to Perform's tool settings; metronome volume to the Tempo drawer.)*
+    - **Each control exists once.** Loop was in both the top bar and the Transport drawer.
+    - **Clear names.** The "Tuning" collision; the single-letter M S I T X track buttons.
+    - **Space key.** Tap-vs-hold (250 ms) for transport vs. preview.
+    - **Scrubbing with Lock Rail on** (found in 15.2 testing): scrubbing moved only a stored playhead that the Lock Rail view never shows, and Play started from the rail beat anyway.
     - **Group visibility** — see 13.12.
-- [ ] **16.2 Implement the interface spec** *(XL — split into items after 16.1)*
-  - Builds on 15.4's component layer.
-  - Update [help.html](help.html) in the same PRs.
+
+Implementation comes first: block out every control so it works, then hold the design sessions. Each implementation item moves the chrome it touches onto Preact components (finishing 15.4's "still to migrate") and updates [help.html](help.html) in the same PR. Suggested order: 16.2 → 16.3 → 16.4 → 16.5, with 16.6 and 16.7 at any point.
+
+- [ ] **16.2 Perform mode + one capture model** *(L)*
+  - **Perform mode:**
+    - An explicit Perform mode, entered from a Perform button in the tool strip or with P, for now.
+    - The input router asks the mode, not Lock Rail plus the transport, whether a press performs.
+    - Perform uses the rail view; entering it snaps the rail onto the playhead.
+    - Perform while stopped auditions.
+    - Record enters Perform.
+  - **Transport (`state/transport.ts`):**
+    - Fold the jam clock into Play: open-ended while in Perform.
+    - Remove J and the Jam button.
+    - Make Pause a real pause in Perform.
+  - **Retire the Lock Rail switch.** *Scroll canvas during playback* becomes a workspace preference, with a temporary toggle until 16.3's View menu. Migrate the saved `scrollCanvasEnabled` value to it.
+  - **Scrubbing in the rail view** scrolls the content live under the rail.
+- [ ] **16.3 Top bar, menus, Settings, Tempo drawer** *(M–L)*
+  - **Top bar:**
+    - the transport, with the Record split button and its menu, and Keep;
+    - Snap and Loop side by side;
+    - small Undo/Redo icons;
+    - a Settings gear.
+  - **Edit (new) and View menus**, generated from the command catalog.
+  - **Settings dialog:** MIDI device, audible scrub.
+  - **Tempo drawer:** BPM, time signature, metronome and its volume.
+  - The Transport drawer goes away.
+- [ ] **16.4 Tool strip, Snap / Prism renames** *(M)*
+  - **Tool strip:**
+    - It replaces the Tools drawer.
+    - It holds the Perform entry.
+    - It shows the Prism chord badge on Draw and Perform.
+  - **Snap drawer:** Magnetic becomes Gravity.
+  - **Prism drawer:** "Tuning" becomes Intonation.
+  - The Tuning drawer is untouched until 13.8.
+- [ ] **16.5 Right panel, track rows, groups** *(M)*
+  - **Right panel:** the sections become Tool and Selection. The dynamics choice moves to Perform's Tool section.
+  - **Track rows:** Mute, Solo and MIDI arm become icons; Edit tone and Delete move to a ⋯ menu.
+  - **Groups:** 13.12's UI half:
+    - the group line and Ungroup button in Selection;
+    - Ungroup on the transform box;
+    - the shared outline on the canvas.
+- [ ] **16.6 Space and audition** *(S)*
+  - Space becomes Play/Pause only.
+  - Holding A auditions: the Draw preview, and a Y guide's pitch while dragging it (absorbs 13.6).
+  - Scrubbing is audible by default; *Settings › Audible scrub* turns it off (the toggle can sit in View until 16.3 lands).
+- [ ] **16.7 Theme tokens** *(M)*
+  - Move every colour onto one set of named tokens. Today there are ~130 literal colours across `styles/*.css` and ~60 in the canvas renderers and `constants.ts`. The canvas should read the same tokens as the CSS, not a parallel list.
+  - No visual change; it's the groundwork that lets 16.9 restyle the app without touching layout or logic.
+- [ ] **16.8 Perform experience** *(L, own planning session — after 16.2)*
+  - Make Perform feel like picking up an instrument, not sitting down in an airplane cockpit: a musical instrument with a recording studio attached, visually distinct from the compose DAW.
+  - **Session inputs:**
+    - how you enter and leave it: a strip button, a top-bar switch, a key, a transition;
+    - a "stage" view that clears the edit chrome and brings the capture controls forward;
+    - the rail drawn as the instrument itself, e.g. a string or slide with snap targets as detents. Keep H.3 in mind: what the haptic slide lets you feel should be what you see;
+    - a clear user-facing name for the dynamics source (today's "Dynamics: Fixed / Key swell").
+- [ ] **16.9 Visual theme** *(L, own planning session — after 16.2–16.7)*
+  - Replaces the default dark-blue theme, which was never designed.
+  - **Direction to explore:** a fusion of Tron-style neon and the Italian Renaissance (synthwave + glissando).
+  - **Ornaments:** hand-designed vector scrollwork or arabesques, to give GUI elements a unique look.
+  - **Start with mockups:** two or three directions on one screen (top bar, rail, a drawer), compared side by side.
+  - Builds on 16.7's tokens. The ornaments are SVG assets through the icon pipeline (PR #59).
 
 ---
 
@@ -234,8 +310,9 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
   - Drag down from the top ruler to create an X guide; drag out of the pitch ruler (13.4) to create a Y guide. Release back over the ruler to cancel.
   - Reuse the existing guide-drag path, including self-excluding snap.
   - A click without a drag still scrubs the playhead. The Add buttons stay as the keyboard-reachable path.
-- [ ] **13.6 Hold Space to audition a Y guide's pitch while dragging** *(S)*
+- [ ] **13.6 Audition a Y guide's pitch while dragging** *(S)*
   - Sounds the snapped pitch on the current track's tone. Sequence after 13.5.
+  - **Absorbed by 16.6** (2026-09-24): the key is hold A, not Space. Y guides can already be dragged, so this doesn't need to wait for 13.5.
 - [ ] **13.9 Octave highlight follows the key root** *(S)*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
@@ -256,7 +333,7 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
 
 Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand `Ctrl+G` groups). There is no group object: a group is just the curves that carry the same id. 13.13 and 13.14 would likely need one — a first-class group entity with an id, and room for its own lanes — which is a data-model change with a composition-version bump and migration.
 
-- [ ] **13.12 Make grouping visible, and ungrouping easy** *(S–M — UI half folds into Phase 16)*
+- [ ] **13.12 Make grouping visible, and ungrouping easy** *(S–M — UI half is 16.5)*
   - Found in 15.2 testing: Prism draw correctly places two offset curves as a group, but nothing on screen says they're grouped, so it read as a bug.
   - Show grouped status on the canvas, for example a shared outline or bracket when any member is hovered or selected, or a group badge on the selection. Show it in Object Properties too ("Group (3 curves)" exists only for the Move-to-track picker today).
   - Put Ungroup somewhere easier to reach than `Ctrl+Shift+G` and the right-click menu: a button in Object Properties when a group is selected, and on the transform box.
@@ -288,8 +365,11 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - Recommended core: **Tuning / Root / Scale** as three controls.
   - **Load-bearing data change:** `scaleRoot` is quantized to 12-EDO (0–11). Generalize it to a cents offset or degree index, with a migration and golden-format shim.
   - **Open question:** does the staff keep the 12-EDO substrate under non-12 tunings? This decides whether the app is a 12-EDO tool with microtonal decoration or genuinely tuning-agnostic.
-  - The UI half is now part of Phase 16's Gravity panel. This item owns the model.
+  - **This session also owns the Tuning drawer's redesign** (decided in 16.1): make it more visually intuitive than today's dropdowns. The drawer stays separate from Snap.
   - The full research report, with sources and ten open questions, is in [.claude/plans/13.8-tuning-taxonomy-research.md](.claude/plans/13.8-tuning-taxonomy-research.md).
+- [ ] **13.15 Gravity feel preview** *(M)*
+  - A small animated waveform in the Snap drawer showing what Force, Spring and Damping do: its amplitude, frequency and falloff change as you move the sliders.
+  - Drive it from the real `snap-magnetic` integrator (a step response into a well), so the preview is the feel, not an illustration of it.
 - [ ] **12.1 Snap-target composition + snap-to-sounding-harmony** *(L, own planning session — after 15.6 and 13.8)*
   - First define how gravity sources combine into one target set. Today Prism projection targets *replace* the others while active, guides are additive, and scale vs. chromatic are exclusive.
   - Then let the sounding bed (a drone or Prism chord) become the magnetic target: "you snap to the harmony you're actually in."
