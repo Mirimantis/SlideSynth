@@ -6,6 +6,7 @@ import {
   reclampLaneHandlesAround, applyAutoSmoothLaneHandles,
   evaluateLaneAtBeat, deepCopyLane, offsetLaneX,
   splitLanesAtBeat, concatLanes, getLane, ensureLane, pitchLane,
+  displayedLane, pinLaneEndToPitch,
   DEFAULT_VOLUME, LANE_SPECS,
 } from './lane';
 import { createCurve, addPointToCurve, createControlPoint } from './curve';
@@ -223,5 +224,46 @@ describe('curve-level lane accessors', () => {
     // Idempotent: second call returns the same lane
     expect(ensureLane(curve, 'volume')).toBe(lane);
     expect(getLane(curve, 'volume')).toBe(lane);
+  });
+});
+
+describe('displayed lane and drawing pin (BACKLOG 15.5)', () => {
+  function drawn(xs: number[]) {
+    const c = createCurve();
+    for (const x of xs) addPointToCurve(c, createControlPoint(x, 6000));
+    return c;
+  }
+
+  it('displayedLane shows the default for a curve without one, without attaching it', () => {
+    const c = drawn([2, 6]);
+    const shown = displayedLane(c, 'volume');
+    expect(shown?.points.map(p => [p.position.x, p.position.y])).toEqual([[2, DEFAULT_VOLUME], [6, DEFAULT_VOLUME]]);
+    expect(getLane(c, 'volume')).toBeUndefined();
+    expect(displayedLane(drawn([2]), 'volume')).toBeUndefined();
+  });
+
+  it('displayedLane returns the curve’s own lane when it has one', () => {
+    const c = drawn([2, 6]);
+    const own = ensureLane(c, 'volume');
+    expect(displayedLane(c, 'volume')).toBe(own);
+  });
+
+  it('pinLaneEndToPitch moves the last lane point to the pitch end, never behind its neighbour', () => {
+    const c = drawn([2, 6]);
+    const lane = ensureLane(c, 'volume')!;
+    addPointToCurve(c, createControlPoint(10, 6000));
+    pinLaneEndToPitch(c, 'volume');
+    expect(lane.points.map(p => p.position.x)).toEqual([2, 10]);
+
+    lane.points.splice(1, 0, createLanePoint(9, 0.5));
+    c.lanes[0]!.points.pop(); // pitch now ends at 6, before the lane's middle point
+    pinLaneEndToPitch(c, 'volume');
+    expect(lane.points[2]!.position.x).toBeCloseTo(9.001);
+  });
+
+  it('pinLaneEndToPitch leaves a curve without a lane alone', () => {
+    const c = drawn([2, 6]);
+    pinLaneEndToPitch(c, 'volume');
+    expect(getLane(c, 'volume')).toBeUndefined();
   });
 });

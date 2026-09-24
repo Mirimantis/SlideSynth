@@ -12,6 +12,37 @@ const HANDLE_RADIUS = 3;
 const INACTIVE_TRACK_ALPHA = 0.45;
 
 /**
+ * Each curve's pitch path as a Path2D, kept until the composition changes
+ * (15.5). It's built in the curve's own world coordinates, relative to its
+ * first point so the numbers stay small, and mapped to the screen with the
+ * viewport transform when drawn. Panning, zooming and scrolling playback then
+ * reuse it instead of re-walking every segment each frame. Keyed by curve
+ * object: undo and file load swap in new objects, and every in-place edit goes
+ * through store.mutate, which bumps the version.
+ */
+const pathCache = new WeakMap<BezierCurve, { version: number; path: Path2D }>();
+
+function curvePath(curve: BezierCurve, version: number): Path2D {
+  const hit = pathCache.get(curve);
+  if (hit && hit.version === version) return hit.path;
+  const points = pitchPoints(curve);
+  const o = points[0]!.position;
+  const path = new Path2D();
+  path.moveTo(0, 0);
+  for (let i = 0; i < points.length - 1; i++) {
+    const seg = getSegmentControlPoints(curve, i);
+    if (!seg) continue;
+    path.bezierCurveTo(
+      seg.p1.x - o.x, seg.p1.y - o.y,
+      seg.p2.x - o.x, seg.p2.y - o.y,
+      seg.p3.x - o.x, seg.p3.y - o.y,
+    );
+  }
+  pathCache.set(curve, { version, path });
+  return path;
+}
+
+/**
  * Render all curves for a track. When `isActiveTrack` is false, the entire
  * track is dimmed via globalAlpha so non-active tracks read as background while
  * still being identifiable by tone color.
@@ -24,15 +55,17 @@ export function renderCurves(
   selectedCurveIds: ReadonlySet<string>,
   selectedPointCurveId: string | null,
   selectedPointIndex: number | null,
-  isActiveTrack: boolean = true,
-  selectedPoints: PointSelection | null = null,
+  isActiveTrack: boolean,
+  selectedPoints: PointSelection | null,
+  /** store.compositionVersion() — invalidates the cached curve paths. */
+  geometryVersion: number,
 ): void {
   const prevAlpha = ctx.globalAlpha;
   if (!isActiveTrack) ctx.globalAlpha = prevAlpha * INACTIVE_TRACK_ALPHA;
   for (const curve of curves) {
     const isSelected = selectedCurveIds.has(curve.id);
     const showHandles = isSelected && curve.id === selectedPointCurveId;
-    renderCurve(ctx, vp, curve, tone, isSelected, showHandles, selectedPointIndex, selectedPoints);
+    renderCurve(ctx, vp, curve, tone, isSelected, showHandles, selectedPointIndex, selectedPoints, geometryVersion);
   }
   if (!isActiveTrack) ctx.globalAlpha = prevAlpha;
 }
@@ -46,33 +79,22 @@ function renderCurve(
   showHandles: boolean,
   selectedPointIndex: number | null,
   selectedPoints: PointSelection | null,
+  geometryVersion: number,
 ): void {
   const points = pitchPoints(curve);
   if (points.length === 0) return;
 
-  // Draw curve segments
+  // Draw curve segments: the cached world-space path, placed on screen. The
+  // stroke happens untransformed, so line width and dashes stay in pixels.
   if (points.length >= 2) {
-    ctx.beginPath();
+    const { zoomX, zoomY } = vp.state;
+    const origin = vp.worldToScreen(points[0]!.position.x, points[0]!.position.y);
+    const onScreen = new Path2D();
+    onScreen.addPath(curvePath(curve, geometryVersion), new DOMMatrix([zoomX, 0, 0, -zoomY, origin.sx, origin.sy]));
     ctx.strokeStyle = tone.color;
     ctx.lineWidth = isSelected ? 4 : 2;
     ctx.setLineDash(tone.dashPattern);
-
-    const first = points[0]!;
-    const firstScreen = vp.worldToScreen(first.position.x, first.position.y);
-    ctx.moveTo(firstScreen.sx, firstScreen.sy);
-
-    for (let i = 0; i < points.length - 1; i++) {
-      const seg = getSegmentControlPoints(curve, i);
-      if (!seg) continue;
-
-      const cp1 = vp.worldToScreen(seg.p1.x, seg.p1.y);
-      const cp2 = vp.worldToScreen(seg.p2.x, seg.p2.y);
-      const end = vp.worldToScreen(seg.p3.x, seg.p3.y);
-
-      ctx.bezierCurveTo(cp1.sx, cp1.sy, cp2.sx, cp2.sy, end.sx, end.sy);
-    }
-
-    ctx.stroke();
+    ctx.stroke(onScreen);
     ctx.setLineDash([]);
   }
 

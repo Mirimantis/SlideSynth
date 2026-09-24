@@ -71,6 +71,25 @@ describe('store reactivity (BACKLOG 15.1)', () => {
     store.setPerformLmbSounding(false);
   });
 
+  it('frame-rate canvas values notify only the canvas channel (15.5)', () => {
+    const perf = countRuns(() => store.getState().performance.planchettes[0]?.snappedWorldY);
+    const pos = countRuns(() => store.getState().playback.positionBeats);
+    const canvas = countRuns(() => store.trackAllChannels());
+    store.setPlanchetteY('primary', 6000, 6000);
+    store.setPlaybackPosition(3);
+    expect(perf.runs()).toBe(0);
+    expect(pos.runs()).toBe(0);
+    expect(canvas.runs()).toBe(2);
+    // A sub-visible planchette move (magnetic settling) asks for no redraw.
+    store.setPlanchetteY('primary', 6000.001, 6000.001);
+    store.setPlaybackPosition(3);
+    expect(canvas.runs()).toBe(2);
+    perf.dispose();
+    pos.dispose();
+    canvas.dispose();
+    store.setPlanchetteY('primary', null, null);
+  });
+
   it('getState() values cannot be assigned directly', () => {
     expect(() => {
       (store.getState() as { activeTool: string }).activeTool = 'select';

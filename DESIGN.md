@@ -86,7 +86,7 @@ src/
 ├── types.ts         # Shared interfaces (Composition, Lane, AppState, …)
 ├── constants.ts     # Pitch range, zoom limits, cents/frequency conversion, timing constants
 ├── state/           # store.ts (signals-backed singleton), reactive.ts (watch/effect), history.ts (snapshot undo),
-│                    #   clipboard.ts, perform-mode.ts (perform-vs-edit predicate)
+│                    #   clipboard.ts, perform-mode.ts (perform-vs-edit predicate), snap-config.ts (the one snap builder)
 ├── model/           # curve, lane, track, tone, composition, curve-groups, layer, pass-log, point-selection
 ├── audio/           # engine, tone-synth, playback (voice-pool scheduler), curve-sampler, preview (live voices),
 │                    #   metronome, midi-input, dynamics-bus, voice-allocation
@@ -112,8 +112,8 @@ src/
 1. **`main.ts` does everything** — layout HTML, wiring, keyboard map, perform logic, render loop, and inline model edits (e.g. multi-point delete in the key handler).
 2. *(Resolved in 15.2: the explicit state machine in `src/state/transport.ts` and one input router per canvas in `src/canvas/input-router.ts`.)* **The perform state machine is implicit.** Play / jam / record / pass-record / MIDI-arm state is spread across ~8 flags in the store, the playback engine and module-level variables, each transition function setting its own combination. Two canvas mouse handlers use two different definitions of "is the left button performing?" (`isComposePerformActive` in `main.ts` vs. `isComposePerformLocked` in `interaction.ts`) — with Lock Rail off, a Draw click during Jam both sounds a note and places a curve point.
 3. **Coarse store notification + hand-synced UI.** Every store change rebuilds the track list and both property panels via `innerHTML`, including on every mousemove of a drag. Widgets that don't subscribe drift out of sync. *(Resolved in 15.1: signals-backed store, targeted watches, render-if-changed panels.)*
-4. **Duplicated state.** Snap settings exist in both `AppState` and `composition.snap`; loop-enabled lives in the playback engine; the snap config is built in three places that disagree (the Space-hold preview ignores guides and projection). *(Snap mirrors and loop state resolved in 15.1; the snap-config builders remain for 15.6.)*
-5. **The render loop mutates the model** — it attaches volume lanes, moves volume points and clears the Prism projection source.
+4. **Duplicated state.** Snap settings exist in both `AppState` and `composition.snap`; loop-enabled lives in the playback engine; the snap config is built in three places that disagree (the Space-hold preview ignores guides and projection). *(Snap mirrors and loop state resolved in 15.1; one snap-config builder in 15.6, `src/state/snap-config.ts`.)*
+5. *(Resolved in 15.5: the frame loop splits into `tickFrame()` and a read-only `draw()` that runs only when something changed.)* **The render loop mutates the model** — it attaches volume lanes, moves volume points and clears the Prism projection source.
 6. **Live pitch is stepped.** `setFrequency` uses `setValueAtTime` at event/frame rate, so live glides and magnetic vibrato are a ~60 Hz staircase — at odds with the product's core value.
 7. **The kernel is untested.** Snap, magnetic physics, bezier math, the curve sampler and the scheduler have no tests.
 

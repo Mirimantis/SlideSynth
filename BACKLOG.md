@@ -118,13 +118,23 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - The canvas stays imperative.
   - Migrate one panel at a time, starting with the track list and property panels, which currently rebuild on every store change.
   - Sequence this with Phase 16 so panels aren't rebuilt twice. Migrate the panels whose shape Phase 16 won't change first.
-- [ ] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2)*
+- [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.
   - Add an `fgDirty` flag mirroring `bgDirty`, and cache each curve's tessellation as a `Path2D` keyed by curve identity. Idle CPU should then drop to near zero.
-- [ ] **15.6 One snap-config builder** *(S–M)*
+  - **Done (this PR):**
+    - Each frame runs `tickFrame()` (scroll-follow, perform, dynamics, magnetic, capture). The canvases redraw only when something changed or is animating, and `draw()` only reads.
+    - "Changed" means a store notification, pointer or key input, or `bgDirty`. The frame-rate canvas values (planchette pitch, crossing pulse, stored playhead) notify a `canvas` channel that only the renderer reads. "Animating" means rolling, armed, a held note, or a pulse or flash still fading.
+    - Idle draws nothing (`__debug.drawCount()` stays flat).
+    - The store drops a Prism projection source whose curve is gone on any composition change.
+    - The Parameters Graph shows a curve's default volume lane without attaching it (`displayedLane`). A press on the graph attaches it, and Draw keeps the lane end on the curve's end as it grows (`pinLaneEndToPitch`).
+    - Curve paths are cached as world-space `Path2D`s, keyed by curve object and composition version, and placed with the viewport transform, so panning and scrolling playback reuse them.
+    - Adding a point to an existing curve in Draw went around `store.mutate`, and so did finishing a draw. Both now go through it.
+- [x] **15.6 One snap-config builder** *(S–M)*
   - Snap config is currently built in three places that disagree: `buildSnapConfig`, `computeComposeCursorPitch`, and the free-planchette preview.
   - Make one builder used by drawing, dragging, preview, perform and guide drag.
   - Prerequisite for 12.1, which defines how gravity sources combine.
+  - **Done (this PR):** `snapConfigFor(state, { zoomX, atBeat, excludeGuideId })` in `src/state/snap-config.ts` (pure, tested), with `currentSnapConfig` over the live store. Every caller uses it.
+  - *Behaviour change:* with Prism projection on, performing snaps to the echo pitches at the rail's beat, as drawing does. Before, perform ignored projection.
 - [ ] **15.7 AudioWorklet live voice** *(L)*
   - The live perform voice becomes an AudioWorklet that receives pitch and gain targets and smooths them at audio rate.
   - Later, the magnetic integrator can move there too, decoupling physics from `requestAnimationFrame`.

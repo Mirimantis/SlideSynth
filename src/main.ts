@@ -2,7 +2,7 @@ import { createViewport } from './canvas/viewport';
 import { createParamViewport } from './canvas/param-viewport';
 import { renderParamGraph } from './canvas/param-graph-renderer';
 import { createParamInteraction } from './canvas/param-interaction';
-import { ensureLane, getLane } from './model/lane';
+import { displayedLane } from './model/lane';
 import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, KEEP_BUFFER_MS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
@@ -13,9 +13,9 @@ import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
-import { snapToGrid, getAdaptiveSubdivisions, findAdaptiveSnap } from './utils/snap';
-import type { SnapConfig } from './utils/snap';
-import { createInteraction, rebuildTransformBox, RULER_HEIGHT, buildSnapConfig } from './canvas/interaction';
+import { snapToGrid, findAdaptiveSnap } from './utils/snap';
+import { createInteraction, rebuildTransformBox, RULER_HEIGHT } from './canvas/interaction';
+import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
 import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
@@ -28,7 +28,7 @@ import { createMetronome } from './audio/metronome';
 import { createMidiInput } from './audio/midi-input';
 import { createDynamicsBus, isDynamicsSource } from './audio/dynamics-bus';
 import { createMagneticState, updateMagnetic, resetMagnetic } from './utils/snap-magnetic';
-import { renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
+import { renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, LOOP_WRAP_FLASH_MS, PULSE_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { renderPropertyPanel } from './ui/property-panel';
 import { renderToolPropertyPanel } from './ui/tool-property-panel';
 import { openToneBuilder } from './ui/tone-builder';
@@ -516,6 +516,10 @@ function resizeCanvases() {
 // ── Audio preview ──────────────────────────────────────────────
 const preview = createPreviewManager();
 let previewActive = false;
+function setPreviewActive(on: boolean): void {
+  previewActive = on;
+  requestRedraw(); // the free planchette appears / disappears
+}
 
 // ── Dynamics bus (BACKLOG 11.1) ────────────────────────────────
 // One normalized channel driving live perform loudness AND the recorded volume
@@ -559,7 +563,7 @@ function activateSpacePreview() {
       preview.startScrubPreview(state.composition);
       preview.updateScrubPosition(interaction.cursorWorld.x, state.composition);
       if (tone) startPrismDrawPreview(tone, interaction.cursorWorld.y);
-      previewActive = true;
+      setPreviewActive(true);
       // Classic-playhead mode: snap the playhead to the cursor so the user sees the scrub
       // location. Leaves it there on preview end (easy way to summon a far-away playhead).
       if (!state.scrollCanvasEnabled) {
@@ -567,12 +571,12 @@ function activateSpacePreview() {
       }
     } else if (tone && interaction.cursorWorld) {
       startPrismDrawPreview(tone, interaction.cursorWorld.y);
-      previewActive = true;
+      setPreviewActive(true);
     }
   } else if (inScrubContext) {
     preview.startScrubPreview(state.composition);
     preview.updateScrubPosition(state.playback.positionBeats, state.composition);
-    previewActive = true;
+    setPreviewActive(true);
   }
 }
 
@@ -645,7 +649,7 @@ const interaction = createInteraction(fgCanvas, viewport, {
   onCursorLeave() {
     if (previewActive && store.getState().activeTool === 'draw') {
       preview.stopAll();
-      previewActive = false;
+      setPreviewActive(false);
     }
   },
   onLoopMarkerDrag(which, beats, phase) {
@@ -772,7 +776,7 @@ const toolPanel = createToolPanel(toolPanelContainer, {
     }
     if (tool !== 'draw' && previewActive) {
       preview.stopAll();
-      previewActive = false;
+      setPreviewActive(false);
     }
     if (tool === 'scissors') {
       interaction.transformBox = null;
@@ -882,6 +886,12 @@ const AFK_WARNING_LEAD_MS = 30_000;
 /** Scroll Canvas effective value — see state/perform-mode.ts. */
 function effectiveScrollCanvas(): boolean {
   return effectiveScrollCanvasFor(store.getState());
+}
+/** The beat under the rail in the scrolling view — where Play starts, and
+ *  where the rail planchette is. */
+function railBeat(): number {
+  const r = canvasContainer.getBoundingClientRect();
+  return Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
 }
 /** Minimum offsetX for clamping — negative when Scroll Canvas is on so beat 0 can
  * reach the rail at canvas centre. */
@@ -2245,7 +2255,7 @@ window.addEventListener('keyup', (e) => {
     return;
   }
   preview.stopAll();
-  previewActive = false;
+  setPreviewActive(false);
 });
 
 // ── Track panel ─────────────────────────────────────────────────
@@ -2485,25 +2495,10 @@ let lastComposeSy: number | null = null;
 function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number; snapTarget: number | null } {
   const { wy } = viewport.screenToWorld(0, sy);
   const st = store.getState();
-  const scale = st.scaleId ? getScaleById(st.scaleId) ?? null : null;
-  // Pull Y guides into the snap candidates so Perform/Record planchette pitch
-  // honors user-placed pitch guides. X-guides are ignored here — time progression
-  // during perform is BPM-clamped, so X-snap doesn't apply.
-  let guideYTargets: readonly number[] | undefined;
-  if (st.guidesVisible && st.composition.guides.length > 0) {
-    const ys = st.composition.guides
-      .filter(g => g.orientation === 'y')
-      .map(g => g.position);
-    if (ys.length > 0) guideYTargets = ys;
-  }
-  const snapConfig: SnapConfig = {
-    enabled: st.snapEnabled,
-    subdivisionsPerBeat: getAdaptiveSubdivisions(viewport.state.zoomX),
-    scaleRoot: st.scaleRoot,
-    scale,
-    hidePitchLines: st.hidePitchLines,
-    guideYTargets,
-  };
+  // The same targets drawing uses (15.6): scale or chromatic lines, pitch
+  // guides, and Prism projection echoes at the rail's beat. Only Y is snapped
+  // here — time advances with the transport.
+  const snapConfig = currentSnapConfig({ zoomX: viewport.state.zoomX, atBeat: railBeat() });
 
   // Adaptive snap: nearest target plus a well radius scaled to neighbor
   // spacing. Pentatonic scales and sparse guides get wider wells than
@@ -3333,13 +3328,11 @@ function playEngineFrom(t: TransportState, pos: number): boolean {
  * false if the engine declined.
  */
 function startRolling(next: TransportState): boolean {
-  if (previewActive) { preview.stopAll(); previewActive = false; }
+  if (previewActive) { preview.stopAll(); setPreviewActive(false); }
   const st = store.getState();
-  const r = canvasContainer.getBoundingClientRect();
-  const railBeat = Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
   const pos = next.capture === 'pass-recording'
     ? st.composition.loopStartBeats
-    : effectiveScrollCanvas() ? railBeat : st.playback.positionBeats;
+    : effectiveScrollCanvas() ? railBeat() : st.playback.positionBeats;
   if (!playEngineFrom(next, pos)) {
     if (next.capture === 'pass-recording') showToast('Set a loop range first', 2500);
     return false;
@@ -3347,6 +3340,7 @@ function startRolling(next: TransportState): boolean {
   // Snap the viewport on the first frame of scrolling playback so there's no
   // flash of the old static offset before the render loop takes over.
   if (effectiveScrollCanvas()) {
+    const r = canvasContainer.getBoundingClientRect();
     scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
     bgDirty = true;
   }
@@ -3478,6 +3472,18 @@ createInputRouter({
   tool: paramInteraction.input,
 });
 
+// Input moves state the store doesn't hold (cursor position, drags, marquee,
+// hover, Space-hold preview), so any of it asks for a redraw (15.5). Capture
+// phase, so this runs even when a handler stops propagation.
+for (const el of [fgCanvas, paramCanvas]) {
+  for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'pointerenter', 'pointerleave', 'lostpointercapture', 'wheel', 'dblclick', 'contextmenu']) {
+    el.addEventListener(type, requestRedraw, { capture: true, passive: true });
+  }
+}
+for (const type of ['keydown', 'keyup', 'blur']) {
+  window.addEventListener(type, requestRedraw, { capture: true });
+}
+
 // Right-click action menu. Disabled during Compose Performance (recording / sounding)
 // because curves being captured shouldn't be mutated out from under the engine.
 fgCanvas.addEventListener('contextmenu', (e) => {
@@ -3603,28 +3609,89 @@ function updatePerfHudDom(state: AppState) {
   });
 }
 
-// ── Render loop ─────────────────────────────────────────────────
-function render() {
+// ── Render loop (BACKLOG 15.5) ──────────────────────────────────
+// Every animation frame runs tickFrame(), which advances what moves on its own
+// (scroll-follow, perform, dynamics, magnetic physics, recording capture). The
+// canvases are then redrawn only when something changed or is animating, and
+// draw() only reads: it never changes the composition. Idle, a frame costs a
+// few flag checks.
+//
+// "Something changed" is:
+//   • any store notification (fgDirty, via the effect below), including the
+//     canvas-only planchette and playhead values;
+//   • pointer and key input, which moves state the store doesn't hold (cursor,
+//     drags, marquee, hovered handle);
+//   • bgDirty — every viewport change already sets it.
+// "Animating" covers the transport rolling or armed, a held perform note, and
+// the tail of a pulse or flash.
+
+let fgDirty = true;
+/** Ask for a redraw on the next frame. */
+function requestRedraw(): void {
+  fgDirty = true;
+}
+effect(() => {
+  store.trackAllChannels();
+  fgDirty = true;
+});
+let wasAnimating = false;
+/** Frames actually drawn — the observable for "idle doesn't redraw". */
+let drawCount = 0;
+
+function isAnimating(state: AppState): boolean {
+  if (playback.isPlaying() || composeEngine.isLmbDown()) return true;
+  if (state.transport.mode === 'countdown' || isRecordArmed(state.transport)) return true;
+  const now = performance.now();
+  if (lastMetronomeClickAt > 0 && now - lastMetronomeClickAt < METRONOME_FLASH_DURATION_MS) return true;
+  const wrapAt = composeEngine.getLastLoopWrapAt();
+  if (wrapAt > 0 && now - wrapAt < LOOP_WRAP_FLASH_MS) return true;
+  const wall = Date.now();
+  return state.performance.planchettes.some(p => wall - p.lastCrossedAt < PULSE_DURATION_MS);
+}
+
+function frame() {
+  runFrame();
+  requestAnimationFrame(frame);
+}
+
+function runFrame() {
   // Frame-time sample for the Perf HUD's rolling window. Always pushed (the
   // sort cost happens only inside updatePerfHudDom when the HUD is visible)
   // so toggling the HUD on instantly has 2 s of accurate p50/p99.
   pushFrameTime(performance.now());
+  tickFrame();
 
+  const state = store.getState();
+  updatePerfHudDom(state);
+  const animating = isAnimating(state);
+  // One more frame after an animation ends clears its last faded step.
+  if (fgDirty || bgDirty || animating || wasAnimating) {
+    fgDirty = false;
+    // Compose UI affordances that follow the same state the canvas draws.
+    toolPanel.setDisabled(isComposePerformActive());
+    updateKeepButtonDom();
+    updatePitchHudDom(state);
+    updateCountdownOverlayDom(state);
+    updateAfkWarningDom(state);
+    draw();
+  }
+  wasAnimating = animating;
+}
+
+/** Per-frame simulation. May update runtime state (viewport, planchettes,
+ *  perform capture); drawing happens separately in draw(). */
+function tickFrame() {
   // Reconcile harmony planchettes against current state. Cheap no-op when
   // state hasn't changed; covers playback start/stop, drawMode toggle, and
   // mid-playback chord-spec voice-count changes.
   syncHarmonyPlanchettes();
 
-  const state = store.getState();
-  const comp = state.composition;
-  const rect = canvasContainer.getBoundingClientRect();
-
   // "Scroll Canvas" view: when the toggle is effectively on during Playback,
   // scroll the viewport each frame so the playhead sits centred on the rail.
   // Toggle off → classic static canvas with the playhead moving across.
   // Recording forces the scrolling view on via `effectiveScrollCanvas()`.
-  const composeScrolling = effectiveScrollCanvas() && playback.isPlaying();
-  if (composeScrolling) {
+  if (effectiveScrollCanvas() && playback.isPlaying()) {
+    const rect = canvasContainer.getBoundingClientRect();
     // While recording the in-flight buffer isn't reflected in the composition
     // length yet, so the canvas extent can be shorter than the live playhead —
     // the viewport would clamp and the canvas visually freezes. Bump the extent
@@ -3655,16 +3722,43 @@ function render() {
   // active or snap is off.
   tickComposePitchMode();
 
-  // Per-frame sync for Compose UI affordances
-  toolPanel.setDisabled(isComposePerformActive());
-  updateKeepButtonDom();
-  updatePitchHudDom(state);
-  updateCountdownOverlayDom(state);
-  updateAfkWarningDom(state);
-  updatePerfHudDom(state);
-
   // Compose perform: record-sample capture each frame while armed + sounding + playing.
   captureComposeRecordingSample();
+
+  reconcileDrawingCurve();
+}
+
+/** Let go of a stale in-progress Draw curve. Checked once per frame, after
+ *  input handlers have finished, rather than on each store change: a handler
+ *  can pass through a moment where the selection doesn't match yet. Three cases:
+ *    • the curve was deleted (e.g. undo)
+ *    • the user selected a different single curve while in Draw — honor the
+ *      new selection so the preview line and the next click both target it
+ *    • the active tool isn't Draw anymore (hotkey switch bypasses the
+ *      toolPanel.onToolChange clear) */
+function reconcileDrawingCurve() {
+  if (!interaction.drawingCurve) return;
+  const state = store.getState();
+  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
+  const singleSelectedId = store.getSelectedCurveId();
+  const stale =
+    !track ||
+    !track.curves.includes(interaction.drawingCurve) ||
+    state.activeTool !== 'draw' ||
+    (singleSelectedId !== null && singleSelectedId !== interaction.drawingCurve.id);
+  if (stale) {
+    interaction.drawingCurve = null;
+    interaction.dragging = null;
+    requestRedraw();
+  }
+}
+
+/** Draw both canvases from current state. Read-only (15.5). */
+function draw() {
+  drawCount++;
+  const state = store.getState();
+  const comp = state.composition;
+  const rect = canvasContainer.getBoundingClientRect();
 
   // Background: staff grid. Stays visible during Harmonic Prism projection
   // so the user can see where they are in the pitch spectrum; snap itself
@@ -3679,26 +3773,6 @@ function render() {
     bgDirty = false;
   }
 
-  // Clear stale drawingCurve reference. Three cases:
-  //   • the curve was deleted (e.g. undo)
-  //   • the user selected a different single curve while in Draw — honor the
-  //     new selection so the preview line and the next click both target it
-  //   • the active tool isn't Draw anymore (hotkey switch bypasses the
-  //     toolPanel.onToolChange clear)
-  if (interaction.drawingCurve) {
-    const track = comp.tracks.find(t => t.id === state.selectedTrackId);
-    const singleSelectedId = store.getSelectedCurveId();
-    const stale =
-      !track ||
-      !track.curves.includes(interaction.drawingCurve) ||
-      state.activeTool !== 'draw' ||
-      (singleSelectedId !== null && singleSelectedId !== interaction.drawingCurve.id);
-    if (stale) {
-      interaction.drawingCurve = null;
-      interaction.dragging = null;
-    }
-  }
-
   // Foreground: curves + playhead + interaction
   fgCtx.clearRect(0, 0, rect.width, rect.height);
 
@@ -3707,17 +3781,14 @@ function render() {
     renderTransformBox(fgCtx, viewport, interaction.transformBox.bbox, interaction.transformBox.activeHandle);
   }
 
-  // Harmonic Prism — resolve the projection source curve up front. If it no
-  // longer exists (deleted), exit projection mode automatically.
+  // Harmonic Prism — resolve the projection source curve up front. (The store
+  // drops a source whose curve is deleted.)
   let prismSource: BezierCurve | null = null;
   if (state.harmonicPrism.projectionSourceId) {
     const prismSrcId = state.harmonicPrism.projectionSourceId;
     for (const track of comp.tracks) {
       const found = track.curves.find(c => c.id === prismSrcId);
       if (found) { prismSource = found; break; }
-    }
-    if (!prismSource) {
-      store.setPrismProjectionSource(null);
     }
   }
 
@@ -3735,6 +3806,7 @@ function render() {
   }
 
   // Render curves for all tracks
+  const geometryVersion = store.compositionVersion();
   for (const track of comp.tracks) {
     if (track.muted) continue;
     const tone = comp.toneLibrary.find(t => t.id === track.toneId);
@@ -3749,6 +3821,7 @@ function render() {
       isActiveTrack ? state.selectedPointIndex : null,
       isActiveTrack,
       isActiveTrack ? state.selectedPoints : null,
+      geometryVersion,
     );
   }
 
@@ -3820,7 +3893,7 @@ function render() {
       && state.harmonicPrism.drawMode
       && interaction.cursorWorld
       && !isPerformActiveOrPending) {
-    const snap = buildSnapConfig(viewport.state.zoomX, interaction.cursorWorld.x);
+    const snap = currentSnapConfig({ zoomX: viewport.state.zoomX, atBeat: interaction.cursorWorld.x });
     const snapped = snapToGrid(interaction.cursorWorld.x, interaction.cursorWorld.y, snap);
     const cursorScreenX = viewport.worldToScreen(snapped.wx, 0).sx;
     renderPrismDrawPreview(
@@ -3948,7 +4021,7 @@ function render() {
     const cursorScreenX = viewport.worldToScreen(cursorWorld.x, 0).sx;
     // Same snap config the preview tone is tuned with (guides and Prism
     // echoes included), so the dot sits where the pitch you hear is (14.4).
-    const snapped = snapToGrid(0, cursorWorld.y, buildSnapConfig(viewport.state.zoomX, cursorWorld.x));
+    const snapped = snapToGrid(0, cursorWorld.y, currentSnapConfig({ zoomX: viewport.state.zoomX, atBeat: cursorWorld.x }));
     renderFreePlanchette(
       fgCtx, viewport, cursorScreenX, snapped.wy,
       cursorWorld.y, rect.height,
@@ -3974,29 +4047,12 @@ function render() {
     const selPts = selCurve ? pitchPoints(selCurve) : undefined;
     const pitchStart = selPts && selPts.length > 0 ? selPts[0]!.position.x : null;
     const pitchEnd = selPts && selPts.length > 0 ? selPts[selPts.length - 1]!.position.x : null;
-    // Lazily attach a default volume lane to a selected curve that doesn't have
-    // one yet (e.g. a just-drawn curve before finishDrawing, or a chord sibling),
-    // so the graph shows and is editable immediately — not only after the first
-    // draw event. The default matches the audio fallback, so this is a no-op for
-    // sound and undo.
-    if (selCurve && pitchPoints(selCurve).length >= 2) {
-      ensureLane(selCurve, 'volume');
-    }
-    // While the curve is actively being drawn, keep the trailing volume point
-    // pinned to the live end of the pitch curve. Otherwise the end point stays
-    // where it was when the lane was first created (at the 2nd pitch point),
-    // leaving a stray volume point near the start of a long curve.
-    if (selCurve && interaction.drawingCurve === selCurve && pitchEnd !== null) {
-      const vpts = getLane(selCurve, 'volume')?.points;
-      if (vpts && vpts.length >= 2) {
-        const prevX = vpts[vpts.length - 2]!.position.x + 0.001;
-        vpts[vpts.length - 1]!.position.x = Math.max(prevX, pitchEnd);
-      }
-    }
     renderParamGraph(
       paramCtx, paramViewport, viewport,
       paramW, paramH,
-      (selCurve ? getLane(selCurve, 'volume') : null) ?? null,
+      // A curve with no volume lane shows the default it sounds with; the graph
+      // attaches it on the first edit (param-interaction.ts).
+      (selCurve ? displayedLane(selCurve, 'volume') : null) ?? null,
       paramColor,
       paramInteraction.selectedIndex(),
       paramPlayheadBeat,
@@ -4004,8 +4060,6 @@ function render() {
       pitchEnd,
     );
   }
-
-  requestAnimationFrame(render);
 }
 
 /**
@@ -4046,6 +4100,8 @@ if (import.meta.env.DEV) {
     transport, tickComposePerform,
     // Live voice counts — the observable for "removing a track stops its sound".
     getActiveSynthCount, getActiveOscillatorCount,
+    // Frames drawn so far (15.5): flat while idle.
+    drawCount: () => drawCount, runFrame,
   };
 }
 
@@ -4183,4 +4239,4 @@ resizeCanvases();
   });
 }
 
-requestAnimationFrame(render);
+requestAnimationFrame(frame);

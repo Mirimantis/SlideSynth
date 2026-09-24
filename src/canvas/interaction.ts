@@ -3,13 +3,11 @@ import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
 import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, computePointSubsetBBox, deepCopyPoints, applyTransformToCurve, splitCurveAtSegment, splitCurveAtPoint, applyAutoSmoothHandles, reclampHandlesAround, pitchPoints } from '../model/curve';
-import { deepCopyLanes, ensureLane } from '../model/lane';
+import { deepCopyLanes, ensureLane, getLane, pinLaneEndToPitch } from '../model/lane';
 import { pointSelectionOf, pointCount, hasPoint, type PointRef, type PointSelection } from '../model/point-selection';
-import { snapToGrid, getAdaptiveSubdivisions } from '../utils/snap';
-import type { SnapConfig } from '../utils/snap';
-import { getScaleById } from '../utils/scales';
-import { computeProjectionTargetsAtX } from './projection-renderer';
-import { SUBDIVISIONS_PER_BEAT, MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
+import { snapToGrid } from '../utils/snap';
+import { currentSnapConfig } from '../state/snap-config';
+import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
 import { chordOffsets } from '../utils/harmonics';
 import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/curve-groups';
 import { nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
@@ -171,7 +169,7 @@ export function createInteraction(
       }
     }
     if (bestPointX !== null) return Math.max(0, bestPointX);
-    const snap = buildSnapConfig(zoomX, worldX);
+    const snap = currentSnapConfig({ zoomX, atBeat: worldX });
     const snapped = snap.enabled ? snapToGrid(worldX, 0, snap).wx : worldX;
     return Math.max(0, snapped);
   }
@@ -198,7 +196,7 @@ export function createInteraction(
     if (istate.draggingGuideId) {
       const guide = store.getComposition().guides.find(g => g.id === istate.draggingGuideId);
       if (guide) {
-        const dragSnap = buildSnapConfigExcludingGuide(vp.state.zoomX, raw.wx, guide.id);
+        const dragSnap = currentSnapConfig({ zoomX: vp.state.zoomX, atBeat: raw.wx, excludeGuideId: guide.id });
         const snappedNow = dragSnap.enabled ? snapToGrid(raw.wx, raw.wy, dragSnap) : raw;
         const next = guide.orientation === 'x'
           ? Math.max(0, snappedNow.wx)
@@ -210,14 +208,14 @@ export function createInteraction(
 
     // Playhead scrubbing — update position and skip all other interaction
     if (istate.scrubbing) {
-      const snap = buildSnapConfig(vp.state.zoomX);
+      const snap = currentSnapConfig({ zoomX: vp.state.zoomX });
       const snappedBeat = snap.enabled ? snapToGrid(raw.wx, 0, snap).wx : raw.wx;
       const beat = Math.max(0, snappedBeat);
       callbacks.onPlayheadScrub?.(beat, 'move');
       return;
     }
 
-    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig(vp.state.zoomX, world.wx));
+    const snapped = snapToGrid(world.wx, world.wy, currentSnapConfig({ zoomX: vp.state.zoomX, atBeat: world.wx }));
 
     // Determine effective coordinates:
     // - Handles: raw (no snap) to allow smooth curve shaping
@@ -413,7 +411,7 @@ export function createInteraction(
     const sy = e.clientY - rect.top;
     const world = vp.screenToWorld(sx, sy);
     const rawPt: Vec2 = { x: world.wx, y: world.wy };
-    const snapped = snapToGrid(world.wx, world.wy, buildSnapConfig(vp.state.zoomX, world.wx));
+    const snapped = snapToGrid(world.wx, world.wy, currentSnapConfig({ zoomX: vp.state.zoomX, atBeat: world.wx }));
     const snappedPt: Vec2 = { x: snapped.wx, y: snapped.wy };
 
     // Ruler zone: first try loop-marker drag (if Loop is on), then fall through
@@ -432,7 +430,7 @@ export function createInteraction(
           return;
         }
       }
-      const snap = buildSnapConfig(vp.state.zoomX);
+      const snap = currentSnapConfig({ zoomX: vp.state.zoomX });
       const snappedBeat = snap.enabled ? snapToGrid(world.wx, 0, snap).wx : world.wx;
       const beat = Math.max(0, snappedBeat);
       istate.scrubbing = true;
@@ -810,10 +808,14 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
       history.snapshot();
       istate.drawingCurve = targetCurve;
       const point = createControlPoint(worldPt.x, worldPt.y);
-      const idx = addPointToCurve(targetCurve, point);
-      // Re-clamp neighboring handles so they don't extend past the new point.
-      reclampHandlesAround(targetCurve, idx);
-      if (state.bezierAutoSmooth) applyAutoSmoothHandles(targetCurve, idx, state.autoSmoothXRatio);
+      let idx = 0;
+      store.mutate(() => {
+        idx = addPointToCurve(targetCurve, point);
+        // Re-clamp neighboring handles so they don't extend past the new point.
+        reclampHandlesAround(targetCurve, idx);
+        if (state.bezierAutoSmooth) applyAutoSmoothHandles(targetCurve, idx, state.autoSmoothXRatio);
+        pinLaneEndToPitch(targetCurve, 'volume');
+      });
       store.setSelectedPoint(idx);
 
       // Start dragging handle
@@ -846,10 +848,15 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
     // Add point to existing drawing curve
     history.snapshot();
     const point = createControlPoint(worldPt.x, worldPt.y);
-    const idx = addPointToCurve(istate.drawingCurve, point);
-    // Re-clamp neighboring handles so they don't extend past the new point.
-    reclampHandlesAround(istate.drawingCurve, idx);
-    if (state.bezierAutoSmooth) applyAutoSmoothHandles(istate.drawingCurve, idx, state.autoSmoothXRatio);
+    const drawing = istate.drawingCurve;
+    let idx = 0;
+    store.mutate(() => {
+      idx = addPointToCurve(drawing, point);
+      // Re-clamp neighboring handles so they don't extend past the new point.
+      reclampHandlesAround(drawing, idx);
+      if (state.bezierAutoSmooth) applyAutoSmoothHandles(drawing, idx, state.autoSmoothXRatio);
+      pinLaneEndToPitch(drawing, 'volume');
+    });
     store.setSelectedPoint(idx);
 
     // Start dragging handle for new point
@@ -1148,7 +1155,7 @@ function findScissorsCut(worldPt: Vec2, vp: Viewport): {
   }
 
   // Second pass: cut on curve segments (screen-space distance)
-  const snap = buildSnapConfig(vp.state.zoomX);
+  const snap = currentSnapConfig({ zoomX: vp.state.zoomX });
   for (const curve of track.curves) {
     if (pitchPoints(curve).length < 2) continue;
     for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
@@ -1262,6 +1269,7 @@ function handleDrawClickPrism(istate: InteractionState, worldPt: Vec2): void {
         const idx = addPointToCurve(sib, point);
         reclampHandlesAround(sib, idx);
         if (state.bezierAutoSmooth) applyAutoSmoothHandles(sib, idx, state.autoSmoothXRatio);
+        pinLaneEndToPitch(sib, 'volume');
         if (sib.id === primary!.id) primaryNewIdx = idx;
       }
     });
@@ -1334,6 +1342,8 @@ function handleDrag(istate: InteractionState, snapped: { wx: number; wy: number 
       movePoint(curve, istate.dragPointIndex, { x: snapped.wx, y: snapped.wy });
       // Re-clamp neighboring handles so they don't extend past the moved point.
       reclampHandlesAround(curve, istate.dragPointIndex);
+      // The lane follows the end of a curve still being drawn out.
+      if (curve === istate.drawingCurve) pinLaneEndToPitch(curve, 'volume');
     } else if (istate.dragging === 'handleOut' || istate.dragging === 'handleIn') {
       const pt = pitchPoints(curve)[istate.dragPointIndex];
       if (!pt) return;
@@ -1367,7 +1377,8 @@ function finishDrawing(istate: InteractionState): void {
   // so it's immediately editable in the Parameters Graph. No-op for < 2 points
   // or if a lane already exists; the default value matches the sampler fallback
   // so audio is unchanged.
-  if (istate.drawingCurve) ensureLane(istate.drawingCurve, 'volume');
+  const drawn = istate.drawingCurve;
+  if (drawn && !getLane(drawn, 'volume')) store.mutate(() => { ensureLane(drawn, 'volume'); });
   istate.drawingCurve = null;
   istate.dragging = null;
   store.setSelectedCurve(null);
@@ -1404,75 +1415,4 @@ function findCurveAt(worldPt: Vec2, vp: Viewport, track: Track): BezierCurve | n
 function getSelectedTrack(): Track | undefined {
   const state = store.getState();
   return state.composition.tracks.find(t => t.id === state.selectedTrackId);
-}
-
-/** Like buildSnapConfig, but filters one guide ID out of the guide targets so
- *  a dragging guide doesn't snap to itself. */
-export function buildSnapConfigExcludingGuide(zoomX: number, wxForProjection: number, excludeGuideId: string): SnapConfig {
-  const cfg = buildSnapConfig(zoomX, wxForProjection);
-  const state = store.getState();
-  if (!state.guidesVisible) return cfg;
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (const g of state.composition.guides) {
-    if (g.id === excludeGuideId) continue;
-    if (g.orientation === 'x') xs.push(g.position);
-    else ys.push(g.position);
-  }
-  return {
-    ...cfg,
-    guideXTargets: xs.length > 0 ? xs : undefined,
-    guideYTargets: ys.length > 0 ? ys : undefined,
-  };
-}
-
-export function buildSnapConfig(zoomX?: number, wxForProjection?: number): SnapConfig {
-  const state = store.getState();
-  const subdivisions = zoomX !== undefined
-    ? getAdaptiveSubdivisions(zoomX)
-    : SUBDIVISIONS_PER_BEAT;
-
-  // Harmonic Prism: when projection mode is active, add echo Y targets
-  // at the cursor X as additional snap candidates.
-  let projectionTargets: readonly number[] | undefined;
-  const prism = state.harmonicPrism;
-  if (prism.projectionSourceId && wxForProjection !== undefined) {
-    const track = state.composition.tracks.find(t =>
-      t.curves.some(c => c.id === prism.projectionSourceId),
-    );
-    const source = track?.curves.find(c => c.id === prism.projectionSourceId);
-    if (source) {
-      projectionTargets = computeProjectionTargetsAtX(
-        source,
-        prism.chordSpec,
-        prism.projectionOctaveRange,
-        wxForProjection,
-      );
-    }
-  }
-
-  // User-defined snap guides (Phase 8.7) — only participate in snap when visible.
-  let guideXTargets: readonly number[] | undefined;
-  let guideYTargets: readonly number[] | undefined;
-  if (state.guidesVisible && state.composition.guides.length > 0) {
-    const xs: number[] = [];
-    const ys: number[] = [];
-    for (const g of state.composition.guides) {
-      if (g.orientation === 'x') xs.push(g.position);
-      else ys.push(g.position);
-    }
-    if (xs.length > 0) guideXTargets = xs;
-    if (ys.length > 0) guideYTargets = ys;
-  }
-
-  return {
-    enabled: state.snapEnabled,
-    subdivisionsPerBeat: subdivisions,
-    scaleRoot: state.scaleRoot,
-    scale: state.scaleId ? getScaleById(state.scaleId) ?? null : null,
-    hidePitchLines: state.hidePitchLines,
-    projectionTargets,
-    guideXTargets,
-    guideYTargets,
-  };
 }
