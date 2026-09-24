@@ -78,7 +78,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - The snap drawer and preset dropdown didn't follow undo or file open.
     - Turning Loop off mid-Jam stopped the transport at the end of existing content.
   - *Deferred to 15.2:* replacing the stringly `curveId:idx` point keys with a structured selection type. That code lives in the interaction handlers 15.2 rewrites.
-- [x] **15.2 Transport / perform state machine** *(L)*
+- [x] **15.2 Transport / perform state machine** *(L, PRs #74 + #75)*
   - One module with a single mode value and named transitions, replacing the ~8 flags spread across the store, the playback engine and `main.ts`: `phase`, `recordArmed`, `jamActive`, `passRecordState`, `lmbSounding`, `midiArmedTrackId`, loop-enabled and Lock Rail.
   - `composeToggleArmed`, `jamToggle`, `toggleRecordNextPass`, `composePerformStop` and the loop-wrap handler become transitions, with unit tests covering every transition.
   - The canvas gets **one input router** that asks the state machine whether a press performs or edits. This replaces today's capture-phase listener in `main.ts` racing the bubbling handlers in `interaction.ts`.
@@ -90,7 +90,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
       - `src/state/transport.ts` is a pure `transition(state, event)` over one `TransportState` (mode × clock × capture), with the whole transition table under test.
       - One `transport(event)` controller in `main.ts` runs each change's side effects. It replaces `composeToggleArmed`, `jamToggle`, `toggleRecordNextPass`, `startComposePerformPlayback`, `composePerformStop` and `startPlayback`.
       - Buttons, hotkeys, the count-in, loop wraps, the AFK timer and the engine running out all dispatch events.
-    - **Part 2 — input router (done, this PR):**
+    - **Part 2 — input router (done, PR #75):**
       - `src/canvas/input-router.ts` holds one set of Pointer Events listeners per canvas (staff and Parameters Graph). It decides once per press whether perform, pan or the edit tools own the gesture; `routePress` is pure and tested.
       - Pointer capture keeps a press with its owner on or off the canvas, replacing the window-level mouse listeners.
       - Selected points are a typed `PointSelection` (curve id → indices) instead of `"curveId:idx"` strings. Multi-point delete moved into `deleteSelectedPoints` in `model/curve.ts`.
