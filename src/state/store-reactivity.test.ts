@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { store } from './store';
 import { effect, watch } from './reactive';
 import { createComposition } from '../model/composition';
-import { setHtmlIfChanged } from '../utils/dom-helpers';
 
 /** Count how many times `read` is re-run by an effect after creation. */
 function countRuns(read: () => unknown): { runs: () => number; dispose: () => void } {
@@ -119,17 +118,5 @@ describe('watch', () => {
     store.setMetronomeVolume(0.5);
     expect(runs).toBe(1);
     dispose();
-  });
-});
-
-describe('setHtmlIfChanged', () => {
-  it('only touches the DOM when the markup differs', () => {
-    const el = { innerHTML: '' } as unknown as Element;
-    expect(setHtmlIfChanged(el, '<b>a</b>')).toBe(true);
-    (el as unknown as { innerHTML: string }).innerHTML = 'sentinel';
-    expect(setHtmlIfChanged(el, '<b>a</b>')).toBe(false);
-    expect((el as unknown as { innerHTML: string }).innerHTML).toBe('sentinel');
-    expect(setHtmlIfChanged(el, '<b>b</b>')).toBe(true);
-    expect((el as unknown as { innerHTML: string }).innerHTML).toBe('<b>b</b>');
   });
 });

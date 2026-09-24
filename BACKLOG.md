@@ -130,6 +130,12 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - The canvas stays imperative.
   - Migrate one panel at a time, starting with the track list and property panels, which currently rebuild on every store change.
   - Sequence this with Phase 16 so panels aren't rebuilt twice. Migrate the panels whose shape Phase 16 won't change first.
+  - **Part 1 (this PR):**
+    - Preact + `@preact/signals` confirmed (both MIT). Components read the store while rendering and re-render when those fields change, because the store's version signals are the ones `@preact/signals` tracks.
+    - Migrated the track list (`ui/track-list.tsx`), Object Properties (`ui/property-panel.tsx`) and Tool Properties (`ui/tool-property-panel.tsx`). The 15.1 stopgap (`setHtmlIfChanged` plus slider values synced by hand) is gone: sliders are controlled inputs, and Preact keeps the node under the pointer.
+    - Render tests use `preact-render-to-string` (dev only).
+    - Also in this PR, a user request: drawers are only as tall as their controls (scrolling past the canvas height), instead of full height. The Tuning drawer's Key/Scale row wraps instead of scrolling sideways.
+  - **Still to migrate:** Prism panel, drawers' contents, toolbar, tone builder/picker and dialogs. Most of these are reshaped by Phase 16, so they move with it.
 - [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2, PR #76)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.
   - Add an `fgDirty` flag mirroring `bgDirty`, and cache each curve's tessellation as a `Path2D` keyed by curve identity. Idle CPU should then drop to near zero.

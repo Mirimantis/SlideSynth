@@ -554,15 +554,20 @@ body {
   overflow: hidden; /* clip the off-screen (translated) drawers */
 }
 
+/* A drawer is as tall as its controls, up to the canvas height (then it
+   scrolls), rather than always running the full height. */
 .drawer {
   position: absolute;
   top: 0;
-  bottom: 0;
   left: 0;
   width: 240px;
+  max-height: 100%;
+  box-sizing: border-box;
   background: var(--bg-light);
   border-right: 1px solid #335;
-  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.35);
+  border-bottom: 1px solid #335;
+  border-bottom-right-radius: 6px;
+  box-shadow: 4px 4px 16px rgba(0, 0, 0, 0.35);
   transform: translateX(-105%);
   transition: transform 0.18s ease;
   pointer-events: auto;
@@ -591,6 +596,12 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Key + scale pickers are wider than the drawer; wrap rather than scroll. */
+#tuning-scale-slot .toolbar-group.scale {
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .tool-panel-grid .tool-btn {
