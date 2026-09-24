@@ -107,10 +107,10 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - *Behaviour changes in part 2:*
     - Alt+left while performing pans, instead of panning and sounding a note at once.
     - Alt+left on the Parameters Graph now pans too, like the staff.
-- [ ] **15.3 Break up `main.ts`** *(L)*
+- [ ] **15.3 Break up `main.ts`** *(L; keyboard map done in PR #77)*
   - **Layout:** move the HTML template into components (15.4).
   - **Keyboard map:** turn it into a **command registry**, one table of named commands with their bindings. Buttons, menus, the context menu and the help.html shortcut table all read from it.
-    - **Done (this PR):**
+    - **Done (PR #77):**
       - `src/commands/catalog.ts` is the one table: id, label, key chords, description. It's pure data.
       - `keys.ts` parses and matches chords; it's pure and tested.
       - `registry.ts` binds what each command does. It requires a handler for every catalog entry, and runs one keyboard listener with the typing guard, hold/release, and auto-repeat rules.
