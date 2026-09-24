@@ -1,6 +1,7 @@
 // Harmonic Prism — chord-spec picker panel.
 
 import { store } from '../state/store';
+import { commandTitle } from '../commands/catalog';
 import {
   RELEVANT_QUALITIES,
   STACKING_LABELS,
@@ -38,7 +39,7 @@ export function createPrismPanel(container: HTMLElement): { refresh(): void } {
 
     container.innerHTML = `
       <div class="prism-row prism-toggle-row">
-        <label class="toggle-switch" title="Press H to toggle Draw mode — clicks place chord clusters at the cursor">
+        <label class="toggle-switch" title="${commandTitle('prism.drawMode')}">
           <span class="toggle-switch-track">
             <input type="checkbox" id="prism-draw-toggle" ${drawOn ? 'checked' : ''} />
             <span class="toggle-switch-thumb"></span>
@@ -47,7 +48,7 @@ export function createPrismPanel(container: HTMLElement): { refresh(): void } {
         </label>
       </div>
       <div class="prism-row prism-toggle-row">
-        <label class="toggle-switch" title="Press Ctrl+H on a selected curve to toggle Projection mode">
+        <label class="toggle-switch" title="${commandTitle('prism.projection')}">
           <span class="toggle-switch-track">
             <input type="checkbox" id="prism-projection-toggle" ${active ? 'checked' : ''} />
             <span class="toggle-switch-thumb"></span>

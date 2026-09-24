@@ -134,7 +134,9 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - Preact + `@preact/signals` confirmed (both MIT). Components read the store while rendering and re-render when those fields change, because the store's version signals are the ones `@preact/signals` tracks.
     - Migrated the track list (`ui/track-list.tsx`), Object Properties (`ui/property-panel.tsx`) and Tool Properties (`ui/tool-property-panel.tsx`). The 15.1 stopgap (`setHtmlIfChanged` plus slider values synced by hand) is gone: sliders are controlled inputs, and Preact keeps the node under the pointer.
     - Render tests use `preact-render-to-string` (dev only).
-    - Also in this PR, a user request: drawers are only as tall as their controls (scrolling past the canvas height), instead of full height. The Tuning drawer's Key/Scale row wraps instead of scrolling sideways.
+    - Also in this PR, a user request: each drawer is sized to its own controls instead of full height and a shared 240px width. Height is capped at the canvas (then it scrolls); width runs from 200px up to the canvas width.
+      - The Prism label column widened so "Voice 1 (root)" no longer runs into its input.
+      - The Prism toggles' tooltips come from the command catalog.
   - **Still to migrate:** Prism panel, drawers' contents, toolbar, tone builder/picker and dialogs. Most of these are reshaped by Phase 16, so they move with it.
 - [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2, PR #76)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.

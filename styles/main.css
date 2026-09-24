@@ -554,13 +554,16 @@ body {
   overflow: hidden; /* clip the off-screen (translated) drawers */
 }
 
-/* A drawer is as tall as its controls, up to the canvas height (then it
-   scrolls), rather than always running the full height. */
+/* A drawer is as tall and as wide as its own controls: up to the canvas
+   height (then it scrolls), and between a minimum width and the canvas
+   width. Drawers don't share one size. */
 .drawer {
   position: absolute;
   top: 0;
   left: 0;
-  width: 240px;
+  width: max-content;
+  min-width: 200px;
+  max-width: calc(100% - 24px);
   max-height: 100%;
   box-sizing: border-box;
   background: var(--bg-light);
@@ -598,7 +601,8 @@ body {
   gap: 6px;
 }
 
-/* Key + scale pickers are wider than the drawer; wrap rather than scroll. */
+/* Key + scale pickers: wrap rather than scroll if the drawer is capped
+   narrower than they are (a narrow window). */
 #tuning-scale-slot .toolbar-group.scale {
   flex-wrap: wrap;
   max-width: 100%;
