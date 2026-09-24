@@ -1,5 +1,6 @@
 import type { ToneDefinition, Composition, VoiceId } from '../types';
 import { createToneSynth, type ToneSynth } from './tone-synth';
+import { createLiveVoice, type LiveVoice } from './live-voice';
 import { getAudioContext, getMasterGain, ensureResumed } from './engine';
 import { evaluateCurveAtBeat } from './curve-sampler';
 import { centsToFrequency } from '../constants';
@@ -19,11 +20,6 @@ const DYNAMICS_EPSILON = 0.005;
 /** Ramp length for a dynamics update — long enough to avoid zipper noise,
  *  short enough that the swell tracks the key. */
 const DYNAMICS_RAMP = 0.02;
-/** Time constant for live pitch updates (BACKLOG 14.3). Updates arrive at
- *  mouse / frame rate (~8–17 ms apart); gliding toward each one instead of
- *  stepping smooths the staircase while adding only a few ms of lag. Interim
- *  until the AudioWorklet voice (BACKLOG 15.7) smooths at audio rate. */
-const LIVE_PITCH_GLIDE_S = 0.008;
 
 const DEFAULT_VOICE: VoiceId = 'primary';
 
@@ -58,7 +54,8 @@ export interface PreviewManager {
 }
 
 export function createPreviewManager(): PreviewManager {
-  const drawSynths = new Map<VoiceId, ToneSynth>();
+  /** Live voices (live-voice.ts): perform, Space preview, Prism harmonies, MIDI. */
+  const drawSynths = new Map<VoiceId, LiveVoice>();
   /** Last gain actually scheduled per draw voice — the epsilon guard's baseline. */
   const drawGains = new Map<VoiceId, number>();
   const scrubEntries = new Map<string, ScrubTrackEntry>();
@@ -81,12 +78,9 @@ export function createPreviewManager(): PreviewManager {
   }
 
   function stopDrawPreviewFor(voiceId: VoiceId) {
-    const synth = drawSynths.get(voiceId);
-    if (!synth) return;
-    const ctx = getAudioContext();
-    const now = ctx.currentTime;
-    synth.setVolume(0, now + RAMP_OUT);
-    synth.stop(now + RAMP_OUT + 0.01);
+    const voice = drawSynths.get(voiceId);
+    if (!voice) return;
+    voice.release(RAMP_OUT);
     drawSynths.delete(voiceId);
     drawGains.delete(voiceId);
   }
@@ -126,34 +120,25 @@ export function createPreviewManager(): PreviewManager {
     startDrawPreview(tone: ToneDefinition, noteNumber: number, voiceId: VoiceId = DEFAULT_VOICE, dynamics?: number) {
       stopDrawPreviewFor(voiceId);
       ensureResumed();
-      const ctx = getAudioContext();
-      const synth = createToneSynth(tone);
-      synth.connect(getPreviewGain());
-      synth.start();
-      synth.setFrequency(centsToFrequency(noteNumber));
-      // Ramp from 0 to the starting level: the bus value when performing, the
-      // fixed preview level for the idle Spacebar path.
+      // Fade in from 0 to the starting level: the bus value when performing,
+      // the fixed preview level for the idle Spacebar path.
       const gain = dynamics === undefined ? PREVIEW_VOLUME : gainForDynamics(dynamics);
-      synth.setVolume(0);
-      synth.setVolume(gain, ctx.currentTime + RAMP_IN);
-      drawSynths.set(voiceId, synth);
+      const voice = createLiveVoice(tone, { hz: centsToFrequency(noteNumber), gain, fadeInSeconds: RAMP_IN }, getPreviewGain());
+      drawSynths.set(voiceId, voice);
       drawGains.set(voiceId, gain);
     },
 
     updateDrawPitch(noteNumber: number, voiceId: VoiceId = DEFAULT_VOICE) {
-      const synth = drawSynths.get(voiceId);
-      if (synth) {
-        synth.glideFrequency(centsToFrequency(noteNumber), LIVE_PITCH_GLIDE_S);
-      }
+      drawSynths.get(voiceId)?.glideTo(centsToFrequency(noteNumber));
     },
 
     setVoiceVolume(voiceId: VoiceId, dynamics: number) {
-      const synth = drawSynths.get(voiceId);
-      if (!synth) return;
+      const voice = drawSynths.get(voiceId);
+      if (!voice) return;
       const gain = gainForDynamics(dynamics);
       const last = drawGains.get(voiceId);
       if (last !== undefined && Math.abs(gain - last) < DYNAMICS_EPSILON) return;
-      synth.setVolume(gain, getAudioContext().currentTime + DYNAMICS_RAMP);
+      voice.rampGain(gain, DYNAMICS_RAMP);
       drawGains.set(voiceId, gain);
     },
 
@@ -165,6 +150,7 @@ export function createPreviewManager(): PreviewManager {
       if (voiceId === undefined) return drawSynths.size > 0;
       return drawSynths.has(voiceId);
     },
+
 
     startScrubPreview(composition: Composition) {
       stopScrubPreview();

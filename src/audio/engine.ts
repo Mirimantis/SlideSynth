@@ -1,5 +1,14 @@
 let ctx: AudioContext | null = null;
 let masterGain: GainNode | null = null;
+const createdListeners: ((ctx: AudioContext) => void)[] = [];
+
+/** Run `fn` with the AudioContext once it exists (now, if it already does).
+ *  For setup that shouldn't create the context early, such as loading an
+ *  AudioWorklet module. */
+export function onAudioContextCreated(fn: (ctx: AudioContext) => void): void {
+  if (ctx) fn(ctx);
+  else createdListeners.push(fn);
+}
 
 /**
  * Get or create the shared AudioContext.
@@ -12,6 +21,7 @@ export function getAudioContext(): AudioContext {
     masterGain = ctx.createGain();
     masterGain.gain.value = 0.5;
     masterGain.connect(ctx.destination);
+    for (const fn of createdListeners.splice(0)) fn(ctx);
   }
   return ctx;
 }

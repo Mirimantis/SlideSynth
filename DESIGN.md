@@ -64,7 +64,7 @@ The 2026-09-24 review asked whether TypeScript was the right base. It is. The fr
 
 The two real platform limits have targeted answers that don't require leaving the web:
 
-- **Control rate.** Live pitch is driven from the main thread at mouse/frame rate. The answer is an **AudioWorklet** voice that smooths pitch and gain at audio rate (and can later run the magnetic integrator there) — BACKLOG 15.7.
+- **Control rate.** Live pitch is driven from the main thread at mouse/frame rate. The answer is an **AudioWorklet** voice that smooths pitch and gain at audio rate (and can later run the magnetic integrator there) — BACKLOG 15.7, done: `src/audio/live-voice.ts`. The worklet emits control signals into the tone's native oscillators, so live and scheduled notes share one timbre.
 - **Code sharing with C++ ports.** VST and VCV Rack are C++. The answer is to keep the kernel (cents math, curve evaluation, snap + magnetic physics, `.gliss` codec) **pure and fully tested** now, so porting it is translation rather than excavation, and to decide C++ vs. Rust→WASM vs. an independently implemented spec only when the first port begins — BACKLOG Phase 17.
 
 ### Why the "no framework" decision is being revisited
@@ -92,6 +92,7 @@ src/
 │                    #   clipboard.ts, perform-mode.ts (perform-vs-edit predicate), snap-config.ts (the one snap builder)
 ├── model/           # curve, lane, track, tone, composition, curve-groups, layer, pass-log, point-selection
 ├── audio/           # engine, tone-synth, playback (voice-pool scheduler), curve-sampler, preview (live voices),
+│                    #   live-voice (+ live-voice-dsp, live-voice.worklet: audio-rate pitch/gain smoothing),
 │                    #   metronome, midi-input, dynamics-bus, voice-allocation
 ├── canvas/          # viewport, interaction (tool mouse handling, ~1,400 lines), performance-engine
 │                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), and one renderer per layer

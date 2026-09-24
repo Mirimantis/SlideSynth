@@ -38,6 +38,7 @@ import { openTonePicker } from './ui/tone-picker';
 import { openPresetSaveDialog } from './ui/preset-save-dialog';
 import { openMidiArmDialog } from './ui/midi-arm-dialog';
 import { createPerfHud } from './ui/perf-hud';
+import { liveVoiceMode } from './audio/live-voice';
 import { getActiveSynthCount, getActiveOscillatorCount } from './audio/tone-synth';
 import { BUILTIN_SNAP_PRESETS, loadUserSnapPresets, saveUserSnapPresets, presetMatches, snapshotPreset, type SnapPreset } from './utils/snap-presets';
 import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile } from './export/json-export';
@@ -150,7 +151,7 @@ app.innerHTML = `
             </label>
           </div>
           <div class="transport-row">
-            <label id="perf-hud-label" class="toggle-switch" title="Show frame ms, synth/oscillator/voice counts, and audio latency (${primaryShortcut('view.perfHud')})">
+            <label id="perf-hud-label" class="toggle-switch" title="Show frame ms, synth/oscillator/voice counts, audio latency and the live-voice path (${primaryShortcut('view.perfHud')})">
               <span class="toggle-switch-track">
                 <input type="checkbox" id="perf-hud-toggle" />
                 <span class="toggle-switch-thumb"></span>
@@ -3205,6 +3206,7 @@ function updatePerfHudDom(state: AppState) {
     oscillatorCount: getActiveOscillatorCount(),
     voiceCount: state.performance.planchettes.length,
     audioBaseLatencyMs: getAudioContext().baseLatency * 1000,
+    liveVoiceMode: liveVoiceMode(),
   });
 }
 
@@ -3701,6 +3703,8 @@ if (import.meta.env.DEV) {
     getActiveSynthCount, getActiveOscillatorCount,
     // Frames drawn so far (15.5): flat while idle.
     drawCount: () => drawCount, runFrame,
+    // Live voices (15.7): drive and inspect them directly.
+    preview, getAudioContext, getMasterGain,
   };
 }
 
