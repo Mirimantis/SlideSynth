@@ -155,11 +155,11 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - Prerequisite for 12.1, which defines how gravity sources combine.
   - **Done (PR #76):** `snapConfigFor(state, { zoomX, atBeat, excludeGuideId })` in `src/state/snap-config.ts` (pure, tested), with `currentSnapConfig` over the live store. Every caller uses it.
   - *Behaviour change:* with Prism projection on, performing snaps to the echo pitches at the rail's beat, as drawing does. Before, perform ignored projection.
-- [x] **15.7 AudioWorklet live voice** *(L)*
+- [x] **15.7 AudioWorklet live voice** *(L, PR #79)*
   - The live perform voice becomes an AudioWorklet that receives pitch and gain targets and smooths them at audio rate.
   - Later, the magnetic integrator can move there too, decoupling physics from `requestAnimationFrame`.
   - Measure against the Perf HUD before and after.
-  - **Done (this PR):**
+  - **Done (PR #79):**
     - The worklet is a *control-signal* source, not a synth. It smooths pitch (one-pole in log-frequency, so glides are even in cents) and gain (linear ramps) per sample. Its two outputs drive the tone's native oscillators' `frequency` and the output gain. So live notes keep exactly the timbre of playback and WAV export, and the automation timeline no longer fills with an event per mouse move.
     - Files:
       - `audio/live-voice-dsp.ts`: pure, tested.
