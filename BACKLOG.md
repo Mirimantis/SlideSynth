@@ -27,30 +27,34 @@ The [queued features](#queued-features-paused) resume after Phase 16. Several of
 
 ## Phase 14 — Stabilize
 
-- [ ] **14.1 Jam / pass-record click edits the canvas when Lock Rail is off** *(S, bug — confirmed)*
+- [x] **14.1 Jam / pass-record click edits the canvas when Lock Rail is off** *(S, bug — confirmed, PR #72)*
   - **Repro:** turn Lock Rail off, start Jam, and click the canvas with the Draw tool. The click sounds a perform note *and* creates a stray one-point curve.
   - **Cause:** the two canvas mousedown handlers disagree about perform mode. `isComposePerformActive` ([src/main.ts](src/main.ts)) includes jam and pass-record; `isComposePerformLocked` ([src/canvas/interaction.ts](src/canvas/interaction.ts)) doesn't.
   - **Fix now:** make both call one shared predicate. The structural fix is 15.2.
-- [ ] **14.2 Tool panel shows the wrong tool after clicking a track** *(S, bug — confirmed)*
+- [x] **14.2 Tool panel shows the wrong tool after clicking a track** *(S, bug — confirmed, PR #72)*
   - **Repro:** in Draw, click a track in the track list to select its curves, then press Delete. The panel still shows Draw, but Draw doesn't work until you click it again.
   - **Cause:** the track-click handler calls `store.setTool('select')` without updating the tool panel. The Ctrl-hold switch in `interaction.ts` has the same gap.
   - **Fix now:** make the tool panel subscribe to the store. Hand-syncing in general goes away in 15.1 / 15.4.
-- [ ] **14.3 Live pitch is stepped** *(S, audio)*
+  - **Decided (2026-09-24): a track click no longer switches tools.** It selects the track's curves and leaves the tool alone, so in Draw you can Delete and keep drawing. The transform box is built when you enter Select (button or `V`).
+- [x] **14.3 Live pitch is stepped** *(S, audio, PR #72)*
   - `ToneSynth.setFrequency` uses `setValueAtTime` at mouse/frame rate, so live glides and magnetic vibrato are a ~60 Hz staircase.
   - **Interim fix:** use `setTargetAtTime` or a short linear ramp to the next expected update. Verify by ear on a bright saw tone.
   - The full fix is the AudioWorklet voice (15.7).
-- [ ] **14.4 Space-hold preview snaps differently from drawing** *(XS, bug)*
+- [x] **14.4 Space-hold preview snaps differently from drawing** *(XS, bug, PR #72)*
   - The free-planchette preview builds its own snap config without guides or projection targets.
   - **Fix now:** use `buildSnapConfig`. The structural fix is 15.6.
-- [ ] **14.5 Repo hygiene** *(XS)*
+- [x] **14.5 Repo hygiene** *(XS, PR #72)*
   - Exclude `.claude/worktrees/**` from Vitest: 11 of 23 test files currently run from stale worktrees.
   - Prune the 9 stale worktrees.
   - Remove the stale "glissandograph mode" / "gliss mode" comments in [src/main.ts](src/main.ts).
-- [ ] **14.6 Pick one product name** *(XS decision + S rename)*
-  - The folder, repo and localStorage prefix say **SlideSynth**. The package, page title, docs and file format say **Glissandograph** / `.gliss`.
-  - Choose one for user-facing text.
-  - The envelope marker `app: "glissandograph"` is a file-format contract and stays regardless.
-  - Renaming localStorage keys needs a one-time migration.
+- [x] **14.6 Pick one product name** *(XS decision + S rename, PR #72)*
+  - **Decided (2026-09-24): Glissandograph.** The page title, package name, docs and file format already used it; the remaining "SlideSynth" mentions in help.html and docs are renamed.
+  - Left as-is on purpose: the GitHub repo and folder name, and the internal `slidesynth.*` localStorage keys and CSS class prefix. None of these are user-facing, and renaming the keys would need a migration for no visible benefit.
+  - The envelope marker `app: "glissandograph"` is a file-format contract and never changes.
+- [x] **14.7 Un-looped Jam stops at the end of existing content** *(S, bug — found during 14.5, PR #72)*
+  - **Repro:** with Loop off, start Jam on a composition with curves. The transport stops when the playhead passes the last curve, and the Jam button stays lit.
+  - **Cause:** the store subscription clamps the play range to the composition length on every store change unless Record is armed, which overrode Jam's open-ended range.
+  - **Fix:** skip the clamp while jamming. The loop-marker sync still applies when Loop is on.
 
 ---
 
@@ -246,6 +250,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
   - May fold into 15.1 if the new store uses structural sharing.
 - [ ] **12.4 Raw-take retention** *(L, own planning session — after 9.3)*
   - Keep the high-rate capture alongside the fitted Bezier; see [DESIGN.md › Raw takes](DESIGN.md#raw-takes-design-framing-for-backlog-124).
+  - Earlier parked exploration of a separate, non-editable raw curve type that plays its samples directly (convert-to-Bezier on demand): [.claude/plans/12.4-raw-recording-curve-type.md](.claude/plans/12.4-raw-recording-curve-type.md).
   - **Session inputs:**
     - authority: raw is the immutable original, the edited Bezier wins playback;
     - retain kept takes only;

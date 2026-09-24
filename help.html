@@ -545,7 +545,7 @@
   <!-- Tracks -->
   <h2 id="tracks">Tracks & Tones</h2>
   <p>
-    The track panel on the left lets you manage multiple tracks, each with its own
+    The track panel on the right lets you manage multiple tracks, each with its own
     tone, colour, and curves.
   </p>
   <details>
@@ -553,6 +553,7 @@
     <div class="detail-body">
       <ul>
         <li>Click <strong>+ Track</strong> to add a new track.</li>
+        <li>Click a track to make it active and select all of its curves. Your tool stays as it is: in Draw, <kbd>Delete</kbd> removes them and you can keep drawing; press <kbd>V</kbd> (or pick Select) to get a transform box around them.</li>
         <li>Click <strong>+ Tone</strong> to open the tone builder and design a custom synth voice.</li>
         <li>Each track has <strong>M</strong> (mute), <strong>S</strong> (solo), <strong>I</strong> (arm for MIDI input), <strong>T</strong> (edit tone), and <strong>X</strong> (delete track) controls.</li>
         <li><strong>X</strong> deletes the track and everything on it. It's a single undo step, so <kbd>Ctrl+Z</kbd> brings it straight back — handy for clearing away layers you don't want to keep. If the track is sounding when you delete it, its audio stops immediately.</li>
@@ -958,13 +959,13 @@
       <p>
         <strong>Just Intonation</strong>: use the acoustic ratio directly. The JI major third
         (5/4) is 386.31¢ — about 14¢ flatter than 12-TET, but it "locks" on sustained tones
-        without the beating you hear in equal temperament. SlideSynth's JI dominant 7th
+        without the beating you hear in equal temperament. Glissandograph's JI dominant 7th
         uses the harmonic seventh (7/4 ≈ 969¢), noticeably flatter than the 12-TET m7
         (1000¢).
       </p>
       <h3>Why microtonal matters</h3>
       <p>
-        SlideSynth pitches are continuous floats, not quantised to semitones. A chord
+        Glissandograph pitches are continuous floats, not quantised to semitones. A chord
         built at MIDI 60.4 is just as valid as one at 60 — the harmonic maths is
         invariant to the base pitch.
       </p>

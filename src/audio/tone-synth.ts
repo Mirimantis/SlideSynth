@@ -4,6 +4,14 @@ import { getAudioContext } from './engine';
 export interface ToneSynth {
   /** Set pitch in Hz. Takes effect immediately or at scheduled time. */
   setFrequency(hz: number, time?: number): void;
+  /**
+   * Glide toward a pitch in Hz, starting now, with a first-order approach of
+   * the given time constant. For live input that arrives at event/frame rate:
+   * an instant step per update would be an audible staircase (BACKLOG 14.3).
+   * Not for scheduled playback — a reused pool voice would swoop from the
+   * previous curve's pitch at each note start.
+   */
+  glideFrequency(hz: number, timeConstant: number): void;
   /** Set volume 0–1. Ramps linearly to avoid clicks. */
   setVolume(v: number, time?: number): void;
   /**
@@ -107,6 +115,13 @@ export function createToneSynth(tone: ToneDefinition): ToneSynth {
       const t = time ?? ctx.currentTime;
       for (const osc of oscillators) {
         osc.frequency.setValueAtTime(hz, t);
+      }
+    },
+
+    glideFrequency(hz: number, timeConstant: number) {
+      const t = ctx.currentTime;
+      for (const osc of oscillators) {
+        osc.frequency.setTargetAtTime(hz, t, timeConstant);
       }
     },
 

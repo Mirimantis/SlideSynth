@@ -50,6 +50,10 @@ export interface InteractionCallbacks {
   onLoopMarkerDrag?(which: 'start' | 'end', beats: number, phase: 'start' | 'move' | 'end'): void;
   onCursorMove?(worldX: number, worldY: number, screenY: number): void;
   onCursorLeave?(): void;
+  /** True when the left button performs instead of editing. Supplied by the
+   *  owner of the playback engine so both canvas mouse paths share one
+   *  definition (BACKLOG 14.1 — see state/perform-mode.ts). */
+  isPerformInputActive(): boolean;
 }
 
 export interface InteractionState {
@@ -97,7 +101,7 @@ export interface InteractionState {
 export function createInteraction(
   canvas: HTMLCanvasElement,
   vp: Viewport,
-  callbacks?: InteractionCallbacks,
+  callbacks: InteractionCallbacks,
 ): InteractionState {
   const istate: InteractionState = {
     cursorWorld: null,
@@ -125,9 +129,7 @@ export function createInteraction(
    * don't fire on the same mouse events.
    */
   function isComposePerformLocked(): boolean {
-    const st = store.getState();
-    return st.playback.state === 'playing'
-        && (st.scrollCanvasEnabled || st.performance.recordArmed);
+    return callbacks.isPerformInputActive();
   }
 
   /**
@@ -167,7 +169,7 @@ export function createInteraction(
     // Loop-marker drag — update marker position (snaps to curve points + grid)
     if (istate.draggingLoopMarker) {
       const beat = snapBeatForMarker(raw.wx);
-      callbacks?.onLoopMarkerDrag?.(istate.draggingLoopMarker, beat, 'move');
+      callbacks.onLoopMarkerDrag?.(istate.draggingLoopMarker, beat, 'move');
       return;
     }
 
@@ -192,7 +194,7 @@ export function createInteraction(
       const snap = buildSnapConfig(vp.state.zoomX);
       const snappedBeat = snap.enabled ? snapToGrid(raw.wx, 0, snap).wx : raw.wx;
       const beat = Math.max(0, snappedBeat);
-      callbacks?.onPlayheadScrub?.(beat, 'move');
+      callbacks.onPlayheadScrub?.(beat, 'move');
       return;
     }
 
@@ -219,7 +221,7 @@ export function createInteraction(
 
     istate.cursorWorld = { x: eff.wx, y: eff.wy };
     istate.cursorScreenY = sy;
-    callbacks?.onCursorMove?.(eff.wx, eff.wy, sy);
+    callbacks.onCursorMove?.(eff.wx, eff.wy, sy);
 
     // Drag-marquee (BACKLOG 8.3) — update the rubber-band rect, redraw, return.
     if (istate.marquee) {
@@ -424,7 +426,7 @@ export function createInteraction(
         if (which) {
           istate.draggingLoopMarker = which;
           const beat = snapBeatForMarker(world.wx);
-          callbacks?.onLoopMarkerDrag?.(which, beat, 'start');
+          callbacks.onLoopMarkerDrag?.(which, beat, 'start');
           return;
         }
       }
@@ -432,7 +434,7 @@ export function createInteraction(
       const snappedBeat = snap.enabled ? snapToGrid(world.wx, 0, snap).wx : world.wx;
       const beat = Math.max(0, snappedBeat);
       istate.scrubbing = true;
-      callbacks?.onPlayheadScrub?.(beat, 'start');
+      callbacks.onPlayheadScrub?.(beat, 'start');
       return;
     }
 
@@ -628,13 +630,13 @@ export function createInteraction(
       const which = istate.draggingLoopMarker;
       istate.draggingLoopMarker = null;
       const comp = store.getComposition();
-      callbacks?.onLoopMarkerDrag?.(which, which === 'start' ? comp.loopStartBeats : comp.loopEndBeats, 'end');
+      callbacks.onLoopMarkerDrag?.(which, which === 'start' ? comp.loopStartBeats : comp.loopEndBeats, 'end');
       return;
     }
     // End playhead scrubbing
     if (istate.scrubbing) {
       istate.scrubbing = false;
-      callbacks?.onPlayheadScrub?.(store.getState().playback.positionBeats, 'end');
+      callbacks.onPlayheadScrub?.(store.getState().playback.positionBeats, 'end');
       return;
     }
     // End guide drag — snapshot was taken on mousedown, so just release.
@@ -723,7 +725,7 @@ export function createInteraction(
   canvas.addEventListener('mouseenter', () => { istate.cursorInCanvas = true; });
   canvas.addEventListener('mouseleave', () => {
     istate.cursorInCanvas = false;
-    callbacks?.onCursorLeave?.();
+    callbacks.onCursorLeave?.();
   });
 
   return istate;

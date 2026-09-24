@@ -4,7 +4,7 @@
  * real-time noteOn / noteOff events from a connected MIDI device.
  *
  * Scope: note events + pitch bend (BACKLOG 8.25). CC and channel routing are
- * still deliberately ignored — a SlideSynth user typically plays one device on
+ * still deliberately ignored — a Glissandograph user typically plays one device on
  * one channel, so bend is forwarded as a single signed value (-8192..+8191)
  * with no per-channel bookkeeping.
  */
