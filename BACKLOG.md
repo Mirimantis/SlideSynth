@@ -178,9 +178,9 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
 
 ## Phase 16 — Simplify the interface
 
-- [x] **16.1 Interface structure session** *(L, own planning session)*
+- [x] **16.1 Interface structure session** *(L, own planning session, PR #80)*
   - Produce a UI spec in [DESIGN.md › Interface principles](DESIGN.md#interface-principles) before any code.
-  - **Done (2026-09-24):** the spec is [DESIGN.md › Interface spec](DESIGN.md#interface-spec-phase-16-decided-2026-09-24). It blocks out every control as a working one. Perform's feel, the Tuning drawer and the visual theme each get their own session afterwards.
+  - **Done (2026-09-24, PR #80):** the spec is [DESIGN.md › Interface spec](DESIGN.md#interface-spec-phase-16-decided-2026-09-24). It blocks out every control as a working one. Perform's feel, the Tuning drawer and the visual theme each get their own session afterwards.
   - **Decisions:**
     - **Perform is an explicit mode that looks different.**
       - It's entered from the tool strip or with P, for now. The Perform session (16.8) may change how you enter it.
