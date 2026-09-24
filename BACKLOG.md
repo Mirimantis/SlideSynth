@@ -62,7 +62,7 @@ The [queued features](#queued-features-paused) resume after Phase 16. Several of
 
 The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target-architecture). Suggested order: 15.1 → 15.2 → 15.3 / 15.4 (incremental, one panel or region at a time). 15.5–15.8 can interleave. This replaces the old "extract pieces of main.ts opportunistically" housekeeping note.
 
-- [x] **15.1 Signals-based store** *(L)*
+- [x] **15.1 Signals-based store** *(L, PR #73)*
   - Fine-grained subscriptions replace the single `notify()`. Today that notify rebuilds the track list and both property panels via `innerHTML` on every change, including every mousemove of a drag.
   - Split state into three kinds:
     - **document:** the composition, which is undoable and saved;
