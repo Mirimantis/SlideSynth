@@ -4,7 +4,7 @@ import { store } from '../state/store';
 import { history } from '../state/history';
 import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, computePointSubsetBBox, deepCopyPoints, applyTransformToCurve, splitCurveAtSegment, splitCurveAtPoint, applyAutoSmoothHandles, reclampHandlesAround, pitchPoints } from '../model/curve';
 import { deepCopyLanes, ensureLane } from '../model/lane';
-import { pointKeysByCurve } from '../model/point-selection';
+import { pointSelectionOf, pointCount, hasPoint, type PointRef, type PointSelection } from '../model/point-selection';
 import { snapToGrid, getAdaptiveSubdivisions } from '../utils/snap';
 import type { SnapConfig } from '../utils/snap';
 import { getScaleById } from '../utils/scales';
@@ -90,19 +90,37 @@ export interface InteractionState {
    *  enclosed anchor points are committed to the multi-point selection. */
   marquee: { startWorld: Vec2; currentWorld: Vec2; additive: boolean } | null;
   /** Multi-point group drag (BACKLOG 8.3). When set, mousemove translates every
-   *  selected point by `cursor - dragStartWorld`. `originalPositionsByKey` is
-   *  the pre-drag snapshot so the offset is computed against a stable origin. */
+   *  selected point by `cursor - dragStartWorld`. `originalPositions` is the
+   *  pre-drag snapshot (curve id -> point index -> position) so the offset is
+   *  computed against a stable origin. */
   pointGroupDrag: {
     dragStartWorld: Vec2;
-    originalPositionsByKey: Map<string, Vec2>;
+    originalPositions: ReadonlyMap<string, ReadonlyMap<number, Vec2>>;
   } | null;
 }
+
+/** The edit tools' share of canvas pointer input (BACKLOG 15.2). The canvas
+ *  input router in main.ts owns the listeners and decides, per press, whether
+ *  a gesture goes to the tools, to perform, or to panning; these are the tool
+ *  handlers it calls. */
+export interface ToolInput {
+  down(e: PointerEvent): void;
+  move(e: PointerEvent): void;
+  up(e: PointerEvent): void;
+  enter(): void;
+  leave(): void;
+  /** Whether an Alt+left press belongs to the tools (Alt-drag duplicate)
+   *  rather than panning. */
+  wantsAltPress(e: PointerEvent): boolean;
+}
+
+export type Interaction = InteractionState & { readonly input: ToolInput };
 
 export function createInteraction(
   canvas: HTMLCanvasElement,
   vp: Viewport,
   callbacks: InteractionCallbacks,
-): InteractionState {
+): Interaction {
   const istate: InteractionState = {
     cursorWorld: null,
     drawingCurve: null,
@@ -125,8 +143,8 @@ export function createInteraction(
 
   /**
    * True when the Compose canvas is in a Scroll-Canvas Playback state that
-   * hands LMB to Perform. Tool handlers early-return in that case so they
-   * don't fire on the same mouse events.
+   * hands the left button to Perform. Pointer input is routed by main.ts;
+   * this still gates the tool hotkeys below.
    */
   function isComposePerformLocked(): boolean {
     return callbacks.isPerformInputActive();
@@ -158,8 +176,9 @@ export function createInteraction(
     return Math.max(0, snapped);
   }
 
-  canvas.addEventListener('mousemove', (e) => {
-    if (isComposePerformLocked()) return;
+  /** Hover and tool drags. The router sends moves here while the canvas is
+   *  editing, and for the whole of a press that started as a tool gesture. */
+  function onMove(e: PointerEvent): void {
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
@@ -236,35 +255,20 @@ export function createInteraction(
       const start = istate.pointGroupDrag.dragStartWorld;
       let dx = eff.wx - start.x;
       const dy = eff.wy - start.y;
-      const orig = istate.pointGroupDrag.originalPositionsByKey;
-
-      // Group keys by curve so we can inspect each curve's neighbor structure.
-      const byCurve = new Map<string, Set<number>>();
-      for (const key of orig.keys()) {
-        const sep = key.lastIndexOf(':');
-        if (sep < 0) continue;
-        const cid = key.slice(0, sep);
-        const pidx = Number(key.slice(sep + 1));
-        if (!Number.isFinite(pidx)) continue;
-        let s = byCurve.get(cid);
-        if (!s) { s = new Set(); byCurve.set(cid, s); }
-        s.add(pidx);
-      }
+      const orig = istate.pointGroupDrag.originalPositions;
 
       const comp = store.getComposition();
       const SAFE_GAP = 0.001;
       let minDx = -Infinity;
       let maxDx = Infinity;
-      for (const [cid, indices] of byCurve) {
+      for (const [cid, indices] of orig) {
         let curve: BezierCurve | undefined;
         for (const t of comp.tracks) {
           curve = t.curves.find(c => c.id === cid);
           if (curve) break;
         }
         if (!curve) continue;
-        for (const idx of indices) {
-          const origPos = orig.get(`${cid}:${idx}`);
-          if (!origPos) continue;
+        for (const [idx, origPos] of indices) {
           const prev = pitchPoints(curve)[idx - 1];
           const next = pitchPoints(curve)[idx + 1];
           if (prev && !indices.has(idx - 1)) {
@@ -280,14 +284,13 @@ export function createInteraction(
       dx = Math.max(minDx, Math.min(maxDx, dx));
 
       store.mutate(comp2 => {
-        for (const [cid, indices] of byCurve) {
+        for (const [cid, indices] of orig) {
           for (const t of comp2.tracks) {
             const c = t.curves.find(cc => cc.id === cid);
             if (!c) continue;
-            for (const idx of indices) {
-              const origPos = orig.get(`${cid}:${idx}`);
+            for (const [idx, origPos] of indices) {
               const pt = pitchPoints(c)[idx];
-              if (origPos && pt) {
+              if (pt) {
                 pt.position.x = origPos.x + dx;
                 pt.position.y = origPos.y + dy;
               }
@@ -396,10 +399,9 @@ export function createInteraction(
     if (istate.dragging) {
       handleDrag(istate, eff);
     }
-  });
+  }
 
-  canvas.addEventListener('mousedown', (e) => {
-    if (isComposePerformLocked()) return;
+  function onDown(e: PointerEvent): void {
     if (e.button !== 0) return; // left click only
     // Alt is for panning, but allow through when a transform box is active
     // in select mode (alt-drag to duplicate)
@@ -564,10 +566,9 @@ export function createInteraction(
     } else if (state.activeTool === 'scissors') {
       handleScissorsClick(rawPt, vp);
     }
-  });
+  }
 
-  canvas.addEventListener('mouseup', () => {
-    if (isComposePerformLocked()) return;
+  function onUp(): void {
     // End drag-marquee (BACKLOG 8.3) — commit selected points, or treat as a
     // click on empty canvas if the drag was below the click threshold.
     if (istate.marquee) {
@@ -595,22 +596,22 @@ export function createInteraction(
       const minY = Math.min(m.startWorld.y, m.currentWorld.y);
       const maxY = Math.max(m.startWorld.y, m.currentWorld.y);
       const track = getSelectedTrack();
-      const newKeys = new Set<string>();
+      const inside: PointRef[] = [];
       if (track) {
         for (const curve of track.curves) {
           for (let i = 0; i < pitchPoints(curve).length; i++) {
             const p = pitchPoints(curve)[i]!;
             if (p.position.x >= minX && p.position.x <= maxX
                 && p.position.y >= minY && p.position.y <= maxY) {
-              newKeys.add(`${curve.id}:${i}`);
+              inside.push({ curveId: curve.id, index: i });
             }
           }
         }
       }
       if (m.additive) {
-        store.addPointKeys(newKeys);
+        store.addPoints(inside);
       } else {
-        store.setSelectedPointKeys(newKeys);
+        store.setSelectedPoints(pointSelectionOf(inside));
       }
       store.syncSelectedCurvesFromPoints();
       if (track) rebuildTransformBox(istate, track);
@@ -664,7 +665,7 @@ export function createInteraction(
     istate.dragCurveId = null;
     istate.dragPointIndex = -1;
     istate.dragStartWorld = null;
-  });
+  }
 
   // Enter to finish drawing, Escape to cancel/dismiss
   // Ctrl held in draw mode temporarily switches to select
@@ -691,7 +692,7 @@ export function createInteraction(
     } else if ((e.key === 'Delete' || e.key === 'Backspace')
         && state.selectedCurveIds.size > 0
         && state.selectedPointIndex === null
-        && state.selectedPointKeys.size === 0) {
+        && state.selectedPoints.size === 0) {
       // Whole-curve delete only fires when neither single-point nor
       // multi-point (BACKLOG 8.3) selection is active. The main.ts handler
       // owns those two cases and runs in the same keydown dispatch.
@@ -722,13 +723,28 @@ export function createInteraction(
     }
   });
 
-  canvas.addEventListener('mouseenter', () => { istate.cursorInCanvas = true; });
-  canvas.addEventListener('mouseleave', () => {
-    istate.cursorInCanvas = false;
-    callbacks.onCursorLeave?.();
-  });
+  /** Alt+left normally pans. It belongs to the tool only for Alt-drag
+   *  duplicate: Select tool, a transform box, and the press on that box. */
+  function wantsAltPress(e: PointerEvent): boolean {
+    const tb = istate.transformBox;
+    if (!tb || store.getState().activeTool !== 'select') return false;
+    const rect = canvas.getBoundingClientRect();
+    return hitTestTransformBox(e.clientX - rect.left, e.clientY - rect.top, tb.bbox, vp) !== null;
+  }
 
-  return istate;
+  return Object.assign(istate, {
+    input: {
+      down: onDown,
+      move: onMove,
+      up: onUp,
+      enter() { istate.cursorInCanvas = true; },
+      leave() {
+        istate.cursorInCanvas = false;
+        callbacks.onCursorLeave?.();
+      },
+      wantsAltPress,
+    } satisfies ToolInput,
+  });
 }
 
 function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport): void {
@@ -875,39 +891,35 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
             // multi-point selection (BACKLOG 8.3). The parent-curve set is
             // re-derived from the union of selected points so the curve
             // highlight follows automatically.
-            store.togglePointKey(curve.id, i);
+            store.togglePoint({ curveId: curve.id, index: i });
             store.syncSelectedCurvesFromPoints();
             rebuildTransformBox(istate, activeTrack);
           } else {
             // Click on a point. If the clicked point is already part of a
             // multi-point selection (size >= 2), start a *group drag* instead
             // of collapsing back to a single-point selection (BACKLOG 8.3).
-            const stateNow = store.getState();
-            const pointKey = `${curve.id}:${i}`;
-            const inGroup = stateNow.selectedPointKeys.size >= 2 && stateNow.selectedPointKeys.has(pointKey);
+            const selected = store.getState().selectedPoints;
+            const ref: PointRef = { curveId: curve.id, index: i };
+            const inGroup = pointCount(selected) >= 2 && hasPoint(selected, ref);
             if (inGroup) {
               // Group-drag: snapshot every selected point's current position
               // and translate them together as the cursor moves.
               history.snapshot();
-              const positions = new Map<string, Vec2>();
-              const comp2 = store.getComposition();
-              for (const key of stateNow.selectedPointKeys) {
-                const sep = key.lastIndexOf(':');
-                if (sep < 0) continue;
-                const cid = key.slice(0, sep);
-                const pidx = Number(key.slice(sep + 1));
-                if (!Number.isFinite(pidx)) continue;
-                for (const tt of comp2.tracks) {
-                  const cc = tt.curves.find(c => c.id === cid);
-                  if (cc && pitchPoints(cc)[pidx]) {
-                    positions.set(key, { x: pitchPoints(cc)[pidx]!.position.x, y: pitchPoints(cc)[pidx]!.position.y });
-                    break;
-                  }
+              const positions = new Map<string, Map<number, Vec2>>();
+              const allCurves = store.getComposition().tracks.flatMap(tt => tt.curves);
+              for (const [cid, indices] of selected) {
+                const cc = allCurves.find(c => c.id === cid);
+                if (!cc) continue;
+                const perCurve = new Map<number, Vec2>();
+                for (const pidx of indices) {
+                  const p = pitchPoints(cc)[pidx];
+                  if (p) perCurve.set(pidx, { x: p.position.x, y: p.position.y });
                 }
+                positions.set(cid, perCurve);
               }
               istate.pointGroupDrag = {
                 dragStartWorld: { ...pt.position },
-                originalPositionsByKey: positions,
+                originalPositions: positions,
               };
               istate.dragStartWorld = { ...pt.position };
               istate.transformBox = null;
@@ -925,8 +937,8 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
             store.setSelectedPoint(i);
             // Seed the multi-point selection with this single point so the
             // visual highlight matches selectedPointIndex (the white-fill rule
-            // in curve-renderer reads selectedPointKeys).
-            store.setSelectedPointKeys(new Set([pointKey]));
+            // in curve-renderer reads selectedPoints).
+            store.setSelectedPoints(pointSelectionOf([ref]));
             store.syncSelectedCurvesFromPoints();
             istate.transformBox = null;
           }
@@ -1009,7 +1021,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
 /** Rebuild the transform box from the current selectedCurveIds, expanding to
  *  include every chord-group sibling so the box wraps the whole cluster.
  *
- *  When `selectedPointKeys` is non-empty, the transform box switches to
+ *  When `selectedPoints` is non-empty, the transform box switches to
  *  point-subset mode (BACKLOG 8.3): bbox wraps just those points, future
  *  scale/translate/octave ops apply only to those points, and chord-group
  *  expansion is skipped (point-level selection is intentionally not
@@ -1017,13 +1029,13 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
  *  drag the whole cluster's points along). */
 export function rebuildTransformBox(istate: InteractionState, track: Track): void {
   const state = store.getState();
-  const pointMode = state.selectedPointKeys.size > 0;
+  const pointMode = state.selectedPoints.size > 0;
 
   let selectedIds: string[];
-  let pointIndicesPerCurve: Map<string, Set<number>> | null = null;
+  let pointIndicesPerCurve: PointSelection | null = null;
 
   if (pointMode) {
-    pointIndicesPerCurve = pointKeysByCurve(state.selectedPointKeys);
+    pointIndicesPerCurve = state.selectedPoints;
     selectedIds = [...pointIndicesPerCurve.keys()];
   } else {
     const expanded = expandSelectionToGroups(state.selectedCurveIds, track);

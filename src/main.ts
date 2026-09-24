@@ -16,6 +16,7 @@ import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, getAdaptiveSubdivisions, findAdaptiveSnap } from './utils/snap';
 import type { SnapConfig } from './utils/snap';
 import { createInteraction, rebuildTransformBox, RULER_HEIGHT, buildSnapConfig } from './canvas/interaction';
+import { createInputRouter, type GestureHandlers } from './canvas/input-router';
 import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
@@ -45,7 +46,8 @@ import { history } from './state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
 import { getCompositionLength, measureLengthInBeats } from './model/composition';
-import { computeMultiCurveBBox, joinCurves, sharpenCurveHandles, smoothCurveHandles, pitchPoints } from './model/curve';
+import { computeMultiCurveBBox, joinCurves, sharpenCurveHandles, smoothCurveHandles, pitchPoints, deleteSelectedPoints } from './model/curve';
+import { pointCount } from './model/point-selection';
 import { assignGroup, dissolveGroup, allShareGroup, anyGrouped, createGroupId } from './model/curve-groups';
 import { chordOffsets } from './utils/harmonics';
 import { showToast } from './ui/toast';
@@ -2186,36 +2188,11 @@ window.addEventListener('keydown', (e) => {
       // single-point semantics), remove every selected point. Curves that drop
       // below 2 points are removed entirely (a 0/1-point curve is degenerate
       // and won't render any segment).
-      if (s.selectedPointKeys.size >= 1 && (s.selectedPointKeys.size > 1 || s.selectedPointIndex === null)) {
+      const selectedCount = pointCount(s.selectedPoints);
+      if (selectedCount >= 1 && (selectedCount > 1 || s.selectedPointIndex === null)) {
         history.snapshot();
-        const byCurve = new Map<string, number[]>();
-        for (const key of s.selectedPointKeys) {
-          const sep = key.lastIndexOf(':');
-          if (sep < 0) continue;
-          const cid = key.slice(0, sep);
-          const idx = Number(key.slice(sep + 1));
-          if (!Number.isFinite(idx)) continue;
-          let arr = byCurve.get(cid);
-          if (!arr) { arr = []; byCurve.set(cid, arr); }
-          arr.push(idx);
-        }
-        store.mutate(comp => {
-          for (const track of comp.tracks) {
-            for (let ci = track.curves.length - 1; ci >= 0; ci--) {
-              const curve = track.curves[ci]!;
-              const indices = byCurve.get(curve.id);
-              if (!indices) continue;
-              // Sort descending so splice doesn't shift later indices we still need.
-              indices.sort((a, b) => b - a);
-              for (const idx of indices) {
-                if (idx >= 0 && idx < pitchPoints(curve).length) pitchPoints(curve).splice(idx, 1);
-              }
-              if (pitchPoints(curve).length < 2) {
-                track.curves.splice(ci, 1);
-              }
-            }
-          }
-        });
+        const sel = s.selectedPoints;
+        store.mutate(comp => deleteSelectedPoints(comp, sel));
         store.clearPointSelection();
         store.setSelectedCurve(null);
         bgDirty = true;
@@ -2412,56 +2389,37 @@ document.getElementById('new-tone-btn')!.addEventListener('click', async () => {
   }
 });
 
-// ── Mouse interaction on canvas ─────────────────────────────────
-let isPanning = false;
-let lastMouse = { x: 0, y: 0 };
-
-fgCanvas.addEventListener('mousedown', (e) => {
-  if (e.button === 1 || (e.button === 0 && e.altKey)) {
-    isPanning = true;
-    lastMouse = { x: e.clientX, y: e.clientY };
-    fgCanvas.style.cursor = 'grabbing';
-    e.preventDefault();
-  }
-});
-
-// Middle-mouse drag in the Parameters Graph pans the shared X (both canvases)
-// and the pitch Y (the param Y axis is fixed 0..1, so it's unaffected). Reuses
-// the same isPanning flow handled by the window mousemove/mouseup below.
-paramCanvas.addEventListener('mousedown', (e) => {
-  if (e.button === 1) {
-    isPanning = true;
-    lastMouse = { x: e.clientX, y: e.clientY };
-    paramCanvas.style.cursor = 'grabbing';
-    e.preventDefault();
-  }
-});
-
-window.addEventListener('mousemove', (e) => {
-  if (isPanning) {
-    // During scrolling Playback the X offset is owned by the scroll formula — a
-    // user pan in X would fight it each frame. Allow only Y.
-    const scrollingPlayback = store.getState().scrollCanvasEnabled && playback.isPlaying();
-    const dx = scrollingPlayback ? 0 : (e.clientX - lastMouse.x);
-    const dy = e.clientY - lastMouse.y;
-    viewport.panBy(dx, dy);
-    const rect = canvasContainer.getBoundingClientRect();
-    // When Scroll Canvas is on, the rail is pinned at canvas-centre. Allow offsetX
-    // to go negative by half the canvas width so the user can pan beat 0 all the
-    // way over to the rail — matches the scrolling-play clamp.
-    viewport.clampOffset(rect.width, rect.height, minPanOffsetX(rect.width));
-    lastMouse = { x: e.clientX, y: e.clientY };
-    bgDirty = true;
-  }
-});
-
-window.addEventListener('mouseup', () => {
-  if (isPanning) {
-    isPanning = false;
-    fgCanvas.style.cursor = '';
-    paramCanvas.style.cursor = '';
-  }
-});
+// ── Canvas panning ──────────────────────────────────────────────
+/** Middle-drag (or Alt+left) pan, shared by the staff and the Parameters Graph
+ *  — the graph's pan moves the shared X and the pitch Y (its own Y axis is a
+ *  fixed 0..1). The canvas input routers below decide when a press pans. */
+function createPanGesture(el: HTMLElement): GestureHandlers {
+  let last = { x: 0, y: 0 };
+  return {
+    down(e) {
+      last = { x: e.clientX, y: e.clientY };
+      el.style.cursor = 'grabbing';
+    },
+    move(e) {
+      // During scrolling playback the X offset is owned by the scroll formula —
+      // a user pan in X would fight it each frame. Allow only Y.
+      const scrollingPlayback = effectiveScrollCanvas() && playback.isPlaying();
+      const dx = scrollingPlayback ? 0 : (e.clientX - last.x);
+      const dy = e.clientY - last.y;
+      viewport.panBy(dx, dy);
+      const rect = canvasContainer.getBoundingClientRect();
+      // When Scroll Canvas is on, the rail is pinned at canvas-centre. Allow offsetX
+      // to go negative by half the canvas width so the user can pan beat 0 all the
+      // way over to the rail — matches the scrolling-play clamp.
+      viewport.clampOffset(rect.width, rect.height, minPanOffsetX(rect.width));
+      last = { x: e.clientX, y: e.clientY };
+      bgDirty = true;
+    },
+    up() {
+      el.style.cursor = '';
+    },
+  };
+}
 
 fgCanvas.addEventListener('wheel', (e) => {
   e.preventDefault();
@@ -3447,42 +3405,77 @@ function toggleRecordNextPass(): void {
   transport({ type: 'toggle-pass-record' });
 }
 
-// Canvas mousedown: intercept LMB for Perform when active.
-fgCanvas.addEventListener('mousedown', (e) => {
-  if (!isComposePerformActive()) return;
-  if (e.button !== 0) return;
-  const rect = fgCanvas.getBoundingClientRect();
-  const sy = e.clientY - rect.top;
-  if (sy < RULER_HEIGHT) return;
-  composeUpdatePlanchette(sy);
-  composeEngine.onLmbDown(performance.now());
-  const planchette = store.getState().performance.planchettes[0];
-  if (planchette?.snappedWorldY != null) {
-    startComposePerformSounding(planchette.snappedWorldY);
-  }
-  e.preventDefault();
-}, true);  // Capture phase so it fires before interaction.ts's bubbling handler.
+// ── Canvas input: one router per canvas (BACKLOG 15.2) ─────────
+// The router decides once per press who owns the gesture — perform, pan, or
+// the edit tools — and pointer capture keeps the whole press with that owner,
+// on or off the canvas. See canvas/input-router.ts.
 
-fgCanvas.addEventListener('mousemove', (e) => {
-  const rect = fgCanvas.getBoundingClientRect();
-  const sy = e.clientY - rect.top;
-  composeUpdatePlanchette(sy);
-  // Cursor movement counts as presence for the idle auto-stop — an un-armed
-  // jam has no captureSample activity marks, so this is its heartbeat.
-  if (isComposePerformActive()) composeEngine.markActivity(performance.now());
-  if (composeEngine.isLmbDown()) {
+/** Live performance's share of canvas pointer input. */
+const performInput = {
+  /** Every move, in every mode: the rail planchette and pitch HUD follow the
+   *  cursor, and an un-armed jam counts cursor movement as presence for its
+   *  idle auto-stop. */
+  track(e: PointerEvent) {
+    composeUpdatePlanchette(e.clientY - fgCanvas.getBoundingClientRect().top);
+    if (isComposePerformActive()) composeEngine.markActivity(performance.now());
+  },
+  down(e: PointerEvent) {
+    composeUpdatePlanchette(e.clientY - fgCanvas.getBoundingClientRect().top);
+    composeEngine.onLmbDown(performance.now());
+    const planchette = store.getState().performance.planchettes[0];
+    if (planchette?.snappedWorldY != null) {
+      startComposePerformSounding(planchette.snappedWorldY);
+    }
+  },
+  move() {
+    // track() already moved the planchette; retune the sounding voice to it.
+    // Moves arrive off-canvas too while the button is held (pointer capture).
+    composeEngine.markActivity(performance.now());
     const p = store.getState().performance.planchettes[0];
     if (p?.snappedWorldY != null) updateComposePerformPitch(p.snappedWorldY);
-  }
-});
-
-fgCanvas.addEventListener('mouseleave', () => {
-  if (!composeEngine.isLmbDown()) {
+  },
+  up() {
+    // A session that ended while the button was held has already released it.
+    if (!composeEngine.isLmbDown()) return;
+    composeEngine.onLmbUp();
+    // CRITICAL ORDERING: finalize BEFORE stopping synths so the planchette array
+    // (and therefore the voiceIds we finalize) still contains every active voice.
+    // syncHarmonyPlanchettes only removes harmonies when playback ends or drawMode
+    // toggles off, neither of which happens at LMB-up — so the array is stable here.
+    // Close first: the phrase must be sealed before either path claims it.
+    closeLmbPhrases();
+    if (isCapturing(store.getState().transport)) {
+      finalizeComposeRecordedCurves();
+    }
+    // Un-armed perform no longer discards the buffer — the closed phrase stays
+    // keepable for KEEP_BUFFER_MS so retrospective capture can commit it
+    // after the fact (BACKLOG 10.2). Eviction ages it out.
+    stopComposePerformSounding();
+  },
+  leave() {
+    if (composeEngine.isLmbDown()) return;
     store.setPlanchetteY('primary', null, null);
     resetMagnetic(magneticState);
     prevSnapTarget = null;
     lastComposeSy = null;
-  }
+  },
+};
+
+createInputRouter({
+  canvas: fgCanvas,
+  isPerforming: isComposePerformActive,
+  isInRuler: e => e.clientY - fgCanvas.getBoundingClientRect().top < RULER_HEIGHT,
+  perform: performInput,
+  pan: createPanGesture(fgCanvas),
+  tool: interaction.input,
+});
+
+createInputRouter({
+  canvas: paramCanvas,
+  isPerforming: () => false,
+  isInRuler: () => false,
+  pan: createPanGesture(paramCanvas),
+  tool: paramInteraction.input,
 });
 
 // Right-click action menu. Disabled during Compose Performance (recording / sounding)
@@ -3532,38 +3525,6 @@ fgCanvas.addEventListener('contextmenu', (e) => {
       onClick: performUngroup,
     },
   ]);
-});
-
-// Off-canvas tracking while LMB held in Perform.
-window.addEventListener('mousemove', (e) => {
-  if (!composeEngine.isLmbDown()) return;
-  const rect = fgCanvas.getBoundingClientRect();
-  if (e.clientX >= rect.left && e.clientX <= rect.right
-      && e.clientY >= rect.top && e.clientY <= rect.bottom) return;
-  const sy = e.clientY - rect.top;
-  composeUpdatePlanchette(sy);
-  composeEngine.markActivity(performance.now());
-  const p = store.getState().performance.planchettes[0];
-  if (p?.snappedWorldY != null) updateComposePerformPitch(p.snappedWorldY);
-});
-
-window.addEventListener('mouseup', (e) => {
-  if (!composeEngine.isLmbDown()) return;
-  if (e.button !== 0) return;
-  composeEngine.onLmbUp();
-  // CRITICAL ORDERING: finalize BEFORE stopping synths so the planchette array
-  // (and therefore the voiceIds we finalize) still contains every active voice.
-  // syncHarmonyPlanchettes only removes harmonies when playback ends or drawMode
-  // toggles off, neither of which happens at LMB-up — so the array is stable here.
-  // Close first: the phrase must be sealed before either path claims it.
-  closeLmbPhrases();
-  if (isCapturing(store.getState().transport)) {
-    finalizeComposeRecordedCurves();
-  }
-  // Un-armed perform no longer discards the buffer — the closed phrase stays
-  // keepable for KEEP_BUFFER_MS so retrospective capture can commit it
-  // after the fact (BACKLOG 10.2). Eviction ages it out.
-  stopComposePerformSounding();
 });
 
 // ── Shared HUD + countdown DOM updaters ─────────────────────────
@@ -3787,7 +3748,7 @@ function render() {
       isActiveTrack ? store.getSelectedCurveId() : null,
       isActiveTrack ? state.selectedPointIndex : null,
       isActiveTrack,
-      isActiveTrack ? state.selectedPointKeys : null,
+      isActiveTrack ? state.selectedPoints : null,
     );
   }
 

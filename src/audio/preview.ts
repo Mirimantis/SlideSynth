@@ -27,9 +27,14 @@ const LIVE_PITCH_GLIDE_S = 0.008;
 
 const DEFAULT_VOICE: VoiceId = 'primary';
 
+/** One track's scrub voices. A curve keeps its voice for as long as it stays
+ *  under the scrub position, so overlapping curves (a chord) all sound and
+ *  none jumps to another curve's pitch; voices it leaves go back to `spare`. */
 interface ScrubTrackEntry {
-  synth: ToneSynth;
+  tone: ToneDefinition;
   trackGain: GainNode;
+  voices: Map<string, ToneSynth>;
+  spare: ToneSynth[];
 }
 
 export interface PreviewManager {
@@ -97,11 +102,24 @@ export function createPreviewManager(): PreviewManager {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
     for (const entry of scrubEntries.values()) {
-      entry.synth.setVolume(0, now + RAMP_OUT);
-      entry.synth.stop(now + RAMP_OUT + 0.01);
+      for (const synth of [...entry.voices.values(), ...entry.spare]) {
+        synth.setVolume(0, now + RAMP_OUT);
+        synth.stop(now + RAMP_OUT + 0.01);
+      }
       entry.trackGain.disconnect();
     }
     scrubEntries.clear();
+  }
+
+  /** A silent, running voice for a track's scrub pool. */
+  function scrubVoice(entry: ScrubTrackEntry): ToneSynth {
+    const reused = entry.spare.pop();
+    if (reused) return reused;
+    const synth = createToneSynth(entry.tone);
+    synth.connect(entry.trackGain);
+    synth.start();
+    synth.setVolume(0);
+    return synth;
   }
 
   return {
@@ -166,36 +184,40 @@ export function createPreviewManager(): PreviewManager {
         trackGain.gain.value = track.volume;
         trackGain.connect(dest);
 
-        const synth = createToneSynth(tone);
-        synth.connect(trackGain);
-        synth.start();
-        synth.setVolume(0); // silent until updateScrubPosition provides data
-
-        scrubEntries.set(track.id, { synth, trackGain });
+        // Voices are created on demand by updateScrubPosition, one per curve
+        // under the scrub position.
+        scrubEntries.set(track.id, { tone, trackGain, voices: new Map(), spare: [] });
       }
     },
 
     updateScrubPosition(beat: number, composition: Composition) {
       for (const [trackId, entry] of scrubEntries) {
         const track = composition.tracks.find(t => t.id === trackId);
-        if (!track) {
-          entry.synth.setVolume(0);
-          continue;
+
+        // Every curve under the scrub position sounds — a chord on one track
+        // used to play only its first curve.
+        const sounding = new Map<string, { noteNumber: number; volume: number }>();
+        for (const curve of track?.curves ?? []) {
+          const sample = evaluateCurveAtBeat(curve, beat);
+          if (sample) sounding.set(curve.id, sample);
         }
 
-        // Find the first curve that covers this beat
-        let found = false;
-        for (const curve of track.curves) {
-          const sample = evaluateCurveAtBeat(curve, beat);
-          if (sample) {
-            entry.synth.setFrequency(centsToFrequency(sample.noteNumber));
-            entry.synth.setVolume(sample.volume * PREVIEW_VOLUME);
-            found = true;
-            break;
-          }
+        // Curves the scrub has left: silence their voices and free them.
+        for (const [curveId, synth] of entry.voices) {
+          if (sounding.has(curveId)) continue;
+          synth.setVolume(0);
+          entry.voices.delete(curveId);
+          entry.spare.push(synth);
         }
-        if (!found) {
-          entry.synth.setVolume(0);
+
+        for (const [curveId, sample] of sounding) {
+          let synth = entry.voices.get(curveId);
+          if (!synth) {
+            synth = scrubVoice(entry);
+            entry.voices.set(curveId, synth);
+          }
+          synth.setFrequency(centsToFrequency(sample.noteNumber));
+          synth.setVolume(sample.volume * PREVIEW_VOLUME);
         }
       }
     },

@@ -13,7 +13,7 @@ In-flight plan for BACKLOG Phase 15 (target in [DESIGN.md › Target architectur
 |------|-------|-----------|----------------|
 | A | 15.1 | Signals-backed store; fine-grained UI effects replace the coarse `store.subscribe` calls in `main.ts`; snap mirrors removed; loop-enabled moved into state | Everything else subscribes to state; do it once, first |
 | B1 | 15.2 part 1 | Transport/perform state machine (pure, tested) + controller — DONE (branch `phase-15b-transport-machine`) | Highest-bug-density region; Phase 16's capture redesign reshapes it, so it must be explicit first |
-| B2 | 15.2 part 2 | One canvas input router + Pointer Events + structured point selection | Needs B1's single perform/edit answer |
+| B2 | 15.2 part 2 | One canvas input router + Pointer Events + structured point selection — DONE (branch `phase-15b2-input-router`) | Needs B1's single perform/edit answer |
 | C | 15.6, 15.5 | One snap-config builder; render loop made read-only; `fgDirty` + `Path2D` cache | Small, independent; unblocks 12.1 |
 | D | 15.3 | Command registry (keyboard / buttons / menus / help table) | Needs A and B to exist so commands have somewhere to dispatch |
 | E | 15.4 | Preact panels, one at a time, starting with those Phase 16 won't reshape | After A so components read signals directly |

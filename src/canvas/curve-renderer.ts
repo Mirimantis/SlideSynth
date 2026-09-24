@@ -1,6 +1,7 @@
 import type { BezierCurve, ToneDefinition, Vec2 } from '../types';
 import type { Viewport } from './viewport';
 import { getSegmentControlPoints, pitchPoints } from '../model/curve';
+import { hasPoint, type PointSelection } from '../model/point-selection';
 
 const POINT_RADIUS = 5;
 const POINT_RADIUS_UNSELECTED = 3;
@@ -24,14 +25,14 @@ export function renderCurves(
   selectedPointCurveId: string | null,
   selectedPointIndex: number | null,
   isActiveTrack: boolean = true,
-  selectedPointKeys: ReadonlySet<string> | null = null,
+  selectedPoints: PointSelection | null = null,
 ): void {
   const prevAlpha = ctx.globalAlpha;
   if (!isActiveTrack) ctx.globalAlpha = prevAlpha * INACTIVE_TRACK_ALPHA;
   for (const curve of curves) {
     const isSelected = selectedCurveIds.has(curve.id);
     const showHandles = isSelected && curve.id === selectedPointCurveId;
-    renderCurve(ctx, vp, curve, tone, isSelected, showHandles, selectedPointIndex, selectedPointKeys);
+    renderCurve(ctx, vp, curve, tone, isSelected, showHandles, selectedPointIndex, selectedPoints);
   }
   if (!isActiveTrack) ctx.globalAlpha = prevAlpha;
 }
@@ -44,7 +45,7 @@ function renderCurve(
   isSelected: boolean,
   showHandles: boolean,
   selectedPointIndex: number | null,
-  selectedPointKeys: ReadonlySet<string> | null,
+  selectedPoints: PointSelection | null,
 ): void {
   const points = pitchPoints(curve);
   if (points.length === 0) return;
@@ -79,7 +80,7 @@ function renderCurve(
   for (let i = 0; i < points.length; i++) {
     const pt = points[i]!;
     const screen = vp.worldToScreen(pt.position.x, pt.position.y);
-    const inMultiPointSelection = !!selectedPointKeys && selectedPointKeys.has(`${curve.id}:${i}`);
+    const inMultiPointSelection = !!selectedPoints && hasPoint(selectedPoints, { curveId: curve.id, index: i });
     // White-fill highlight when this point is the primary (showHandles +
     // selectedPointIndex match) OR when it's part of the multi-point set
     // (BACKLOG 8.3).
