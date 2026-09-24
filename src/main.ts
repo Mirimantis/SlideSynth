@@ -22,7 +22,7 @@ import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
 import { createToolPanel } from './ui/tool-panel';
 import { createPrismPanel } from './ui/prism-panel';
-import { openContextMenu } from './ui/context-menu';
+import { openContextMenu, type ContextMenuItem } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
 import { createMidiInput } from './audio/midi-input';
@@ -43,14 +43,16 @@ import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
 import { history } from './state/history';
-import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from './state/clipboard';
 import { createTrack } from './model/track';
 import { getCompositionLength, measureLengthInBeats } from './model/composition';
-import { computeMultiCurveBBox, joinCurves, sharpenCurveHandles, smoothCurveHandles, pitchPoints, deleteSelectedPoints } from './model/curve';
-import { pointCount } from './model/point-selection';
-import { assignGroup, dissolveGroup, allShareGroup, anyGrouped, createGroupId } from './model/curve-groups';
+import { computeMultiCurveBBox, pitchPoints } from './model/curve';
+import { createGroupId } from './model/curve-groups';
 import { chordOffsets } from './utils/harmonics';
 import { showToast } from './ui/toast';
+import { commandSpec, commandTitle, primaryShortcut, type CommandId } from './commands/catalog';
+import { createCommandRegistry } from './commands/registry';
+import { createEditCommands } from './commands/edit-commands';
+import { TOOL_COMMANDS } from './ui/tool-panel';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { getScaleById } from './utils/scales';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
@@ -73,7 +75,7 @@ import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/p
 import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
 import { effect, watch } from './state/reactive';
 import { escapeHtml, setHtmlIfChanged } from './utils/dom-helpers';
-import type { AppState, ToolMode, BezierCurve, TransportState } from './types';
+import type { AppState, Composition, ToolMode, BezierCurve, TransportState } from './types';
 import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, isJamming, passRecordState, performPhase } from './state/transport';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -96,16 +98,16 @@ app.innerHTML = `
     </div>
     <div class="toolbar-zone right">
       <div class="transport-buttons transport">
-        <button id="btn-play" title="Play (Space)"></button>
-        <button id="btn-pause" title="Pause" disabled></button>
-        <button id="btn-stop" title="Stop"></button>
-        <button id="btn-record" class="record-btn" title="Record (R) — captures curves onto the selected track" hidden></button>
-        <button id="btn-jam" class="jam-btn" title="Jam (J) — free-running clock: sound on, nothing recorded"></button>
-        <button id="btn-keep" class="keep-btn" title="Keep that (K) — commit the phrase you just played" disabled></button>
+        <button id="btn-play" title="${commandSpec('transport.play').label} (${primaryShortcut('transport.playPause')})"></button>
+        <button id="btn-pause" title="${commandTitle('transport.pause')}" disabled></button>
+        <button id="btn-stop" title="${commandTitle('transport.stop')}"></button>
+        <button id="btn-record" class="record-btn" title="${commandTitle('transport.record')}" hidden></button>
+        <button id="btn-jam" class="jam-btn" title="${commandTitle('transport.jam')}"></button>
+        <button id="btn-keep" class="keep-btn" title="${commandTitle('perform.keep')}" disabled></button>
       </div>
       <div class="toolbar-toggles">
-        <button id="snap-toggle" class="icon-toggle" title="Toggle snap (S)" aria-label="Snap" aria-pressed="true"></button>
-        <button id="loop-toggle-btn" class="icon-toggle" title="Toggle loop (L)" aria-label="Loop" aria-pressed="false"></button>
+        <button id="snap-toggle" class="icon-toggle" title="${commandTitle('snap.toggle')}" aria-label="Snap" aria-pressed="true"></button>
+        <button id="loop-toggle-btn" class="icon-toggle" title="${commandTitle('transport.loop')}" aria-label="Loop" aria-pressed="false"></button>
       </div>
     </div>
   </div>
@@ -122,7 +124,7 @@ app.innerHTML = `
         <div class="drawer-header">Transport</div>
         <div id="transport-section">
           <div class="transport-row">
-            <label class="toggle-switch" title="Loop playback (L)">
+            <label class="toggle-switch" title="${commandTitle('transport.loop')}">
               <span class="toggle-switch-track">
                 <input type="checkbox" id="loop-toggle" />
                 <span class="toggle-switch-thumb"></span>
@@ -147,7 +149,7 @@ app.innerHTML = `
             </label>
           </div>
           <div class="transport-row">
-            <label id="perf-hud-label" class="toggle-switch" title="Show frame ms, synth/oscillator/voice counts, and audio latency (!)">
+            <label id="perf-hud-label" class="toggle-switch" title="Show frame ms, synth/oscillator/voice counts, and audio latency (${primaryShortcut('view.perfHud')})">
               <span class="toggle-switch-track">
                 <input type="checkbox" id="perf-hud-toggle" />
                 <span class="toggle-switch-thumb"></span>
@@ -255,7 +257,7 @@ app.innerHTML = `
         </div>
       </div>
       <div class="drawer" id="drawer-prism" data-drawer="prism">
-        <div class="drawer-header" title="Harmonic Prism — press H on a selected curve to project harmonic echoes">Harmonic Prism</div>
+        <div class="drawer-header" title="Harmonic Prism — ${primaryShortcut('prism.drawMode')}: Draw mode; ${primaryShortcut('prism.projection')}: projection from the selected curve">Harmonic Prism</div>
         <div id="prism-panel"></div>
       </div>
       <div class="drawer" id="drawer-tuning" data-drawer="tuning">
@@ -769,26 +771,7 @@ function buildTransformBoxFromSelection(): void {
 
 const toolPanelContainer = document.getElementById('tool-panel')!;
 const toolPanel = createToolPanel(toolPanelContainer, {
-  onToolChange(tool: ToolMode) {
-    store.setTool(tool);
-    if (tool !== 'draw' && interaction.drawingCurve) {
-      interaction.drawingCurve = null;
-    }
-    if (tool !== 'draw' && previewActive) {
-      preview.stopAll();
-      setPreviewActive(false);
-    }
-    if (tool === 'scissors') {
-      interaction.transformBox = null;
-      store.setSelectedCurve(null);
-      store.setSelectedPoint(null);
-    } else if (tool === 'draw') {
-      // Clear the transform box but keep the curve selection so Draw extends it.
-      interaction.transformBox = null;
-    } else if (tool === 'select') {
-      buildTransformBoxFromSelection();
-    }
-  },
+  onToolChange: tool => commands.run(TOOL_COMMANDS[tool]),
 });
 
 // ── Harmonic Prism panel (chord-spec picker) ───────────────────
@@ -953,8 +936,8 @@ function updateKeepButtonDom() {
   btnKeep.disabled = keepable === 0 || noTrack;
   btnKeep.classList.toggle('keepable', keepable > 0);
   btnKeep.title = keepable > 0
-    ? `Keep that (K) — commit the phrase you just played (${keepable} keepable)`
-    : 'Keep that (K) — commit the phrase you just played';
+    ? `${commandTitle('perform.keep')} (${keepable} keepable)`
+    : commandTitle('perform.keep');
 }
 
 /** Format a length in beats + BPM as "M:SS" for the toolbar title display. */
@@ -969,29 +952,13 @@ function updateBpm(bpm: number) {
   bpmInput.value = String(bpm);
 }
 
-btnPlay.addEventListener('click', () => transport({ type: 'play' }));
-
-// Pause: plain playback pauses; a jam, recording or queued pass ends instead —
-// a free-running clock or a capture has no meaningful paused state to resume.
-btnPause.addEventListener('click', () => transport({ type: 'pause' }));
-
-btnStop.addEventListener('click', () => {
-  transport({ type: 'stop' });
-  // Stop also rewinds the classic playhead, even when already stopped.
-  store.setPlaybackPosition(0);
-});
-
-btnRecord.addEventListener('click', (e) => {
-  // Shift+click mirrors Shift+R — one obvious place for both record styles.
-  if (e.shiftKey) toggleRecordNextPass();
-  else toggleRecord();
-});
-
-btnJam.addEventListener('click', () => transport({ type: 'toggle-jam' }));
-
-btnKeep.addEventListener('click', () => {
-  keepLastPhrase();
-});
+btnPlay.addEventListener('click', () => commands.run('transport.play'));
+btnPause.addEventListener('click', () => commands.run('transport.pause'));
+btnStop.addEventListener('click', () => commands.run('transport.stop'));
+// Shift+click mirrors Shift+R — one obvious place for both record styles.
+btnRecord.addEventListener('click', (e) => commands.run(e.shiftKey ? 'transport.recordPass' : 'transport.record'));
+btnJam.addEventListener('click', () => commands.run('transport.jam'));
+btnKeep.addEventListener('click', () => commands.run('perform.keep'));
 
 bpmInput.addEventListener('change', () => {
   const bpm = Math.max(20, Math.min(300, Number(bpmInput.value)));
@@ -1246,7 +1213,7 @@ if (!midiInput.isSupported()) {
 // ── Snap toggle (top bar icon button) ──────────────────────────
 const snapToggleBtn = document.getElementById('snap-toggle') as HTMLButtonElement;
 snapToggleBtn.addEventListener('click', () => {
-  store.setSnap(!store.getState().snapEnabled);
+  commands.run('snap.toggle');
   snapToggleBtn.blur();
 });
 
@@ -1536,7 +1503,7 @@ loopToggle.addEventListener('change', () => {
 });
 
 loopToggleBtn.addEventListener('click', () => {
-  applyLoopEnabled(!store.getState().loopEnabled);
+  commands.run('transport.loop');
   loopToggleBtn.blur();
 });
 
@@ -1703,64 +1670,20 @@ document.addEventListener('change', (e) => {
   t.blur();
 });
 
-function addFileMenuItem(label: string, handler: () => void) {
+function addFileMenuItem(id: CommandId) {
   const item = document.createElement('button');
   item.className = 'file-menu-item';
-  item.textContent = label;
+  const keys = primaryShortcut(id);
+  item.textContent = keys ? `${commandSpec(id).label} (${keys})` : commandSpec(id).label;
   item.addEventListener('click', () => {
     closeFileMenu();
-    handler();
+    commands.run(id);
   });
   fileDropdown.appendChild(item);
 }
-
-addFileMenuItem('Save Composition', () => {
-  const comp = store.getComposition();
-  const json = serializeComposition(comp);
-  downloadFile(json, `${comp.name || 'composition'}.gliss`);
-});
-
-addFileMenuItem('Load Composition', async () => {
-  try {
-    // .gliss is the native format; .json accepts legacy flat saves.
-    const json = await openFile('.gliss,.json');
-    const comp = deserializeComposition(json);
-    // Stop first so anything a running session captured commits into the
-    // composition the undo snapshot below preserves.
-    transport({ type: 'stop' });
-    history.snapshot();
-    store.loadComposition(comp);
-    nameInput.value = comp.name || 'Untitled';
-  } catch (e) {
-    console.error('Failed to load:', e);
-  }
-});
-
-addFileMenuItem('Import MIDI', async () => {
-  try {
-    const buffer = await openBinaryFile('.mid,.midi');
-    const comp = midiToComposition(buffer);
-    transport({ type: 'stop' });
-    history.snapshot();
-    store.loadComposition(comp);
-    nameInput.value = comp.name || 'Untitled';
-  } catch (e) {
-    console.error('MIDI import failed:', e);
-  }
-});
-
-addFileMenuItem('Export WAV', async () => {
-  const comp = store.getComposition();
-  try {
-    await exportWav(comp);
-  } catch (e) {
-    console.error('WAV export failed:', e);
-  }
-});
-
-addFileMenuItem('User Manual (?)', () => {
-  window.open('/help.html', '_blank');
-});
+for (const id of ['file.save', 'file.open', 'file.importMidi', 'file.exportWav', 'help.open'] as const) {
+  addFileMenuItem(id);
+}
 
 toolbarRow.insertBefore(fileGroup, nameGroup.nextSibling);
 
@@ -1779,120 +1702,9 @@ function addToolbarButton(label: string, title: string, onClick: () => void): HT
   return btn;
 }
 
-// ── Join helper ────────────────────────────────────────────────
-function performJoin() {
-  const state = store.getState();
-  if (state.selectedCurveIds.size < 2) return;
-  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-  if (!track) return;
-  const curves = [...state.selectedCurveIds]
-    .map(id => track.curves.find(c => c.id === id))
-    .filter((c): c is import('./types').BezierCurve => !!c);
-  if (curves.length < 2) return;
-  // Refuse to join curves from different groups (a chord-cluster member
-  // can't be merged with a curve from a different cluster). Ungrouped
-  // curves can always join each other; same-group siblings join freely
-  // and the joined result keeps the group id.
-  const groupIds = new Set(curves.map(c => c.groupId).filter((g): g is string => !!g));
-  if (groupIds.size > 1) {
-    showToast("Can't join curves from different groups");
-    return;
-  }
-  const threshold = Math.max(8 / viewport.state.zoomX, 8 / viewport.state.zoomY);
-  const { merged, consumedIds } = joinCurves(curves, threshold);
-  if (consumedIds.size < 2) return;
-  // Inherit the shared group id (if any) onto the merged curve.
-  const sharedGroup = groupIds.size === 1 ? [...groupIds][0]! : null;
-  if (sharedGroup) merged.groupId = sharedGroup;
-  history.snapshot();
-  store.mutate(() => {
-    for (let i = track.curves.length - 1; i >= 0; i--) {
-      if (consumedIds.has(track.curves[i]!.id)) track.curves.splice(i, 1);
-    }
-    track.curves.push(merged);
-  });
-  store.setSelectedCurve(merged.id);
-  store.setSelectedPoint(null);
-  interaction.transformBox = null;
-}
-
-function performSharpen() {
-  const state = store.getState();
-  if (state.selectedCurveIds.size === 0) return;
-  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-  if (!track) return;
-  const curves = [...state.selectedCurveIds]
-    .map(id => track.curves.find(c => c.id === id))
-    .filter((c): c is import('./types').BezierCurve => !!c);
-  if (curves.length === 0) return;
-  history.snapshot();
-  store.mutate(() => {
-    for (const curve of curves) sharpenCurveHandles(curve);
-  });
-}
-
-function performSmooth() {
-  const state = store.getState();
-  if (state.selectedCurveIds.size === 0) return;
-  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-  if (!track) return;
-  const curves = [...state.selectedCurveIds]
-    .map(id => track.curves.find(c => c.id === id))
-    .filter((c): c is import('./types').BezierCurve => !!c);
-  if (curves.length === 0) return;
-  history.snapshot();
-  store.mutate(() => {
-    const ratio = store.getState().autoSmoothXRatio;
-    for (const curve of curves) smoothCurveHandles(curve, ratio);
-  });
-}
-
-// ── Group / Ungroup helpers ────────────────────────────────────
-function performGroup() {
-  const state = store.getState();
-  if (state.selectedCurveIds.size < 2) return;
-  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-  if (!track) return;
-  const curves = [...state.selectedCurveIds]
-    .map(id => track.curves.find(c => c.id === id))
-    .filter((c): c is import('./types').BezierCurve => !!c);
-  if (curves.length < 2) return;
-  if (allShareGroup(curves)) return;  // already grouped
-  history.snapshot();
-  store.mutate(() => {
-    assignGroup(curves);
-  });
-  rebuildTransformBox(interaction, track);
-}
-
-function performUngroup() {
-  const state = store.getState();
-  if (state.selectedCurveIds.size === 0) return;
-  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-  if (!track) return;
-  const selected = [...state.selectedCurveIds]
-    .map(id => track.curves.find(c => c.id === id))
-    .filter((c): c is import('./types').BezierCurve => !!c);
-  if (!anyGrouped(selected)) return;
-  // Expand: every member of every selected curve's group is dissolved.
-  const groupIds = new Set(selected.map(c => c.groupId).filter((g): g is string => !!g));
-  const allMembers = track.curves.filter(c => c.groupId && groupIds.has(c.groupId));
-  if (allMembers.length === 0) return;
-  history.snapshot();
-  store.mutate(() => {
-    dissolveGroup(allMembers);
-  });
-  rebuildTransformBox(interaction, track);
-}
 // ── Undo / Redo buttons ────────────────────────────────────────
-function clearInteractionForUndo() {
-  interaction.drawingCurve = null;
-  interaction.dragging = null;
-  interaction.transformBox = null;
-}
-
-const undoBtn = addToolbarButton('Undo', 'Undo (Ctrl+Z)', () => { clearInteractionForUndo(); history.undo(); });
-const redoBtn = addToolbarButton('Redo', 'Redo (Ctrl+Shift+Z)', () => { clearInteractionForUndo(); history.redo(); });
+const undoBtn = addToolbarButton(commandSpec('edit.undo').label, commandTitle('edit.undo'), () => commands.run('edit.undo'));
+const redoBtn = addToolbarButton(commandSpec('edit.redo').label, commandTitle('edit.redo'), () => commands.run('edit.redo'));
 
 undoBtn.disabled = true;
 redoBtn.disabled = true;
@@ -1902,361 +1714,224 @@ history.subscribe(() => {
   redoBtn.disabled = !history.canRedo();
 });
 
-// ── Keyboard shortcuts ──────────────────────────────────────────
-window.addEventListener('keydown', (e) => {
-  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
+// ── Commands (BACKLOG 15.3) ─────────────────────────────────────
+// What each command in the catalog (commands/catalog.ts) does. The keyboard,
+// buttons and menus all run commands through `commands`, so a key and the
+// button for the same action can't drift apart. Edit commands live in
+// commands/edit-commands.ts.
 
-  if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    if (e.repeat) return;
-    // Shift+R = deliberate one-pass record (10.5); plain R = open-ended record.
-    if (e.shiftKey) toggleRecordNextPass();
-    else toggleRecord();
-    return;
+/** Switch tools — the tool buttons and D / V / X / C. */
+function selectTool(tool: ToolMode) {
+  store.setTool(tool);
+  if (tool !== 'draw' && interaction.drawingCurve) {
+    interaction.drawingCurve = null;
   }
-  if (e.key.toLowerCase() === 'j' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    if (e.repeat) return;
-    transport({ type: 'toggle-jam' });
-    return;
+  if (tool !== 'draw' && previewActive) {
+    preview.stopAll();
+    setPreviewActive(false);
   }
-  if (e.key.toLowerCase() === 'k' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    if (e.repeat) return;
-    keepLastPhrase();
-    return;
+  if (tool === 'scissors') {
+    interaction.transformBox = null;
+    store.setSelectedCurve(null);
+    store.setSelectedPoint(null);
+  } else if (tool === 'draw') {
+    // Clear the transform box but keep the curve selection so Draw extends it.
+    interaction.transformBox = null;
+  } else if (tool === 'select') {
+    buildTransformBoxFromSelection();
   }
-  if (e.key.toLowerCase() === 'u' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    if (e.repeat) return;
-    dropLastPass();
-    return;
-  }
-  // Dynamics swell (BACKLOG 11.1) — hold to swell, release to fall away. Held
-  // with the left hand while the right works the mouse. No-op unless the bus is
-  // on its key-swell source, so F stays free otherwise.
-  if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    if (dynamics.getSource() !== 'key-swell') return;
-    e.preventDefault();
-    if (e.repeat) return;
-    dynamics.setSwellHeld(true);
-    return;
-  }
-  if (e.key === 'Escape') {
-    // Escape stops a count-in, a recording or a jam; otherwise it falls
-    // through to clearing Prism projection.
-    const before = store.getState().transport;
-    transport({ type: 'escape' });
-    if (store.getState().transport !== before) {
-      e.preventDefault();
-      return;
-    }
-    // Clear Harmonic Prism projection if it's the only thing active.
-    if (store.getState().harmonicPrism.projectionSourceId) {
-      e.preventDefault();
-      store.setPrismProjectionSource(null);
-      bgDirty = true;
-      return;
-    }
-  }
+}
 
-  // Undo / Redo
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-    e.preventDefault();
-    clearInteractionForUndo();
-    if (e.shiftKey) {
-      history.redo();
-    } else {
-      history.undo();
-    }
-    return;
+/** Escape backs out: a count-in, recording or jam first; otherwise the edit
+ *  in progress (transform box, or the curve being drawn) and Prism projection. */
+function escapeCommand() {
+  const before = store.getState().transport;
+  transport({ type: 'escape' });
+  if (store.getState().transport !== before) return;
+  if (!isComposePerformActive()) {
+    if (interaction.transformBox) interaction.dismissTransformBox();
+    else if (store.getState().activeTool === 'draw' && interaction.hasDrawTarget()) interaction.finishDrawing();
   }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-    e.preventDefault();
-    clearInteractionForUndo();
-    history.redo();
-    return;
-  }
+  if (store.getState().harmonicPrism.projectionSourceId) store.setPrismProjectionSource(null);
+}
 
-  // Copy / Cut / Paste / Duplicate
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
-    e.preventDefault();
-    copySelectedCurves();
+/** Ctrl+H: project from the selected curve, or turn projection off. */
+function toggleProjection() {
+  if (store.getState().harmonicPrism.projectionSourceId) {
+    store.setPrismProjectionSource(null);
     return;
   }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') {
-    e.preventDefault();
-    if (cutSelectedCurves()) {
-      interaction.transformBox = null;
-    }
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
-    e.preventDefault();
-    const state = store.getState();
-    // In Scroll Canvas mode the rail (visible canvas-centre beat) is what the
-    // user reads as "current position". When playback is stopped, the stored
-    // playhead can lag behind a manual pan, so derive the rail beat from the
-    // viewport instead. During playback the two coincide (scrolling-play
-    // tracks the playhead), so this is also safe there.
-    let atBeat = state.playback.positionBeats;
-    if (state.scrollCanvasEnabled && !playback.isPlaying()) {
-      const rect = fgCanvas.getBoundingClientRect();
-      const centreX = rect.width * RAIL_SCREEN_X_RATIO;
-      atBeat = viewport.state.offsetX + centreX / viewport.state.zoomX;
-    }
-    const newIds = pasteCurves(atBeat);
-    if (newIds) {
-      const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-      if (track) rebuildTransformBox(interaction, track);
-    }
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
-    e.preventDefault();
-    const newIds = continueCurves();
-    if (newIds) {
-      const state = store.getState();
-      const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-      if (track) rebuildTransformBox(interaction, track);
-    }
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
-    e.preventDefault();
-    const newIds = duplicateCurves();
-    if (newIds) {
-      const state = store.getState();
-      const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-      if (track) rebuildTransformBox(interaction, track);
-    }
-    return;
-  }
+  const sel = store.getSelectedCurveId();
+  if (sel) store.setPrismProjectionSource(sel);
+}
 
-  // Join selected curves
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
-    e.preventDefault();
-    performJoin();
-    return;
-  }
+/** Centre the view on a beat. */
+function scrollToBeat(beat: number) {
+  const r = canvasContainer.getBoundingClientRect();
+  scrollViewportToBeat(viewport, beat, r.width, r.height);
+  bgDirty = true;
+}
 
-  // Harmonic Prism — Ctrl+H toggles Projection mode on the selected curve
-  // (browser binds Ctrl+H to the History panel, so always preventDefault).
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'h') {
-    e.preventDefault();
-    const prism = store.getState().harmonicPrism;
-    if (prism.projectionSourceId) {
-      store.setPrismProjectionSource(null);
-      bgDirty = true; // staff comes back
-    } else {
-      const sel = store.getSelectedCurveId();
-      if (sel) {
-        store.setPrismProjectionSource(sel);
-        bgDirty = true; // staff hides
+/** First or last control point across all tracks, or null on an empty canvas. */
+function compositionEdge(edge: 'start' | 'end'): number | null {
+  let best: number | null = null;
+  for (const track of store.getComposition().tracks) {
+    for (const curve of track.curves) {
+      for (const pt of pitchPoints(curve)) {
+        const x = pt.position.x;
+        if (best === null || (edge === 'start' ? x < best : x > best)) best = x;
       }
     }
-    return;
   }
+  return best;
+}
 
-  // Group / Ungroup
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'g') {
-    e.preventDefault();
-    performUngroup();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'g') {
-    e.preventDefault();
-    performGroup();
-    return;
-  }
+/** Paste lands at the playhead. With Lock Rail on and stopped, the rail is
+ *  what reads as "here" — the stored playhead can lag behind a manual pan. */
+function pasteBeat(): number {
+  const st = store.getState();
+  return st.scrollCanvasEnabled && !playback.isPlaying() ? railBeat() : st.playback.positionBeats;
+}
 
-  // Sharpen selected curve(s) — clear all bezier handles to make every point sharp.
-  // Uses e.code for Alt-letter because some layouts (e.g. macOS) remap e.key with Option.
-  if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === 'KeyS') {
-    e.preventDefault();
-    performSharpen();
-    return;
-  }
+/** Load a whole composition (file open, MIDI import) as one undoable step. */
+function replaceComposition(comp: Composition) {
+  // Stop first so anything a running session captured commits into the
+  // composition the undo snapshot below preserves.
+  transport({ type: 'stop' });
+  history.snapshot();
+  store.loadComposition(comp);
+  nameInput.value = comp.name || 'Untitled';
+}
 
-  // Smooth selected curve(s) — reset every point to the auto-smoothing handle defaults.
-  if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'KeyS') {
-    e.preventDefault();
-    performSmooth();
-    return;
-  }
+const notWhilePerforming = () => !isComposePerformActive();
 
-  switch (e.key) {
-    case ' ': {
-      e.preventDefault();
-      if (e.repeat) break; // auto-repeat shouldn't re-fire the timer
-      // Start (or reset) the hold timer. A release before SPACE_HOLD_MS is a tap; a
-      // release after activates preview then stops it on keyup.
+const commands = createCommandRegistry({
+  ...createEditCommands({ interaction, viewport, isPerformLocked: isComposePerformActive, pasteBeat }),
+
+  // ── Transport ──
+  'transport.playPause': {
+    // Tap vs hold: a release before SPACE_HOLD_MS is a transport tap; past it,
+    // Space becomes hold-to-preview.
+    run() {
       if (spaceHoldTimer !== null) window.clearTimeout(spaceHoldTimer);
       spaceHoldTimer = window.setTimeout(activateSpacePreview, SPACE_HOLD_MS);
-      break;
-    }
-    case 'd':
-      store.setTool('draw');
-      interaction.transformBox = null;
-      break;
-    case 'v':
-      store.setTool('select');
-      buildTransformBoxFromSelection();
-      break;
-    case 'x':
-      store.setTool('delete');
-      break;
-    case 'c':
-      store.setTool('scissors');
-      interaction.transformBox = null;
-      store.setSelectedCurve(null);
-      store.setSelectedPoint(null);
-      break;
-    case 's': {
-      const snapEnabled = !store.getState().snapEnabled;
-      store.setSnap(snapEnabled);
-      break;
-    }
-    case 'h':
-    case 'H': {
-      // Harmonic Prism — toggle Draw mode (chord-cluster placement).
-      const prism = store.getState().harmonicPrism;
-      store.setPrismDrawMode(!prism.drawMode);
-      break;
-    }
-    case 'l':
-    case 'L': {
-      applyLoopEnabled(!store.getState().loopEnabled);
-      break;
-    }
-    case '?':
-      window.open('/help.html', '_blank');
-      break;
-    case '!':
-      // Toggle the Perf HUD. The perfHudVisible watch mirrors the
-      // change back into the Transport-panel checkbox.
-      store.setPerfHudVisible(!store.getState().perfHudVisible);
-      break;
-    case 'PageUp':
-    case 'PageDown': {
-      // Jump the viewport to the first (PageUp) or last (PageDown) control point
-      // across all tracks in the composition. PageUp on an empty canvas falls
-      // back to beat 0 so there's always a reliable home position; PageDown on
-      // an empty canvas is a no-op.
-      e.preventDefault();
+    },
+    // Timer still pending: a tap. Timer fired but no preview started (e.g.
+    // recording): still a tap, so the transport responds. Otherwise the end of
+    // a hold: stop the preview.
+    release() {
+      const wasTap = spaceHoldTimer !== null;
+      if (spaceHoldTimer !== null) {
+        window.clearTimeout(spaceHoldTimer);
+        spaceHoldTimer = null;
+      }
+      if (wasTap || !previewActive) {
+        handleSpaceTap();
+        return;
+      }
+      preview.stopAll();
+      setPreviewActive(false);
+    },
+  },
+  'transport.play': { run: () => transport({ type: 'play' }) },
+  // Plain playback pauses; a jam, recording or queued pass ends instead — a
+  // free-running clock or a capture has no paused state to resume.
+  'transport.pause': { run: () => transport({ type: 'pause' }) },
+  'transport.stop': {
+    run() {
+      transport({ type: 'stop' });
+      // Stop also rewinds the classic playhead, even when already stopped.
+      store.setPlaybackPosition(0);
+    },
+  },
+  'transport.record': { run: toggleRecord },
+  'transport.recordPass': { run: toggleRecordNextPass },
+  'transport.jam': { run: () => transport({ type: 'toggle-jam' }) },
+  'transport.loop': { run: () => applyLoopEnabled(!store.getState().loopEnabled) },
+  'transport.escape': { run: escapeCommand },
+
+  // ── Perform ──
+  'perform.keep': { run: keepLastPhrase },
+  'perform.dropPass': { run: dropLastPass },
+  // Dynamics swell (11.1): only on the key-swell source, so F is free otherwise.
+  'perform.swell': {
+    run: () => dynamics.setSwellHeld(true),
+    release: () => dynamics.setSwellHeld(false),
+    enabled: () => dynamics.getSource() === 'key-swell',
+  },
+
+  // ── Tools ── (off while the left button performs, like the tool buttons)
+  'tool.draw': { run: () => selectTool('draw'), enabled: notWhilePerforming },
+  'tool.select': { run: () => selectTool('select'), enabled: notWhilePerforming },
+  'tool.delete': { run: () => selectTool('delete'), enabled: notWhilePerforming },
+  'tool.slice': { run: () => selectTool('scissors'), enabled: notWhilePerforming },
+  'edit.finishCurve': {
+    run: () => interaction.finishDrawing(),
+    enabled: () => notWhilePerforming() && store.getState().activeTool === 'draw' && interaction.hasDrawTarget(),
+  },
+  'snap.toggle': { run: () => store.setSnap(!store.getState().snapEnabled) },
+
+  // ── Harmonic Prism ──
+  'prism.drawMode': { run: () => store.setPrismDrawMode(!store.getState().harmonicPrism.drawMode) },
+  'prism.projection': { run: toggleProjection },
+
+  // ── View ──
+  // Page Up on an empty canvas goes to beat 0 so there's always a way home.
+  'view.start': { run: () => scrollToBeat(compositionEdge('start') ?? 0) },
+  'view.end': {
+    run() {
+      const end = compositionEdge('end');
+      if (end !== null) scrollToBeat(end);
+    },
+  },
+  // While playing, the engine owns the position; stopped, it's the stored
+  // playhead (what ruler scrubbing moves).
+  'view.playhead': {
+    run: () => scrollToBeat(playback.isPlaying() ? playback.getPositionBeats() : store.getState().playback.positionBeats),
+  },
+  // The perfHudVisible watch mirrors this into the Transport-panel checkbox.
+  'view.perfHud': { run: () => store.setPerfHudVisible(!store.getState().perfHudVisible) },
+  'help.open': { run: () => { window.open('/help.html', '_blank'); } },
+
+  // ── File ──
+  'file.save': {
+    run() {
       const comp = store.getComposition();
-      let minX: number | null = null;
-      let maxX: number | null = null;
-      for (const track of comp.tracks) {
-        for (const curve of track.curves) {
-          for (const pt of pitchPoints(curve)) {
-            if (minX === null || pt.position.x < minX) minX = pt.position.x;
-            if (maxX === null || pt.position.x > maxX) maxX = pt.position.x;
-          }
-        }
+      downloadFile(serializeComposition(comp), `${comp.name || 'composition'}.gliss`);
+    },
+  },
+  'file.open': {
+    async run() {
+      try {
+        // .gliss is the native format; .json accepts legacy flat saves.
+        replaceComposition(deserializeComposition(await openFile('.gliss,.json')));
+      } catch (e) {
+        console.error('Failed to load:', e);
       }
-      let target: number;
-      if (e.key === 'PageUp') {
-        target = minX ?? 0;
-      } else {
-        if (maxX === null) return;
-        target = maxX;
+    },
+  },
+  'file.importMidi': {
+    async run() {
+      try {
+        replaceComposition(midiToComposition(await openBinaryFile('.mid,.midi')));
+      } catch (e) {
+        console.error('MIDI import failed:', e);
       }
-      const r = canvasContainer.getBoundingClientRect();
-      scrollViewportToBeat(viewport, target, r.width, r.height);
-      bgDirty = true;
-      return;
-    }
-    case 'Home': {
-      // Centre the viewport on the current playhead beat regardless of where
-      // the user has panned. While playing, the audio engine owns the position;
-      // when stopped, ruler-scrub updates `state.playback.positionBeats` —
-      // matches the renderer's playhead lookup.
-      e.preventDefault();
-      const r = canvasContainer.getBoundingClientRect();
-      const playheadBeat = playback.isPlaying()
-        ? playback.getPositionBeats()
-        : store.getState().playback.positionBeats;
-      scrollViewportToBeat(viewport, playheadBeat, r.width, r.height);
-      bgDirty = true;
-      return;
-    }
-    case 'Delete':
-    case 'Backspace': {
-      const s = store.getState();
-      // Delete selected guide first — guides are mutually exclusive with curve
-      // selection, but check explicitly so a stale ID doesn't fall through.
-      // Locked guides can't be deleted; the user must unlock first.
-      if (s.selectedGuideId && !s.guidesLocked) {
-        history.snapshot();
-        store.removeGuide(s.selectedGuideId);
-        bgDirty = true;
-        break;
+    },
+  },
+  'file.exportWav': {
+    async run() {
+      try {
+        await exportWav(store.getComposition());
+      } catch (e) {
+        console.error('WAV export failed:', e);
       }
-      // Multi-point delete (BACKLOG 8.3): when there are 2+ selected points
-      // (or a single multi-point selection that doesn't match selectedPointIndex
-      // single-point semantics), remove every selected point. Curves that drop
-      // below 2 points are removed entirely (a 0/1-point curve is degenerate
-      // and won't render any segment).
-      const selectedCount = pointCount(s.selectedPoints);
-      if (selectedCount >= 1 && (selectedCount > 1 || s.selectedPointIndex === null)) {
-        history.snapshot();
-        const sel = s.selectedPoints;
-        store.mutate(comp => deleteSelectedPoints(comp, sel));
-        store.clearPointSelection();
-        store.setSelectedCurve(null);
-        bgDirty = true;
-        break;
-      }
-      // Delete selected point (only when a single curve is selected with a point)
-      const delCurveId = store.getSelectedCurveId();
-      if (delCurveId && s.selectedPointIndex !== null) {
-        const track = s.composition.tracks.find(t => t.id === s.selectedTrackId);
-        const curve = track?.curves.find(c => c.id === delCurveId);
-        if (curve) {
-          history.snapshot();
-          store.mutate(() => {
-            pitchPoints(curve).splice(s.selectedPointIndex!, 1);
-            if (pitchPoints(curve).length === 0 && track) {
-              const idx = track.curves.indexOf(curve);
-              if (idx >= 0) track.curves.splice(idx, 1);
-            }
-          });
-          store.setSelectedPoint(null);
-          store.setSelectedCurve(pitchPoints(curve).length > 0 ? curve.id : null);
-        }
-      }
-      break;
-    }
-  }
+    },
+  },
 });
 
-window.addEventListener('keyup', (e) => {
-  // Mirror the keydown guard — otherwise typing into a form field still
-  // releases through to the transport tap / swell actions.
-  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
-  if (e.key.toLowerCase() === 'f') {
-    dynamics.setSwellHeld(false);
-    return;
-  }
-  if (e.key !== ' ') return;
-  // If the timer is still pending, the key was a tap — run the transport action.
-  // If it already fired, decide based on whether preview actually started:
-  //   - previewActive: hold-release, just stop preview (no tap action).
-  //   - !previewActive: timer fired but context didn't allow preview (e.g. recording) —
-  //     still treat release as a tap so transport responds.
-  const wasTap = spaceHoldTimer !== null;
-  if (spaceHoldTimer !== null) {
-    window.clearTimeout(spaceHoldTimer);
-    spaceHoldTimer = null;
-  }
-  if (wasTap || !previewActive) {
-    handleSpaceTap();
-    return;
-  }
-  preview.stopAll();
-  setPreviewActive(false);
-});
+commands.installKeyboard(window, e =>
+  e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement);
 
 // ── Track panel ─────────────────────────────────────────────────
 const trackListEl = document.getElementById('track-list')!;
@@ -3489,48 +3164,14 @@ for (const type of ['keydown', 'keyup', 'blur']) {
 fgCanvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   if (isComposePerformActive()) return;
-  const state = store.getState();
-  const selectedCount = state.selectedCurveIds.size;
-  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-  const selectedCurves = track
-    ? [...state.selectedCurveIds]
-        .map(id => track.curves.find(c => c.id === id))
-        .filter((c): c is import('./types').BezierCurve => !!c)
-    : [];
-  const canGroup = selectedCount >= 2 && !allShareGroup(selectedCurves);
-  const canUngroup = selectedCount >= 1 && anyGrouped(selectedCurves);
-  openContextMenu(e.pageX, e.pageY, [
-    {
-      label: 'Smooth Curve',
-      shortcut: 'Shift+S',
-      disabled: selectedCount === 0,
-      onClick: performSmooth,
-    },
-    {
-      label: 'Sharpen Curve',
-      shortcut: 'Alt+S',
-      disabled: selectedCount === 0,
-      onClick: performSharpen,
-    },
-    {
-      label: 'Join',
-      shortcut: 'Ctrl+J',
-      disabled: selectedCount < 2,
-      onClick: performJoin,
-    },
-    {
-      label: 'Group',
-      shortcut: 'Ctrl+G',
-      disabled: !canGroup,
-      onClick: performGroup,
-    },
-    {
-      label: 'Ungroup',
-      shortcut: 'Ctrl+Shift+G',
-      disabled: !canUngroup,
-      onClick: performUngroup,
-    },
-  ]);
+  const item = (id: CommandId): ContextMenuItem => ({
+    label: commandSpec(id).label,
+    shortcut: primaryShortcut(id),
+    disabled: !commands.enabled(id),
+    onClick: () => commands.run(id),
+  });
+  openContextMenu(e.pageX, e.pageY,
+    (['edit.smooth', 'edit.sharpen', 'edit.join', 'edit.group', 'edit.ungroup'] as const).map(item));
 });
 
 // ── Shared HUD + countdown DOM updaters ─────────────────────────

@@ -112,7 +112,16 @@ export interface ToolInput {
   wantsAltPress(e: PointerEvent): boolean;
 }
 
-export type Interaction = InteractionState & { readonly input: ToolInput };
+export type Interaction = InteractionState & {
+  readonly input: ToolInput;
+  /** Whether Draw has a curve to finish: one in progress, or the single
+   *  selected curve it would extend. */
+  hasDrawTarget(): boolean;
+  /** End the curve being drawn (Enter / Escape in Draw). */
+  finishDrawing(): void;
+  /** Close the transform box (Escape). */
+  dismissTransformBox(): void;
+};
 
 export function createInteraction(
   canvas: HTMLCanvasElement,
@@ -665,48 +674,15 @@ export function createInteraction(
     istate.dragStartWorld = null;
   }
 
-  // Enter to finish drawing, Escape to cancel/dismiss
-  // Ctrl held in draw mode temporarily switches to select
-  // Delete/Backspace deletes selected curve (when no point is selected)
+  // Ctrl held in Draw temporarily switches to Select — a modifier gesture,
+  // not a command. Enter, Escape and Delete are commands (commands/catalog.ts).
   window.addEventListener('keydown', (e) => {
     if (isComposePerformLocked()) return;
-    // Don't hijack keys while the user is typing in a form field — matches the
-    // global hotkey handler's guard in main.ts so Enter/Delete/Backspace/Escape
-    // stay native to inputs (e.g. comp-name, BPM).
+    // Don't hijack keys while the user is typing in a form field.
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
-    const state = store.getState();
-    const inDrawMode = state.activeTool === 'draw';
-    const hasDrawTarget = istate.drawingCurve || store.getSelectedCurveId();
-    if (e.key === 'Escape' && istate.transformBox) {
-      istate.transformBox = null;
-      canvas.style.cursor = 'default';
-    } else if (e.key === 'Enter' && inDrawMode && hasDrawTarget) {
-      finishDrawing(istate);
-    } else if (e.key === 'Escape' && inDrawMode && hasDrawTarget) {
-      finishDrawing(istate);
-    } else if (e.key === 'Control' && inDrawMode) {
+    if (e.key === 'Control' && store.getState().activeTool === 'draw') {
       istate.ctrlSwitchedTool = true;
       store.setTool('select');
-    } else if ((e.key === 'Delete' || e.key === 'Backspace')
-        && state.selectedCurveIds.size > 0
-        && state.selectedPointIndex === null
-        && state.selectedPoints.size === 0) {
-      // Whole-curve delete only fires when neither single-point nor
-      // multi-point (BACKLOG 8.3) selection is active. The main.ts handler
-      // owns those two cases and runs in the same keydown dispatch.
-      history.snapshot();
-      const idsToDelete = [...state.selectedCurveIds];
-      store.mutate(comp => {
-        const track = comp.tracks.find(t => t.id === state.selectedTrackId);
-        if (track) {
-          for (const curveId of idsToDelete) {
-            const idx = track.curves.findIndex(c => c.id === curveId);
-            if (idx >= 0) track.curves.splice(idx, 1);
-          }
-        }
-      });
-      store.setSelectedCurve(null);
-      istate.transformBox = null;
     }
   });
 
@@ -742,6 +718,12 @@ export function createInteraction(
       },
       wantsAltPress,
     } satisfies ToolInput,
+    hasDrawTarget: () => !!(istate.drawingCurve || store.getSelectedCurveId()),
+    finishDrawing: () => finishDrawing(istate),
+    dismissTransformBox() {
+      istate.transformBox = null;
+      canvas.style.cursor = 'default';
+    },
   });
 }
 

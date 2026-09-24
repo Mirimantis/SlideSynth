@@ -7,6 +7,11 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    // The user manual is its own page (it loads the shortcut table from the
+    // command catalog), so it needs building alongside the app.
+    rollupOptions: {
+      input: { main: 'index.html', help: 'help.html' },
+    },
   },
   test: {
     // Agent worktrees live under .claude/worktrees and carry their own copies
