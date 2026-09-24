@@ -29,8 +29,10 @@ import { createMidiInput } from './audio/midi-input';
 import { createDynamicsBus, isDynamicsSource } from './audio/dynamics-bus';
 import { createMagneticState, updateMagnetic, resetMagnetic } from './utils/snap-magnetic';
 import { renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, LOOP_WRAP_FLASH_MS, PULSE_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
-import { renderPropertyPanel } from './ui/property-panel';
-import { renderToolPropertyPanel } from './ui/tool-property-panel';
+import { h, render } from 'preact';
+import { PropertyPanel } from './ui/property-panel';
+import { ToolPropertyPanel } from './ui/tool-property-panel';
+import { TrackList, type TrackListActions } from './ui/track-list';
 import { openToneBuilder } from './ui/tone-builder';
 import { openTonePicker } from './ui/tone-picker';
 import { openPresetSaveDialog } from './ui/preset-save-dialog';
@@ -74,7 +76,6 @@ import { canOpenLayer, createLayerTrack, newestLayerTrack, LAYER_TRACK_LIMIT } f
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
 import { effect, watch } from './state/reactive';
-import { escapeHtml, setHtmlIfChanged } from './utils/dom-helpers';
 import type { AppState, Composition, ToolMode, BezierCurve, TransportState } from './types';
 import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, isJamming, passRecordState, performPhase } from './state/transport';
 
@@ -1934,106 +1935,60 @@ commands.installKeyboard(window, e =>
   e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement);
 
 // ── Track panel ─────────────────────────────────────────────────
-const trackListEl = document.getElementById('track-list')!;
-
-/** Render the track rows. Runs from an effect on every relevant store change;
- *  the DOM is only touched when what the rows show actually changes, so drags
- *  and slider moves elsewhere no longer rebuild the list (BACKLOG 15.1). */
-function renderTrackList() {
-  const state = store.getState();
-  const comp = state.composition;
-  const rows = comp.tracks.map(track => {
-    const tone = comp.toneLibrary.find(t => t.id === track.toneId);
-    const color = tone?.color ?? '#888';
-    const isSelected = track.id === state.selectedTrackId;
-    const isMidiArmed = state.midiArmedTrackId === track.id;
-    const isMidiRecording = isMidiArmed && state.performance.planchettes.some(
-      p => p.voiceId.startsWith('midi-') && p.trackId === track.id,
-    );
-    const midiArmClass = isMidiRecording ? 'recording' : isMidiArmed ? 'armed' : '';
-    const midiArmTitle = isMidiArmed
-      ? 'MIDI input armed — click to disarm'
-      : 'Arm this track for MIDI input recording';
-    return `
-      <div class="track-item${isSelected ? ' selected' : ''}${track.muted ? ' muted' : ''}" data-track-id="${escapeHtml(track.id)}">
-        <div class="track-color" style="background:${escapeHtml(color)}"></div>
-        <div class="track-info">
-          <span class="track-name">${escapeHtml(track.name)}</span>
-          <span class="track-tone tone-name-clickable" style="color:${escapeHtml(color)}" title="Click to change tone">${escapeHtml(tone?.name ?? '?')}</span>
-        </div>
-        <div class="track-controls">
-          <button class="track-mute ${track.muted ? 'active' : ''}" title="Mute">M</button>
-          <button class="track-solo ${track.solo ? 'active' : ''}" title="Solo">S</button>
-          <button class="track-midi-arm ${midiArmClass}" title="${midiArmTitle}">I</button>
-          <button class="track-edit-tone" title="Edit tone">T</button>
-          <button class="track-delete" title="Delete track (undoable)">X</button>
-        </div>
-      </div>`;
-  });
-  setHtmlIfChanged(trackListEl, rows.join(''));
-}
-
-// One delegated handler for every row. It resolves the track from the live
-// composition at click time — rows can outlive an undo, which swaps in new
-// track objects without changing what the rows show.
-trackListEl.addEventListener('click', (e) => {
-  const target = e.target as HTMLElement;
-  const row = target.closest<HTMLElement>('.track-item');
-  if (!row) return;
-  const comp = store.getComposition();
-  const track = comp.tracks.find(t => t.id === row.dataset.trackId);
-  if (!track) return;
-
-  if (target.classList.contains('track-mute')) {
-    history.snapshot();
-    store.mutate(() => { track.muted = !track.muted; });
-    return;
-  }
-  if (target.classList.contains('track-solo')) {
-    history.snapshot();
-    store.mutate(() => { track.solo = !track.solo; });
-    return;
-  }
-  if (target.classList.contains('track-delete')) {
-    // In-flight MIDI voices on this track would otherwise keep capturing
-    // into a track that no longer exists.
-    if (store.getState().midiArmedTrackId === track.id) finalizeAllInFlightMidiVoices();
-    history.snapshot();
-    // If the current layer lived here, clear it so the next pass opens a new one.
-    if (currentLayerTrackId === track.id) currentLayerTrackId = null;
-    store.removeTrack(track.id);
-    showToast(`Deleted ${track.name} — Ctrl+Z to restore`, 2500);
-    bgDirty = true;
-    return;
-  }
-  if (target.classList.contains('track-midi-arm')) {
-    const current = store.getState().midiArmedTrackId;
-    // If switching arm or disarming while notes are still held, finalize
-    // those in-flight voices first so we don't lose recorded samples (the
-    // arm change would orphan the planchettes otherwise).
-    if (current !== null) finalizeAllInFlightMidiVoices();
-    // Toggle: arm this track if not already armed; disarm if it was.
-    store.setMidiArmedTrackId(current === track.id ? null : track.id);
-    return;
-  }
-  if (target.classList.contains('track-edit-tone')) {
-    const currentTone = comp.toneLibrary.find(t => t.id === track.toneId);
-    if (currentTone) {
-      openToneBuilder(currentTone).then(result => {
-        if (result.action === 'save') {
-          history.snapshot();
-          store.mutate(c => {
-            const idx = c.toneLibrary.findIndex(t => t.id === result.tone.id);
-            if (idx >= 0) c.toneLibrary[idx] = result.tone;
-          });
-        }
-      });
+/** What the track list's controls do (the list itself is ui/track-list.tsx).
+ *  Each looks the track up by id when it runs — an undo swaps in new objects. */
+const trackListActions: TrackListActions = {
+  select(trackId) {
+    const track = store.getComposition().tracks.find(t => t.id === trackId);
+    if (!track) return;
+    store.setSelectedTrack(trackId);
+    // Select all curves in this track. The tool stays as it is (14.2); the
+    // transform box belongs to Select, so it's built only there.
+    if (track.curves.length > 0) {
+      store.setSelectedCurves(track.curves.map(c => c.id));
+      if (store.getState().activeTool === 'select') rebuildTransformBox(interaction, track);
     }
-    return;
-  }
-  if (target.classList.contains('tone-name-clickable')) {
-    const trackId = track.id;
-    openTonePicker(comp.toneLibrary, track.toneId, target).then(picked => {
+  },
+  toggleMute(trackId) {
+    history.snapshot();
+    store.mutate(c => {
+      const t = c.tracks.find(tt => tt.id === trackId);
+      if (t) t.muted = !t.muted;
+    });
+  },
+  toggleSolo(trackId) {
+    history.snapshot();
+    store.mutate(c => {
+      const t = c.tracks.find(tt => tt.id === trackId);
+      if (t) t.solo = !t.solo;
+    });
+  },
+  toggleMidiArm(trackId) {
+    const current = store.getState().midiArmedTrackId;
+    // Switching or disarming while notes are held: finalize those voices first
+    // so their samples aren't orphaned by the arm change.
+    if (current !== null) finalizeAllInFlightMidiVoices();
+    store.setMidiArmedTrackId(current === trackId ? null : trackId);
+  },
+  editTone(trackId) {
+    const comp = store.getComposition();
+    const track = comp.tracks.find(t => t.id === trackId);
+    const currentTone = track && comp.toneLibrary.find(t => t.id === track.toneId);
+    if (!currentTone) return;
+    openToneBuilder(currentTone).then(result => {
+      if (result.action !== 'save') return;
+      history.snapshot();
+      store.mutate(c => {
+        const idx = c.toneLibrary.findIndex(t => t.id === result.tone.id);
+        if (idx >= 0) c.toneLibrary[idx] = result.tone;
+      });
+    });
+  },
+  pickTone(trackId, anchor) {
+    const comp = store.getComposition();
+    const track = comp.tracks.find(t => t.id === trackId);
+    if (!track) return;
+    openTonePicker(comp.toneLibrary, track.toneId, anchor).then(picked => {
       if (!picked) return;
       history.snapshot();
       store.mutate(c => {
@@ -2041,18 +1996,21 @@ trackListEl.addEventListener('click', (e) => {
         if (live) live.toneId = picked.id;
       });
     });
-    return;
-  }
-  store.setSelectedTrack(track.id);
-  // Select all curves in this track. The tool stays as it is — clicking a
-  // track used to force Select, which left Draw looking active but dead
-  // (GlissNotes). The transform box belongs to Select, so it's built only
-  // there; switching to Select later builds it from the selection.
-  if (track.curves.length > 0) {
-    store.setSelectedCurves(track.curves.map(c => c.id));
-    if (store.getState().activeTool === 'select') rebuildTransformBox(interaction, track);
-  }
-});
+  },
+  remove(trackId) {
+    const track = store.getComposition().tracks.find(t => t.id === trackId);
+    if (!track) return;
+    // In-flight MIDI voices on this track would otherwise keep capturing into
+    // a track that no longer exists.
+    if (store.getState().midiArmedTrackId === trackId) finalizeAllInFlightMidiVoices();
+    history.snapshot();
+    // If the current layer lived here, clear it so the next pass opens a new one.
+    if (currentLayerTrackId === trackId) currentLayerTrackId = null;
+    store.removeTrack(trackId);
+    showToast(`Deleted ${track.name} — Ctrl+Z to restore`, 2500);
+  },
+};
+render(h(TrackList, { actions: trackListActions }), document.getElementById('track-list')!);
 
 document.getElementById('add-track-btn')!.addEventListener('click', async () => {
   const comp = store.getComposition();
@@ -3783,9 +3741,8 @@ watch(() => store.getState().activeTool, tool => toolPanel.updateTool(tool));
 const propContentEl = document.getElementById('prop-content')!;
 const toolPropContentEl = document.getElementById('tool-prop-content')!;
 effect(() => syncCompositionDerived());
-effect(() => renderTrackList());
-effect(() => renderPropertyPanel(propContentEl));
-effect(() => renderToolPropertyPanel(toolPropContentEl));
+render(h(PropertyPanel, null), propContentEl);
+render(h(ToolPropertyPanel, null), toolPropContentEl);
 effect(() => updateRecordButtonVisuals());
 
 // Play/Pause buttons follow the transport.

@@ -125,11 +125,19 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - **Render loop:** move it to a canvas module.
   - **Model edits:** inline edits in handlers (e.g. multi-point delete in the key handler) move into `model/`.
   - **Target:** `main.ts` is a bootstrap of a few hundred lines.
-- [ ] **15.4 Reactive UI chrome** *(L)*
+- [ ] **15.4 Reactive UI chrome** *(L; part 1 in PR #78)*
   - Move panels, drawers, dialogs and menus onto a small reactive component layer. The recommended default is Preact + `@preact/signals`; confirm the choice at the start of this item.
   - The canvas stays imperative.
   - Migrate one panel at a time, starting with the track list and property panels, which currently rebuild on every store change.
   - Sequence this with Phase 16 so panels aren't rebuilt twice. Migrate the panels whose shape Phase 16 won't change first.
+  - **Part 1 (PR #78):**
+    - Preact + `@preact/signals` confirmed (both MIT). Components read the store while rendering and re-render when those fields change, because the store's version signals are the ones `@preact/signals` tracks.
+    - Migrated the track list (`ui/track-list.tsx`), Object Properties (`ui/property-panel.tsx`) and Tool Properties (`ui/tool-property-panel.tsx`). The 15.1 stopgap (`setHtmlIfChanged` plus slider values synced by hand) is gone: sliders are controlled inputs, and Preact keeps the node under the pointer.
+    - Render tests use `preact-render-to-string` (dev only).
+    - Also in this PR, a user request: each drawer is sized to its own controls instead of full height and a shared 240px width. Height is capped at the canvas (then it scrolls); width runs from 200px up to the canvas width.
+      - The Prism label column widened so "Voice 1 (root)" no longer runs into its input.
+      - The Prism toggles' tooltips come from the command catalog.
+  - **Still to migrate:** Prism panel, drawers' contents, toolbar, tone builder/picker and dialogs. Most of these are reshaped by Phase 16, so they move with it.
 - [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2, PR #76)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.
   - Add an `fgDirty` flag mirroring `bgDirty`, and cache each curve's tessellation as a `Path2D` keyed by curve identity. Idle CPU should then drop to near zero.

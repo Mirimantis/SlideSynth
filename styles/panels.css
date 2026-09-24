@@ -227,11 +227,13 @@
   font-size: 0.8rem;
 }
 
-.prism-row label {
+.prism-row label:not(.toggle-switch) {
   color: var(--text-dim);
   white-space: nowrap;
   font-size: 0.8rem;
-  width: 60px;
+  /* One label column for every row; wide enough for "Voice 1 (root)". */
+  width: 84px;
+  flex-shrink: 0;
 }
 
 .prism-row select,

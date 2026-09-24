@@ -54,7 +54,7 @@ Honored now so future ports stay cheap:
 | Rendering | HTML5 Canvas 2D | Background (staff, rulers) and foreground (curves, playhead, interaction) canvases, plus a Parameters Graph canvas |
 | Audio | Web Audio API | Oscillator/gain graphs per voice; `AudioParam` automation; `OfflineAudioContext` for WAV export |
 | State | `@preact/signals-core` (MIT) | Fine-grained store subscriptions (BACKLOG 15.1) |
-| UI chrome | Vanilla DOM today | Moving to Preact components (MIT) in BACKLOG 15.4 — see [Target architecture](#target-architecture) |
+| UI chrome | Preact (MIT) + `@preact/signals` for panels; vanilla DOM for the rest | Migrating panel by panel (BACKLOG 15.4) — see [Target architecture](#target-architecture) |
 | Tests | Vitest | |
 | Input | Mouse, Web MIDI | Pointer Events (pen), Gamepad and Web Serial planned |
 
@@ -95,7 +95,8 @@ src/
 │                    #   metronome, midi-input, dynamics-bus, voice-allocation
 ├── canvas/          # viewport, interaction (tool mouse handling, ~1,400 lines), performance-engine
 │                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), and one renderer per layer
-├── ui/              # toolbar, tool-panel, drawer, prism-panel, property panels, tone builder/picker, dialogs, HUDs
+├── ui/              # Preact: track-list, property-panel, tool-property-panel (.tsx). Vanilla DOM: toolbar,
+│                    #   tool-panel, drawer, prism-panel, tone builder/picker, dialogs, HUDs
 ├── export/          # json-export (.gliss envelope + migrations), wav-export, midi-import
 └── utils/           # bezier-math, snap, snap-magnetic, snap-presets, scales, harmonics, svg helpers
 ```
