@@ -55,13 +55,39 @@ export function getLane(curve: BezierCurve, type: LaneType): Lane | undefined {
 export function ensureLane(curve: BezierCurve, type: LaneType, value?: number): Lane | undefined {
   const existing = getLane(curve, type);
   if (existing) return existing;
+  const lane = defaultLaneFor(curve, type, value);
+  if (lane) curve.lanes.push(lane);
+  return lane;
+}
+
+/** The flat default lane ensureLane would attach, without attaching it —
+ *  undefined when the curve is too short to have a span. */
+export function defaultLaneFor(curve: BezierCurve, type: LaneType, value?: number): Lane | undefined {
   const pts = pitchPoints(curve);
   if (pts.length < 2) return undefined;
-  const start = pts[0]!.position.x;
+  return createDefaultLane(type, pts[0]!.position.x, pts[pts.length - 1]!.position.x, value);
+}
+
+/** The lane to show for a curve: its own, or the default it would sound with
+ *  if it has none. Read-only callers (the Parameters Graph renderer) use this
+ *  so that displaying a curve never changes it (15.5); editing attaches the
+ *  lane with ensureLane. */
+export function displayedLane(curve: BezierCurve, type: LaneType): Lane | undefined {
+  return getLane(curve, type) ?? defaultLaneFor(curve, type);
+}
+
+/**
+ * Keep a lane's last point on the pitch curve's end while the curve is being
+ * drawn out to the right, so a lane attached early doesn't end partway along.
+ * Never moves it left of the point before it.
+ */
+export function pinLaneEndToPitch(curve: BezierCurve, type: LaneType): void {
+  const lanePts = getLane(curve, type)?.points;
+  const pts = pitchPoints(curve);
+  if (!lanePts || lanePts.length < 2 || pts.length < 2) return;
   const end = pts[pts.length - 1]!.position.x;
-  const lane = createDefaultLane(type, start, end, value);
-  curve.lanes.push(lane);
-  return lane;
+  const floor = lanePts[lanePts.length - 2]!.position.x + 0.001;
+  lanePts[lanePts.length - 1]!.position.x = Math.max(floor, end);
 }
 
 /**

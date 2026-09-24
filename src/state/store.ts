@@ -26,6 +26,12 @@ import { NO_POINTS, addPoints, onlyPoint, togglePoint, withoutCurves, type Point
 //                read-only views of `composition.snap` with their own channel.
 //   workspace  — preferences persisted to localStorage (HUDs, metronome, …).
 //   runtime    — selection, tool, transport, performance, planchettes.
+//
+// A few runtime values change at frame or mouse rate and are drawn only on the
+// canvas: planchette pitch, the snap-crossing pulse, the stored playhead. They
+// skip their fields' channels, so panels don't re-render at 60 Hz, and notify
+// the `canvas` channel instead, which only the render loop's dirty flag reads
+// (15.5).
 
 /** AppState fields that are views of `composition.snap`, not stored copies. */
 const SNAP_VIEW_FIELDS = {
@@ -41,8 +47,19 @@ const SNAP_VIEW_FIELDS = {
 
 type SnapViewKey = keyof typeof SNAP_VIEW_FIELDS;
 type RawState = Omit<AppState, SnapViewKey>;
-/** A notification channel: one per stored field, plus `snap` for composition.snap. */
-type Channel = keyof RawState | 'snap';
+/** A notification channel: one per stored field, `snap` for composition.snap,
+ *  and `canvas` for the canvas-only runtime values. */
+type Channel = keyof RawState | 'snap' | 'canvas';
+
+/** Planchette pitch changes smaller than this (cents) don't ask for a redraw —
+ *  magnetic physics settles asymptotically and would otherwise keep the canvas
+ *  redrawing a still planchette. */
+const PLANCHETTE_REDRAW_EPSILON = 0.01;
+
+function planchetteMoved(a: number | null, b: number | null): boolean {
+  if (a === null || b === null) return a !== b;
+  return Math.abs(a - b) > PLANCHETTE_REDRAW_EPSILON;
+}
 
 /** Every selection field. Selection setters bump them together — over-bumping
  *  is harmless because watchers compare values before doing any work. */
@@ -260,6 +277,7 @@ class Store {
     this.state = createInitialState();
     for (const key of Object.keys(this.state) as (keyof RawState)[]) this.versions.set(key, signal(0));
     this.versions.set('snap', signal(0));
+    this.versions.set('canvas', signal(0));
 
     const view = {} as AppState;
     for (const key of Object.keys(this.state) as (keyof RawState)[]) {
@@ -297,9 +315,37 @@ class Store {
   /** Notify everything that read these channels. Batched, so watchers that read
    *  several of them run once. */
   private touch(...channels: readonly Channel[]): void {
+    if (channels.includes('composition') && this.dropMissingProjectionSource()) {
+      channels = [...channels, 'harmonicPrism'];
+    }
     batch(() => {
       for (const c of channels) this.version(c).value++;
     });
+  }
+
+  /** Invariant: the Prism projection source is a curve that exists. Checked on
+   *  every composition change (delete, cut, join, undo, load, …) instead of by
+   *  the render loop (15.5). Returns true if it cleared the source. */
+  private dropMissingProjectionSource(): boolean {
+    const prism = this.state.harmonicPrism;
+    const id = prism.projectionSourceId;
+    if (!id || this.state.composition.tracks.some(t => t.curves.some(c => c.id === id))) return false;
+    prism.projectionSourceId = null;
+    if (prism.activeMode === 'projection') prism.activeMode = null;
+    return true;
+  }
+
+  /** Subscribe to every channel. Only for the canvas renderer's dirty flag,
+   *  since the canvas draws nearly all state (15.5); UI code reads just the
+   *  fields it shows. */
+  trackAllChannels(): void {
+    for (const v of this.versions.values()) void v.value;
+  }
+
+  /** Current composition version, untracked. Bumps on every composition change,
+   *  so it keys caches of derived geometry (the renderer's curve paths). */
+  compositionVersion(): number {
+    return this.version('composition').peek();
   }
 
   getState(): AppState {
@@ -461,15 +507,18 @@ class Store {
   setPlanchetteY(voiceId: string, cursorWorldY: number | null, snappedWorldY: number | null) {
     const p = this.state.performance.planchettes.find(pl => pl.voiceId === voiceId);
     if (!p) return;
+    const moved = planchetteMoved(p.cursorWorldY, cursorWorldY) || planchetteMoved(p.snappedWorldY, snappedWorldY);
     p.cursorWorldY = cursorWorldY;
     p.snappedWorldY = snappedWorldY;
-    // No notify — called every frame during mouse-move; render loop already ticks each frame.
+    // Canvas-only: called every frame during mouse-move and magnetic settling.
+    if (moved) this.touch('canvas');
   }
 
   markPlanchetteCrossed(voiceId: string, t: number) {
     const p = this.state.performance.planchettes.find(pl => pl.voiceId === voiceId);
     if (!p) return;
     p.lastCrossedAt = t;
+    this.touch('canvas');
   }
 
   setPerformCurrentCurve(voiceId: string, curveId: string | null) {
@@ -671,8 +720,10 @@ class Store {
   }
 
   setPlaybackPosition(beats: number) {
+    if (this.state.playback.positionBeats === beats) return;
     this.state.playback.positionBeats = beats;
-    // Don't notify on every position update (called at 60fps) — use requestAnimationFrame
+    // Canvas-only: called at frame rate during playback and scrubbing.
+    this.touch('canvas');
   }
 
   setViewport(vp: Partial<ViewportState>) {
@@ -845,10 +896,7 @@ class Store {
 
     if (this.state.midiArmedTrackId === trackId) this.state.midiArmedTrackId = null;
 
-    const projectionSourceId = this.state.harmonicPrism.projectionSourceId;
-    if (projectionSourceId && removedCurveIds.has(projectionSourceId)) {
-      this.state.harmonicPrism.projectionSourceId = null;
-    }
+    // A projection source on the removed track is dropped by touch().
 
     // Non-primary planchettes bound to this track (MIDI voices on an armed
     // track) would otherwise keep rendering and capturing against it.

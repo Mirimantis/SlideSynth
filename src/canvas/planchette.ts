@@ -16,8 +16,8 @@ export const RAIL_SCREEN_X_RATIO = 0.5;
 /** @deprecated use RAIL_SCREEN_X_RATIO. Retained as an alias for callers in flight. */
 export const PLANCHETTE_SCREEN_X_RATIO = RAIL_SCREEN_X_RATIO;
 
-const PULSE_DURATION_MS = 200;
-const LOOP_WRAP_FLASH_MS = 250;
+export const PULSE_DURATION_MS = 200;
+export const LOOP_WRAP_FLASH_MS = 250;
 const PRIMARY_COLOR = '#f44336';
 const GHOST_COLOR = 'rgba(244, 67, 54, 0.35)';
 const PULSE_COLOR = '#ffeb3b';

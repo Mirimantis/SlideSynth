@@ -115,3 +115,27 @@ describe('store.setLayerMode', () => {
     expect(store.getState().layerModeEnabled).toBe(false);
   });
 });
+
+describe('Prism projection source invariant (BACKLOG 15.5)', () => {
+  beforeEach(() => { seed(); });
+
+  it('is dropped when a mutation deletes the source curve', () => {
+    store.setPrismProjectionSource('keep-1');
+    store.mutate(comp => { comp.tracks[0]!.curves = []; });
+    expect(store.getState().harmonicPrism.projectionSourceId).toBeNull();
+    expect(store.getState().harmonicPrism.activeMode).toBeNull();
+  });
+
+  it('is dropped when a loaded composition (undo, file open) lacks the curve', () => {
+    store.setPrismProjectionSource('keep-1');
+    store.loadComposition(createComposition());
+    expect(store.getState().harmonicPrism.projectionSourceId).toBeNull();
+  });
+
+  it('survives unrelated composition changes', () => {
+    store.setPrismProjectionSource('doomed-2');
+    store.mutate(comp => { comp.bpm = 99; });
+    expect(store.getState().harmonicPrism.projectionSourceId).toBe('doomed-2');
+    expect(store.getState().harmonicPrism.activeMode).toBe('projection');
+  });
+});

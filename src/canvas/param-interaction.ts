@@ -64,6 +64,14 @@ export function createParamInteraction(
     return Math.max(ext[0], Math.min(ext[1], beat));
   }
 
+  /** The graph shows a default lane for a curve that has none of its own
+   *  (15.5). A press on the graph attaches it, so what you grab is what you
+   *  saw; it matches the audio fallback, so the sound doesn't change. */
+  function attachShownLane(curve: BezierCurve): void {
+    if (getLane(curve, 'volume') || pitchPoints(curve).length < 2) return;
+    store.mutate(() => { ensureLane(curve, 'volume'); });
+  }
+
   function hitPoint(curve: BezierCurve, sx: number, sy: number): number | null {
     const lane = getLane(curve, 'volume');
     if (!lane) return null;
@@ -94,6 +102,7 @@ export function createParamInteraction(
     if (e.button !== 0) return;
     const curve = getSelectedCurve();
     if (!curve) return;
+    attachShownLane(curve);
     const tool = store.getState().activeTool;
     const ctrl = e.ctrlKey || e.metaKey;
     const { sx, sy } = localPos(e);
@@ -206,6 +215,7 @@ export function createParamInteraction(
   canvas.addEventListener('contextmenu', (e) => {
     const curve = getSelectedCurve();
     if (!curve) return;
+    attachShownLane(curve);
     const { sx, sy } = localPos(e);
     const idx = hitPoint(curve, sx, sy);
     if (idx === null) return;
