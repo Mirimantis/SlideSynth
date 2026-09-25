@@ -1,5 +1,5 @@
 import type { AppState } from '../types';
-import { forcesScrollView, isRolling } from './transport';
+import { forcesScrollView } from './transport';
 
 /**
  * The single definition of "does the left mouse button perform or edit?"
@@ -9,15 +9,16 @@ import { forcesScrollView, isRolling } from './transport';
  * its only caller.
  */
 
-/** Scroll Canvas effective value: the user's Lock Rail toggle, forced on while
- *  counting in, recording, jamming, or holding a queued one-pass record — so the
- *  view doesn't switch modes at the moment capture starts. */
+/** Whether the rail view is showing: always in Perform, in compose mode when
+ *  the user scrolls the canvas during playback, and while a recording runs
+ *  (so leaving Perform mid-take doesn't jump the view). */
 export function effectiveScrollCanvas(st: AppState): boolean {
-  return st.scrollCanvasEnabled || forcesScrollView(st.transport);
+  return st.performMode || st.scrollCanvasEnabled || forcesScrollView(st.transport);
 }
 
-/** True when the transport is rolling in the scrolling view, where the left
- *  button sounds the rail planchette instead of driving the edit tools. */
+/** True when the left button sounds the rail planchette instead of driving the
+ *  edit tools: exactly when Perform mode is on (BACKLOG 16.2). Rolling, that's
+ *  a performance; stopped, it auditions. */
 export function isPerformInputActive(st: AppState): boolean {
-  return isRolling(st.transport) && effectiveScrollCanvas(st);
+  return st.performMode;
 }

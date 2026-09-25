@@ -20,10 +20,13 @@ export interface PressContext {
   /** PointerEvent.button: 0 left, 1 middle, 2 right. */
   button: number;
   altKey: boolean;
-  /** The transport is rolling in the scrolling view: the left button plays. */
+  /** Perform mode: the left button plays (BACKLOG 16.2). */
   performing: boolean;
   /** The press landed on the rulers at the top of the canvas. */
   inRuler: boolean;
+  /** A recording is running, so the rulers don't scrub or move loop markers
+   *  under it. */
+  rulerLocked: boolean;
   /** The tools claim this Alt press (Alt-drag duplicate on a transform box). */
   toolWantsAlt: boolean;
 }
@@ -34,10 +37,10 @@ export function routePress(c: PressContext): PressOwner | null {
   if (c.button !== 0) return null;
   // Alt+left pans, except Alt-drag duplicate on a transform box while editing.
   if (c.altKey) return c.toolWantsAlt && !c.performing ? 'tool' : 'pan';
-  // While performing, the rulers are inert rather than scrubbing under a
-  // running transport.
-  if (c.performing) return c.inRuler ? null : 'perform';
-  return 'tool';
+  // The rulers scrub and drag loop markers in either mode (the tools handle
+  // that), except under a running recording.
+  if (c.inRuler) return c.rulerLocked ? null : 'tool';
+  return c.performing ? 'perform' : 'tool';
 }
 
 export interface GestureHandlers {
@@ -50,6 +53,8 @@ export interface InputRouterConfig {
   canvas: HTMLCanvasElement;
   isPerforming(): boolean;
   isInRuler(e: PointerEvent): boolean;
+  /** See PressContext.rulerLocked. Defaults to never locked. */
+  isRulerLocked?(): boolean;
   /** `track` sees every pointer move (the rail planchette and pitch HUD follow
    *  the cursor in every mode); `leave` fires when the pointer leaves with no
    *  press in progress. */
@@ -101,6 +106,7 @@ export function createInputRouter(cfg: InputRouterConfig): InputRouter {
       altKey: e.altKey,
       performing,
       inRuler: cfg.isInRuler(e),
+      rulerLocked: cfg.isRulerLocked?.() ?? false,
       toolWantsAlt: !performing && e.altKey && (cfg.tool.wantsAltPress?.(e) ?? false),
     });
     const handlers = owner ? handlersFor(owner) : undefined;

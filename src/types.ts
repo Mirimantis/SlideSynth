@@ -156,8 +156,9 @@ export interface PlaybackInfo {
 export type TransportMode = 'stopped' | 'paused' | 'countdown' | 'playing';
 
 /** Which clock a rolling transport runs: plain Play (ends with the content, or
- *  loops) or the free-running, open-ended jam clock (BACKLOG 10.1). */
-export type TransportClock = 'play' | 'jam';
+ *  loops) or the open-ended clock that Play runs in Perform (BACKLOG 16.2; it
+ *  was the jam clock, 10.1). */
+export type TransportClock = 'play' | 'open';
 
 /** What a rolling transport is recording: nothing (the rolling buffer still
  *  runs for Keep), an open-ended record, or one loop pass (BACKLOG 10.5) that
@@ -246,8 +247,12 @@ export interface AppState {
   selectedPoints: PointSelection;
   activeTool: ToolMode;
   /** Transport + capture mode (BACKLOG 15.2) — the single source for "is it
-   *  playing / counting in / jamming / recording". Runtime only. */
+   *  playing / counting in / recording". Runtime only. */
   transport: TransportState;
+  /** Perform mode (BACKLOG 16.2): the left button plays the rail planchette
+   *  instead of running the active tool, and the view is the rail view.
+   *  Runtime only; `activeTool` is kept for when Perform is left. */
+  performMode: boolean;
   performance: PerformanceState;
   viewport: ViewportState;
   playback: PlaybackInfo;
@@ -281,7 +286,10 @@ export interface AppState {
   selectedGuideId: string | null;
   drawPreviewMode: 'tone' | 'composition';   // Draw-tool spacebar preview scope
   bezierAutoSmooth: boolean;                  // Draw-tool: click-placed points get horizontal handles
-  scrollCanvasEnabled: boolean;               // Compose Playback view preference (localStorage-backed)
+  /** Compose mode: scroll the canvas past the rail during playback instead of
+   *  moving the playhead (BACKLOG 16.2: the view half of the old Lock Rail).
+   *  Perform always uses the rail view. localStorage-backed; off by default. */
+  scrollCanvasEnabled: boolean;
   /** Layer-per-pass looping (BACKLOG 10.3): each performed pass commits onto a
    *  fresh track. localStorage-backed; off by default. */
   layerModeEnabled: boolean;

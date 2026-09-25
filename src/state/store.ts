@@ -77,7 +77,12 @@ function createInitialPrimaryPlanchette(trackId: string | null): PlanchetteState
   };
 }
 
-const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollCanvas';
+// A new key, not a migration: the old `slidesynth.scrollCanvas` (Lock Rail)
+// also meant "the left button performs while playing", which Perform mode now
+// owns (BACKLOG 16.2). Carrying it over would leave most users editing on a
+// scrolling canvas they never asked for, so the view option starts off.
+const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollDuringPlayback';
+try { localStorage.removeItem('slidesynth.scrollCanvas'); } catch { /* ignore */ }
 const LAYER_MODE_STORAGE_KEY = 'slidesynth.layerMode';
 const PITCH_HUD_STORAGE_KEY = 'slidesynth.pitchHud';
 const PERF_HUD_STORAGE_KEY = 'slidesynth.perfHud';
@@ -243,12 +248,13 @@ function createInitialState(): RawState {
     // Phase 8.11 — MIDI input recording arm. Not persisted (record-arm
     // shouldn't silently re-engage on app reload).
     midiArmedTrackId: null,
+    performMode: false,
     drawPreviewMode: 'tone',
     bezierAutoSmooth: false,
     // ── workspace (localStorage) ──
     guidesVisible: loadBoolPref(GUIDES_VISIBLE_STORAGE_KEY, true),
     guidesLocked: loadBoolPref(GUIDES_LOCKED_STORAGE_KEY, false),
-    scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, true),
+    scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, false),
     layerModeEnabled: loadBoolPref(LAYER_MODE_STORAGE_KEY, false),
     pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
     perfHudVisible: loadBoolPref(PERF_HUD_STORAGE_KEY, false),
@@ -583,6 +589,14 @@ class Store {
   setBezierAutoSmooth(enabled: boolean) {
     this.state.bezierAutoSmooth = enabled;
     this.touch('bezierAutoSmooth');
+  }
+
+  /** Perform mode (BACKLOG 16.2). What entering and leaving it does to the
+   *  transport and the view lives in main.ts's `setPerformMode`. */
+  setPerformMode(on: boolean) {
+    if (this.state.performMode === on) return;
+    this.state.performMode = on;
+    this.touch('performMode');
   }
 
   setScrollCanvas(enabled: boolean) {

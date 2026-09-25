@@ -185,6 +185,13 @@ export function createInteraction(
 
   /** Hover and tool drags. The router sends moves here while the canvas is
    *  editing, and for the whole of a press that started as a tool gesture. */
+  /** The viewport's X offset when the ruler scrub began. A scrub maps the
+   *  cursor to beats through the ruler as it was at the press, so the rail
+   *  view can scroll the content under the rail as you drag (BACKLOG 16.2)
+   *  without that scroll feeding back into the beat under the cursor. In the
+   *  page view nothing scrolls, so it's the same mapping as always. */
+  let scrubOffsetX = 0;
+
   function onMove(e: PointerEvent): void {
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
@@ -217,8 +224,9 @@ export function createInteraction(
 
     // Playhead scrubbing — update position and skip all other interaction
     if (istate.scrubbing) {
+      const scrubWx = sx / vp.state.zoomX + scrubOffsetX;
       const snap = currentSnapConfig({ zoomX: vp.state.zoomX });
-      const snappedBeat = snap.enabled ? snapToGrid(raw.wx, 0, snap).wx : raw.wx;
+      const snappedBeat = snap.enabled ? snapToGrid(scrubWx, 0, snap).wx : scrubWx;
       const beat = Math.max(0, snappedBeat);
       callbacks.onPlayheadScrub?.(beat, 'move');
       return;
@@ -443,6 +451,7 @@ export function createInteraction(
       const snappedBeat = snap.enabled ? snapToGrid(world.wx, 0, snap).wx : world.wx;
       const beat = Math.max(0, snappedBeat);
       istate.scrubbing = true;
+      scrubOffsetX = vp.state.offsetX;
       callbacks.onPlayheadScrub?.(beat, 'start');
       return;
     }

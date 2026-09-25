@@ -7,46 +7,52 @@ import type { TransportState } from '../types';
 const roll = (clock: TransportState['clock'], capture: TransportState['capture']): TransportState =>
   ({ mode: 'playing', clock, capture, countdownStartedAt: 0 });
 
-describe('perform-mode (BACKLOG 14.1)', () => {
+const EVERY_TRANSPORT: [string, TransportState][] = [
+  ['stopped', TRANSPORT_STOPPED],
+  ['paused', { ...TRANSPORT_STOPPED, mode: 'paused' }],
+  ['counting in', { mode: 'countdown', clock: 'play', capture: 'armed', countdownStartedAt: 1 }],
+  ['playing', roll('play', 'none')],
+  ['playing open-ended', roll('open', 'none')],
+  ['recording', roll('play', 'armed')],
+  ['pass queued', roll('play', 'pass-queued')],
+];
+
+describe('perform-mode (BACKLOG 14.1, 16.2)', () => {
   beforeEach(() => {
     store.setScrollCanvas(false);
+    store.setPerformMode(false);
     store.setTransport(TRANSPORT_STOPPED);
   });
 
-  it('edits when Lock Rail is off and nothing forces the scrolling view', () => {
+  // The 14.1 bug was two definitions of "performing" disagreeing. Since 16.2
+  // there's nothing to disagree about: the mode alone decides.
+  it.each(EVERY_TRANSPORT)('the left button plays in Perform and edits outside it, while %s', (_label, t) => {
+    store.setTransport(t);
+    store.setScrollCanvas(true);
+    expect(isPerformInputActive(store.getState())).toBe(false);
+    store.setPerformMode(true);
+    expect(isPerformInputActive(store.getState())).toBe(true);
+  });
+
+  it('Perform always shows the rail view', () => {
+    store.setPerformMode(true);
+    expect(effectiveScrollCanvas(store.getState())).toBe(true);
+  });
+
+  it('compose mode shows the rail view only when asked to scroll', () => {
     store.setTransport(roll('play', 'none'));
     expect(effectiveScrollCanvas(store.getState())).toBe(false);
-    expect(isPerformInputActive(store.getState())).toBe(false);
-  });
-
-  it('performs while playing with Lock Rail on', () => {
     store.setScrollCanvas(true);
-    store.setTransport(roll('play', 'none'));
-    expect(isPerformInputActive(store.getState())).toBe(true);
+    expect(effectiveScrollCanvas(store.getState())).toBe(true);
   });
 
-  it('never performs while the transport is stopped, paused or counting in', () => {
-    store.setScrollCanvas(true);
-    for (const t of [
-      TRANSPORT_STOPPED,
-      { ...TRANSPORT_STOPPED, mode: 'paused' as const },
-      { mode: 'countdown' as const, clock: 'play' as const, capture: 'armed' as const, countdownStartedAt: 1 },
-    ]) {
-      store.setTransport(t);
-      expect(isPerformInputActive(store.getState())).toBe(false);
-    }
-  });
-
-  // The 14.1 bug: with Lock Rail off, jam and one-pass record still force the
-  // scrolling view, so the edit tools must stand down too.
   it.each([
-    ['jamming', roll('jam', 'none')],
+    ['counting in', { mode: 'countdown', clock: 'play', capture: 'armed', countdownStartedAt: 1 } as TransportState],
     ['recording', roll('play', 'armed')],
-    ['pass record queued', roll('play', 'pass-queued')],
+    ['pass queued', roll('play', 'pass-queued')],
     ['pass recording', roll('play', 'pass-recording')],
-  ])('performs with Lock Rail off while %s', (_label, t) => {
+  ])('keeps the rail view while %s, even outside Perform', (_label, t) => {
     store.setTransport(t);
     expect(effectiveScrollCanvas(store.getState())).toBe(true);
-    expect(isPerformInputActive(store.getState())).toBe(true);
   });
 });

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { TransportState } from '../types';
 import {
   TRANSPORT_STOPPED, transition, type TransportEvent,
-  isRecordArmed, isCapturing, isJamming, passRecordState, performPhase, forcesScrollView,
+  isRecordArmed, isCapturing, isOpenEnded, passRecordState, performPhase, forcesScrollView,
 } from './transport';
 
 const S = TRANSPORT_STOPPED;
@@ -12,27 +12,32 @@ const roll = (clock: TransportState['clock'], capture: TransportState['capture']
   ({ mode: 'playing', clock, capture, countdownStartedAt: 0 });
 
 const PLAY = roll('play', 'none');
-const JAM = roll('jam', 'none');
+/** Play in Perform: the open-ended clock (was Jam). */
+const OPEN = roll('open', 'none');
 const REC = roll('play', 'armed');
-const JAM_REC = roll('jam', 'armed');
+const OPEN_REC = roll('open', 'armed');
 const QUEUED = roll('play', 'pass-queued');
-const JAM_QUEUED = roll('jam', 'pass-queued');
+const OPEN_QUEUED = roll('open', 'pass-queued');
 const PASS = roll('play', 'pass-recording');
 
 const R: TransportEvent = { type: 'toggle-record', audioNow: 42 };
+const PLAY_EV: TransportEvent = { type: 'play', openEnded: false };
+const PLAY_OPEN: TransportEvent = { type: 'play', openEnded: true };
 
 /** [from, event, expected] — every state × every event that changes something,
  *  plus the ignored ones that matter. `'same'` means the event is ignored and
  *  the identical object comes back. */
 const table: [string, TransportState, TransportEvent, TransportState | 'same'][] = [
   // play
-  ['stopped + play', S, { type: 'play' }, PLAY],
-  ['paused + play resumes', PAUSED, { type: 'play' }, PLAY],
-  ['playing + play', PLAY, { type: 'play' }, 'same'],
-  ['countdown + play', COUNTDOWN, { type: 'play' }, 'same'],
+  ['stopped + play', S, PLAY_EV, PLAY],
+  ['stopped + play in Perform is open-ended', S, PLAY_OPEN, OPEN],
+  ['paused + play resumes', PAUSED, PLAY_EV, PLAY],
+  ['paused + play in Perform resumes open-ended', PAUSED, PLAY_OPEN, OPEN],
+  ['playing + play', PLAY, PLAY_EV, 'same'],
+  ['countdown + play', COUNTDOWN, PLAY_OPEN, 'same'],
   // pause
   ['plain play + pause', PLAY, { type: 'pause' }, PAUSED],
-  ['jam + pause stops', JAM, { type: 'pause' }, S],
+  ['open-ended play + pause really pauses', OPEN, { type: 'pause' }, PAUSED],
   ['recording + pause stops', REC, { type: 'pause' }, S],
   ['queued pass + pause stops', QUEUED, { type: 'pause' }, S],
   ['stopped + pause', S, { type: 'pause' }, 'same'],
@@ -47,7 +52,7 @@ const table: [string, TransportState, TransportEvent, TransportState | 'same'][]
   ['countdown + esc', COUNTDOWN, { type: 'escape' }, S],
   ['recording + esc', REC, { type: 'escape' }, S],
   ['pass recording + esc', PASS, { type: 'escape' }, S],
-  ['jam + esc', JAM, { type: 'escape' }, S],
+  ['open-ended play + esc', OPEN, { type: 'escape' }, 'same'],
   ['plain play + esc', PLAY, { type: 'escape' }, 'same'],
   ['queued pass on plain play + esc', QUEUED, { type: 'escape' }, 'same'],
   // R
@@ -55,7 +60,7 @@ const table: [string, TransportState, TransportEvent, TransportState | 'same'][]
   ['paused + R counts in', PAUSED, R, COUNTDOWN_AT(42)],
   ['countdown + R cancels', COUNTDOWN, R, S],
   ['plain play + R arms now', PLAY, R, REC],
-  ['jam + R arms now, keeps the jam clock', JAM, R, JAM_REC],
+  ['open-ended play + R arms now, keeps the clock', OPEN, R, OPEN_REC],
   ['queued pass + R takes over', QUEUED, R, REC],
   ['recording + R stops', REC, R, S],
   ['pass recording + R stops', PASS, R, S],
@@ -64,27 +69,25 @@ const table: [string, TransportState, TransportEvent, TransportState | 'same'][]
   ['paused + Shift+R', PAUSED, { type: 'toggle-pass-record' }, PASS],
   ['countdown + Shift+R', COUNTDOWN, { type: 'toggle-pass-record' }, PASS],
   ['plain play + Shift+R queues', PLAY, { type: 'toggle-pass-record' }, QUEUED],
-  ['jam + Shift+R queues, keeps the jam clock', JAM, { type: 'toggle-pass-record' }, JAM_QUEUED],
+  ['open-ended play + Shift+R queues, keeps the clock', OPEN, { type: 'toggle-pass-record' }, OPEN_QUEUED],
   ['queued + Shift+R cancels', QUEUED, { type: 'toggle-pass-record' }, PLAY],
   ['pass recording + Shift+R cancels', PASS, { type: 'toggle-pass-record' }, PLAY],
   ['open recording + Shift+R', REC, { type: 'toggle-pass-record' }, 'same'],
-  // J
-  ['stopped + J', S, { type: 'toggle-jam' }, JAM],
-  ['paused + J', PAUSED, { type: 'toggle-jam' }, JAM],
-  ['plain play + J converts to jam', PLAY, { type: 'toggle-jam' }, JAM],
-  ['queued pass + J converts to jam', QUEUED, { type: 'toggle-jam' }, JAM_QUEUED],
-  ['jam + J stops', JAM, { type: 'toggle-jam' }, S],
-  ['jam recording + J stops', JAM_REC, { type: 'toggle-jam' }, S],
-  ['countdown + J', COUNTDOWN, { type: 'toggle-jam' }, 'same'],
-  ['recording + J', REC, { type: 'toggle-jam' }, 'same'],
-  ['pass recording + J', PASS, { type: 'toggle-jam' }, 'same'],
+  // Entering Perform while rolling
+  ['plain play opens its clock', PLAY, { type: 'open-clock' }, OPEN],
+  ['queued pass opens its clock', QUEUED, { type: 'open-clock' }, OPEN_QUEUED],
+  ['recording opens its clock', REC, { type: 'open-clock' }, OPEN_REC],
+  ['already open', OPEN, { type: 'open-clock' }, 'same'],
+  ['stopped', S, { type: 'open-clock' }, 'same'],
+  ['paused', PAUSED, { type: 'open-clock' }, 'same'],
+  ['countdown', COUNTDOWN, { type: 'open-clock' }, 'same'],
   // count-in
   ['countdown elapses into recording', COUNTDOWN, { type: 'countdown-elapsed' }, REC],
   ['stale countdown-elapsed', PLAY, { type: 'countdown-elapsed' }, 'same'],
   // loop wrap
   ['wrap starts a queued pass', QUEUED, { type: 'loop-wrap' }, PASS],
   ['wrap ends a pass', PASS, { type: 'loop-wrap' }, PLAY],
-  ['wrap keeps the jam clock', JAM_QUEUED, { type: 'loop-wrap' }, roll('jam', 'pass-recording')],
+  ['wrap keeps the open clock', OPEN_QUEUED, { type: 'loop-wrap' }, roll('open', 'pass-recording')],
   ['wrap during plain play', PLAY, { type: 'loop-wrap' }, 'same'],
   ['wrap during open recording', REC, { type: 'loop-wrap' }, 'same'],
 ];
@@ -101,10 +104,10 @@ describe('transport transitions (BACKLOG 15.2)', () => {
   });
 
   it('only ever produces states that satisfy the invariants', () => {
-    const states = [S, PAUSED, COUNTDOWN, PLAY, JAM, REC, JAM_REC, QUEUED, JAM_QUEUED, PASS];
+    const states = [S, PAUSED, COUNTDOWN, PLAY, OPEN, REC, OPEN_REC, QUEUED, OPEN_QUEUED, PASS];
     const events: TransportEvent[] = [
-      { type: 'play' }, { type: 'pause' }, { type: 'stop' }, { type: 'escape' }, R,
-      { type: 'toggle-pass-record' }, { type: 'toggle-jam' }, { type: 'countdown-elapsed' }, { type: 'loop-wrap' },
+      PLAY_EV, PLAY_OPEN, { type: 'pause' }, { type: 'stop' }, { type: 'escape' }, R,
+      { type: 'toggle-pass-record' }, { type: 'open-clock' }, { type: 'countdown-elapsed' }, { type: 'loop-wrap' },
     ];
     for (const s of states) {
       for (const e of events) {
@@ -124,20 +127,20 @@ describe('transport transitions (BACKLOG 15.2)', () => {
 
 describe('derived views', () => {
   it('matches the old flag semantics', () => {
-    expect([S, PAUSED, COUNTDOWN, PLAY, JAM, REC, QUEUED, PASS].map(isRecordArmed))
+    expect([S, PAUSED, COUNTDOWN, PLAY, OPEN, REC, QUEUED, PASS].map(isRecordArmed))
       .toEqual([false, false, true, false, false, true, false, true]);
     expect([COUNTDOWN, REC, PASS, QUEUED].map(isCapturing)).toEqual([false, true, true, false]);
-    expect([PLAY, JAM, JAM_REC, S].map(isJamming)).toEqual([false, true, true, false]);
+    expect([PLAY, OPEN, OPEN_REC, S, PAUSED].map(isOpenEnded)).toEqual([false, true, true, false, false]);
     expect([PLAY, QUEUED, PASS].map(passRecordState)).toEqual(['off', 'queued', 'recording']);
   });
 
   it('plain Play is a rolling phase, so the loop seam is handled there too', () => {
-    expect([S, PAUSED, COUNTDOWN, PLAY, JAM].map(performPhase))
+    expect([S, PAUSED, COUNTDOWN, PLAY, OPEN].map(performPhase))
       .toEqual(['idle', 'idle', 'countdown', 'playing', 'playing']);
   });
 
-  it('capture sessions force the scrolling view; plain Play does not', () => {
-    expect([S, PLAY, JAM, COUNTDOWN, REC, QUEUED, PASS].map(forcesScrollView))
-      .toEqual([false, false, true, true, true, true, true]);
+  it('capture sessions force the scrolling view; playback alone does not', () => {
+    expect([S, PLAY, OPEN, COUNTDOWN, REC, QUEUED, PASS].map(forcesScrollView))
+      .toEqual([false, false, false, true, true, true, true]);
   });
 });

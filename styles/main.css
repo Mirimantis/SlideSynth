@@ -22,6 +22,9 @@
   --icon-color: var(--text-dim);
   --icon-color-hover: var(--accent-hover);
   --icon-color-active: var(--accent);
+  /* Perform mode (BACKLOG 16.2): its own colour, so playing reads as a
+     different place from composing. A first cue only; 16.8 designs it. */
+  --perform: #ce93d8;
 }
 
 /* ── SVG icons (shape-only assets, color from currentColor) ─────── */
@@ -167,6 +170,51 @@ body {
 .icon-toggle:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* ── Perform toggle (BACKLOG 16.2) ────────────────────────────────
+   An interim home where Lock Rail was, until the Perform session (16.8). */
+.perform-toggle {
+  height: 30px;
+  padding: 0 16px;
+  border-radius: 15px;
+  border: 1px solid var(--perform);
+  background: transparent;
+  color: var(--perform);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.perform-toggle:hover {
+  background: rgba(206, 147, 216, 0.15);
+}
+
+.perform-toggle.active {
+  background: var(--perform);
+  color: var(--bg);
+}
+
+.perform-toggle:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.perform-toggle:focus-visible {
+  outline: 2px solid var(--perform);
+  outline-offset: 2px;
+}
+
+/* In Perform the canvas takes the Perform colour at its edge. An overlay,
+   because the canvases would cover an inset shadow on the container. */
+body.perform-mode #canvas-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 2px var(--perform);
+  pointer-events: none;
 }
 
 .comp-name-input {
@@ -1014,18 +1062,6 @@ body {
   background: #f9a825;
   border-color: #f9a825;
   animation: recordPulse 1s infinite;
-}
-
-/* Jam button — free-running clock (BACKLOG 10.1) */
-.jam-btn {
-  background: var(--surface);
-  color: #64b5f6;
-  border: 1px solid #335;
-}
-
-.jam-btn.jamming {
-  color: #fff;
-  background: #1976d2;
 }
 
 /* Keep button — lights when the rolling buffer holds a keepable phrase (10.2) */
