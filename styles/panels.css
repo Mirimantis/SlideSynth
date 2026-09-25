@@ -1,6 +1,7 @@
 /* ── Transport / Snap Section ─────────────────────────────────── */
 
-#transport-section,
+/* A drawer's body (the Tempo drawer is a Preact component, 16.3). */
+.drawer-section,
 #snap-section {
   padding: 8px;
   border-bottom: 1px solid #335;

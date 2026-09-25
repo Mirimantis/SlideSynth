@@ -10,12 +10,16 @@ export interface CommandHandler {
    *  disabled. Its key goes to the browser, except Ctrl chords, which stay
    *  blocked (Ctrl+J would open Downloads). Default: always enabled. */
   enabled?(): boolean;
+  /** For on/off settings: whether it's on. Menus show a check mark. */
+  checked?(): boolean;
 }
 
 export interface CommandRegistry {
   /** Run a command if it's enabled. Returns whether it ran. */
   run(id: CommandId): boolean;
   enabled(id: CommandId): boolean;
+  /** A setting's on/off state, or undefined for an ordinary command. */
+  checked(id: CommandId): boolean | undefined;
   /** Listen for the catalog's key chords on `target`. `isTyping` says when a
    *  key belongs to a form field instead. Returns a dispose function. */
   installKeyboard(target: Window, isTyping: (e: KeyboardEvent) => boolean): () => void;
@@ -39,6 +43,7 @@ export function createCommandRegistry(handlers: Record<CommandId, CommandHandler
 
   return {
     enabled,
+    checked: id => handlers[id].checked?.(),
     run(id) {
       if (!enabled(id)) return false;
       handlers[id].run();

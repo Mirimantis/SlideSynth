@@ -20,7 +20,8 @@ const QUEUED = roll('play', 'pass-queued');
 const OPEN_QUEUED = roll('open', 'pass-queued');
 const PASS = roll('play', 'pass-recording');
 
-const R: TransportEvent = { type: 'toggle-record', audioNow: 42 };
+const R: TransportEvent = { type: 'toggle-record', audioNow: 42, countIn: true };
+const R_NO_COUNT: TransportEvent = { type: 'toggle-record', audioNow: 42, countIn: false };
 const PLAY_EV: TransportEvent = { type: 'play', openEnded: false };
 const PLAY_OPEN: TransportEvent = { type: 'play', openEnded: true };
 
@@ -58,6 +59,8 @@ const table: [string, TransportState, TransportEvent, TransportState | 'same'][]
   // R
   ['stopped + R counts in', S, R, COUNTDOWN_AT(42)],
   ['paused + R counts in', PAUSED, R, COUNTDOWN_AT(42)],
+  ['stopped + R without count-in records now', S, R_NO_COUNT, REC],
+  ['paused + R without count-in records now', PAUSED, R_NO_COUNT, REC],
   ['countdown + R cancels', COUNTDOWN, R, S],
   ['plain play + R arms now', PLAY, R, REC],
   ['open-ended play + R arms now, keeps the clock', OPEN, R, OPEN_REC],

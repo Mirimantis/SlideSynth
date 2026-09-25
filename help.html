@@ -258,8 +258,8 @@
   <p>
     The workspace has an <strong>icon rail</strong> down the left, the <strong>canvas</strong>
     in the centre, and a <strong>properties panel</strong> on the right. Each rail icon opens
-    a <strong>drawer</strong> that slides out over the canvas edge — <strong>Transport</strong>
-    (BPM, time signature, metronome, loop, dynamics, MIDI input), <strong>Tools</strong>
+    a <strong>drawer</strong> that slides out over the canvas edge — <strong>Tempo</strong>
+    (BPM, time signature, metronome), <strong>Tools</strong>
     (tool-mode buttons), <strong>Snap</strong> (snap presets, magnetic settings, guides),
     <strong>Harmonic Prism</strong>, and <strong>Tuning</strong> (key, scale, reference pitch).
     One drawer is open at a time; <kbd>Escape</kbd> or a click on the canvas closes it. The
@@ -270,10 +270,14 @@
   <p>
     A toolbar across the top carries the <strong>composition name</strong> (editable) alongside
     the <strong>composition length</strong> (auto-derived from the rightmost point, shown as
-    <code>M:SS</code>), the <strong>File</strong> menu and <strong>Undo</strong>/<strong>Redo</strong>
-    on the left; the <strong>Perform</strong> button in the centre; and on the right the
-    transport buttons (Play, Pause, Stop, Record, Keep) followed by two icon toggles,
-    <strong>Snap</strong> and <strong>Loop</strong>, which fill with the accent colour when on.
+    <code>M:SS</code>), the <strong>File</strong>, <strong>Edit</strong> and <strong>View</strong>
+    menus and the <strong>Undo</strong>/<strong>Redo</strong> arrows on the left; the
+    <strong>Perform</strong> button in the centre; and on the right the transport (Stop,
+    Play/Pause, Record with its ▾ options menu, Keep), the <strong>Snap</strong> and
+    <strong>Loop</strong> switches, which fill with the accent colour when on, and the
+    <strong>Settings</strong> gear. Every menu item shows its keyboard shortcut, greys out when
+    it can't be used right now, and on/off items (Pitch HUD, Loop and so on) show a check mark
+    when they're on.
     A <strong>ruler bar</strong>
     along the top of the canvas has two stacked strips: a <strong>seconds ruler</strong>
     on top that adapts its tick interval to zoom (sub-second decimals when zoomed in,
@@ -353,7 +357,7 @@
 
   <h3>Layers (looping)</h3>
   <p>
-    Turn on the <strong>Layer</strong> switch in the Transport drawer and each pass you
+    Turn on <strong>New track per pass</strong> in the Record button's ▾ menu and each pass you
     perform becomes its own <strong>track</strong>, so passes stack into a choir
     instead of piling onto one track. Because layers are ordinary tracks, they get
     mute, solo, volume and their own tone from the track panel for free.
@@ -378,7 +382,7 @@
 
   <h3>Recording</h3>
   <ul>
-    <li><strong>R</strong> or the red <strong>Record</strong> button arms recording, switching to Perform first if you're in Compose. From Idle it runs a 3-second countdown then starts Playback. If Playback is already running, it arms immediately with no countdown.</li>
+    <li><strong>R</strong> or the red <strong>Record</strong> button arms recording, switching to Perform first if you're in Compose. From Idle it runs a 3-second count-in then starts Playback; turn <strong>Count-in</strong> off in the Record button's ▾ menu to start recording straight away. If Playback is already running, it arms immediately with no countdown.</li>
     <li>While recording, each LMB press/release captures a curve onto the selected track. The curve is simplified and auto-smoothed on release, so the result is fully editable afterward. A live trail follows the planchette as you record, showing the path being captured; on release it's replaced by the simplified curve.</li>
     <li><strong>Escape</strong> during the countdown or recording stops and returns to Idle.</li>
     <li>Recording continues past the composition end so you can extend phrases or capture silence; an AFK timeout stops it after 1 minute of inactivity (a warning popup appears at 30s with a countdown to the stop). The timeout is suppressed while <strong>Loop</strong> is on, while the playhead hasn't yet reached the rightmost control point (there's still existing content to record over), and while MIDI keys are being played.</li>
@@ -390,7 +394,7 @@
     The mouse gives you pitch, but a note also needs a <em>shape</em> — the swell and fade
     within it. That comes from a second channel, the <strong>dynamics bus</strong>: one value
     that both sets how loud you sound right now and is written into the recorded curve's
-    volume lane. Set it from <strong>Dynamics</strong> in the Transport drawer.
+    volume lane. Set it from <strong>Dynamics</strong> in Tool Properties while you're in Perform.
   </p>
   <ul>
     <li><strong>Fixed</strong> (default) — every performed note records at one steady level. This is how recording has always behaved.</li>
@@ -529,22 +533,22 @@
     <summary>Playback details</summary>
     <div class="detail-body">
       <ul>
-        <li><strong>Play / Pause / Stop</strong> — toolbar buttons or <kbd>Space</kbd> to toggle.</li>
-        <li><strong>BPM</strong> — adjustable from 20 to 300.</li>
+        <li><strong>Play / Pause / Stop</strong> — the top-bar buttons (Play and Pause share one button) or <kbd>Space</kbd> to toggle.</li>
+        <li><strong>BPM</strong> — in the <strong>Tempo</strong> drawer, 20 to 300. Each change is one undo step.</li>
         <li><strong>Tune A4</strong> — reference frequency for the note A4 in Hz (default 440). Set to <strong>432</strong> for "Verdi tuning", <strong>415</strong> for Baroque pitch, <strong>444</strong> for sharper modern tunings, or anywhere from 380–500 for experimental work. The cents offset relative to A=440 displays beside the input. Retunes the entire staff — every note's playback frequency shifts in lockstep, and the Pitch HUD's Hz readout follows the new tuning. Stored per-composition so projects round-trip cleanly; older saves open at A=440.</li>
-        <li><strong>Time signature</strong> — dropdown with 2/4, 3/4, 4/4, 5/4, 7/4, 6/8, 9/8, 12/8. Measure lines on the ruler and staff update immediately; BPM continues to mean quarter notes per minute regardless of denominator. Persisted with the composition.</li>
-        <li><strong>Metronome</strong> — checkbox + volume slider in Transport. When enabled, audible clicks play during Playback (and Record) with three tiers: a bright high click on beat 1 of each measure (downbeat), a medium click on compound-meter secondary accents (beat 4 of 6/8, etc.), and a soft low click on every other tick. The ruler playhead / rail flashes a coloured ring on each tick so the beat is visible as well as audible. /4 meters tick on the beat; /8 meters tick on eighth-note subdivisions. Metronome clicks are not captured while recording (Record stores cursor Y, not audio output). Enabled state and volume persist via localStorage.</li>
+        <li><strong>Time signature</strong> — in the <strong>Tempo</strong> drawer: 2/4, 3/4, 4/4, 5/4, 7/4, 6/8, 9/8, 12/8. Measure lines on the ruler and staff update immediately; BPM continues to mean quarter notes per minute regardless of denominator. Persisted with the composition.</li>
+        <li><strong>Metronome</strong> — switch + volume slider in the <strong>Tempo</strong> drawer. When enabled, audible clicks play during Playback (and Record) with three tiers: a bright high click on beat 1 of each measure (downbeat), a medium click on compound-meter secondary accents (beat 4 of 6/8, etc.), and a soft low click on every other tick. The ruler playhead / rail flashes a coloured ring on each tick so the beat is visible as well as audible. /4 meters tick on the beat; /8 meters tick on eighth-note subdivisions. Metronome clicks are not captured while recording (Record stores cursor Y, not audio output). Enabled state and volume persist via localStorage.</li>
         <li><strong>Length</strong> — derived automatically from the rightmost point in any curve and shown as <code>M:SS</code> next to the composition name. Playback stops at that point (or loops back to the start if Loop is on). With no points, playback is a no-op.</li>
         <li><strong>Canvas extent</strong> — the grid, staff, and rulers render everywhere you pan or zoom, with a generous buffer of open space past the last point so you can keep drawing outward. A memory-safe cap limits total pan range.</li>
-        <li><strong>Loop</strong> (<kbd>L</kbd>) — toggle from the icon button at the right of the top toolbar, the Transport drawer checkbox, or the hotkey; all three stay in sync. When enabled, two draggable <strong>loop markers</strong> (green in, red out) appear in the ruler. Drag them to set the loop range; they snap to the beat grid and to existing curve control points. The range is saved with the composition. Markers hide when Loop is off; playback then runs through to composition end.</li>
-        <li><strong>Scroll during playback</strong> (Transport drawer) — how Compose mode shows playback. <strong>Off</strong> (default) is a static canvas with the playhead moving across it. <strong>On</strong> fixes the playhead as a rail at canvas centre and slides the canvas past it, as Perform always does; the edit tools keep working on the moving canvas. Preference persists via localStorage.</li>
-        <li><strong>Pitch HUD</strong> — shows the pitch under the cursor (note name + cents + frequency in Hz) in the top-right of the canvas while the cursor has a meaningful Y. The Hz readout reflects the current Tune A4 setting, so A=432 etc. shifts every frequency in lockstep. Toggle off to hide. Preference persists via localStorage.</li>
-        <li><strong>Perf HUD</strong> — passive observer in the top-left: frame ms (p50 / p99 over a rolling ~2 s), live synth / oscillator / voice counts, audio output latency, and where live voices are smoothed (<code>live: audio thread</code> normally; <code>main thread</code> if the browser can't run the audio worklet). Off by default; toggle from the Transport drawer or press <kbd>!</kbd> (Shift+1). Useful when something feels sluggish — load a heavy composition (see <code>fixtures/stress-test.ssn</code>) and watch the numbers move.</li>
-        <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording, switching to Perform first. From Idle, a 3-second countdown runs then Playback begins. If Playback is already running, the countdown is skipped and recording arms immediately at the current beat. While armed, holding the left button plays the selected track's tone AND captures it as a curve; release commits the curve. Escape cancels.</li>
-        <li><strong>Dynamics</strong> — picks what drives the loudness of what you perform: <strong>Fixed</strong> (a steady level, the original behaviour) or <strong>Key swell</strong> (hold <kbd>F</kbd> to swell). See <a href="#perform">Perform &amp; Record</a>. Remembered between sessions.</li>
+        <li><strong>Loop</strong> (<kbd>L</kbd>) — toggle from the icon button at the right of the top bar or the hotkey. It can't change while a recording runs. When enabled, two draggable <strong>loop markers</strong> (green in, red out) appear in the ruler. Drag them to set the loop range; they snap to the beat grid and to existing curve control points. The range is saved with the composition. Markers hide when Loop is off; playback then runs through to composition end.</li>
+        <li><strong>Scroll canvas during playback</strong> (<strong>View</strong> menu) — how Compose mode shows playback. <strong>Off</strong> (default) is a static canvas with the playhead moving across it. <strong>On</strong> fixes the playhead as a rail at canvas centre and slides the canvas past it, as Perform always does; the edit tools keep working on the moving canvas. Preference persists via localStorage.</li>
+        <li><strong>Pitch HUD</strong> — shows the pitch under the cursor (note name + cents + frequency in Hz) in the top-right of the canvas while the cursor has a meaningful Y. The Hz readout reflects the current Tune A4 setting, so A=432 etc. shifts every frequency in lockstep. Toggle it from the <strong>View</strong> menu. Preference persists via localStorage.</li>
+        <li><strong>Perf HUD</strong> — passive observer in the top-left: frame ms (p50 / p99 over a rolling ~2 s), live synth / oscillator / voice counts, audio output latency, and where live voices are smoothed (<code>live: audio thread</code> normally; <code>main thread</code> if the browser can't run the audio worklet). Off by default; toggle from the <strong>View</strong> menu or press <kbd>!</kbd> (Shift+1). Useful when something feels sluggish — load a heavy composition (see <code>fixtures/stress-test.ssn</code>) and watch the numbers move.</li>
+        <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording, switching to Perform first. From Idle, a 3-second count-in runs then Playback begins (turn <strong>Count-in</strong> off in the Record ▾ menu to start straight away). If Playback is already running, the countdown is skipped and recording arms immediately at the current beat. While armed, holding the left button plays the selected track's tone AND captures it as a curve; release commits the curve. Escape cancels.</li>
+        <li><strong>Dynamics</strong> — in Tool Properties while you're in Perform, picks what drives the loudness of what you perform: <strong>Fixed</strong> (a steady level, the original behaviour) or <strong>Key swell</strong> (hold <kbd>F</kbd> to swell). See <a href="#perform">Perform &amp; Record</a>. Remembered between sessions.</li>
         <li><strong>Perform</strong> (<kbd>P</kbd>) — in Perform the left button plays the selected track's tone at the planchette's pitch, and Play runs until you stop it. In Compose the left button always runs the active tool, playing or not. See <a href="#perform">Perform &amp; Record</a>.</li>
         <li><strong>Ruler</strong> — two stacked strips at the top of the canvas: a <strong>seconds ruler</strong> (adapts tick spacing to zoom; labels decimal seconds when zoomed in and <code>M:SS</code> for larger steps) and a <strong>beat / measure ruler</strong> with subdivision ticks. The seconds ruler also reflects BPM changes.</li>
-        <li><strong>Scrubbing</strong> — click and drag anywhere in the ruler bar (either strip) to position the playhead. Scrubbing is allowed into empty grid past the last point. Where the rail is showing (Perform, or Scroll during playback), scrubbing slides the content under the rail instead of moving a playhead across it. The ruler is locked while a recording runs.</li>
+        <li><strong>Scrubbing</strong> — click and drag anywhere in the ruler bar (either strip) to position the playhead. Scrubbing is allowed into empty grid past the last point. Where the rail is showing (Perform, or Scroll during playback), scrubbing slides the content under the rail instead of moving a playhead across it. The ruler is locked while a recording runs. Scrubbing plays what's under the playhead as you drag; turn <strong>Audible scrub</strong> off in Settings for silent scrubbing.</li>
       </ul>
     </div>
   </details>
@@ -617,8 +621,8 @@
     <summary>MIDI input details</summary>
     <div class="detail-body">
       <ul>
-        <li>Pick a device from the <strong>MIDI Input</strong> dropdown in the
-            Transport drawer. On first selection the browser prompts for MIDI access.
+        <li>Pick a device under <strong>MIDI › Input device</strong> in
+            <strong>Settings</strong> (the gear, top right). On first selection the browser prompts for MIDI access.
             If no track is currently armed, a small dialog asks which track to record into
             (or offers to create a new one) so the arming step is never silently skipped.</li>
         <li><kbd>Note On</kbd> sounds a track's tone at the note's pitch;
@@ -1035,7 +1039,7 @@
       <ul>
         <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> — undo (up to 50 steps).</li>
         <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd> — redo.</li>
-        <li>Toolbar <strong>Undo</strong> / <strong>Redo</strong> buttons mirror the shortcuts.</li>
+        <li>The <strong>Undo</strong> / <strong>Redo</strong> arrows in the top bar and the <strong>Edit</strong> menu mirror the shortcuts.</li>
       </ul>
     </div>
   </details>
@@ -1047,7 +1051,7 @@
     <div class="detail-body">
       <ul>
         <li><strong>Composition name</strong> — the editable text field at the top-left of the toolbar sets the composition name, which is used as the filename when saving.</li>
-        <li>Click the <strong>File</strong> button next to the composition name to open the file menu.</li>
+        <li>Click <strong>File</strong> next to the composition name to open the file menu. <strong>Edit</strong> holds undo, the clipboard and the curve actions (join, group, smooth…); <strong>View</strong> holds the HUDs, <em>Scroll canvas during playback</em>, the go-to commands and this manual.</li>
         <li><strong>File &gt; Save Composition</strong> — downloads the composition as a JSON file named after the composition.</li>
         <li><strong>File &gt; Load Composition</strong> — opens a JSON composition file (the name field updates to match).</li>
         <li><strong>File &gt; Import MIDI</strong> — imports a MIDI file, converting notes to Bezier curves with pitch bends.</li>
