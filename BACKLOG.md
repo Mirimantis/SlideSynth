@@ -216,7 +216,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
 
 Implementation comes first: block out every control so it works, then hold the design sessions. Each implementation item moves the chrome it touches onto Preact components (finishing 15.4's "still to migrate") and updates [help.html](help.html) in the same PR. Suggested order: 16.2 → 16.3 → 16.4 → 16.5, with 16.6 and 16.7 at any point.
 
-- [ ] **16.2 Perform mode + one capture model** *(L)*
+- [x] **16.2 Perform mode + one capture model** *(L, PR #81)*
   - **Perform mode:**
     - An explicit Perform mode, entered from a Perform button in the tool strip or with P, for now.
     - The input router asks the mode, not Lock Rail plus the transport, whether a press performs.
@@ -229,6 +229,23 @@ Implementation comes first: block out every control so it works, then hold the d
     - Make Pause a real pause in Perform.
   - **Retire the Lock Rail switch.** *Scroll canvas during playback* becomes a workspace preference, with a temporary toggle until 16.3's View menu. Migrate the saved `scrollCanvasEnabled` value to it.
   - **Scrubbing in the rail view** scrolls the content live under the rail.
+  - **Done (PR #81):**
+    - `AppState.performMode` is the one answer to "does the left button play?" (`isPerformInputActive`). The rail view shows in Perform, with *Scroll during playback* on, or while a recording runs.
+    - The transport's jam clock is now the `open` clock. Play in Perform is open-ended; entering Perform mid-play sends `open-clock`. Pause is a real pause for any playback; only capture ends instead. J, the Jam button and `toggle-jam` are gone.
+    - While stopped, Perform auditions: the planchette and Prism harmonies sound with magnetic feel, but capture needs a rolling transport, so nothing lands in the Keep buffer.
+    - Record and Record-one-pass enter Perform first.
+    - *Where the button went:* the Perform button (P) sits in the top bar where the Lock Rail switch was, because the tool strip doesn't exist until 16.4. The tool buttons light none while in Perform, and picking a tool leaves Perform.
+    - *Visible state:* the Perform button lights up and the canvas gets a violet frame. That's a first cue only; 16.8 designs the real one.
+    - *Scrubbing:* a ruler press brings the clicked beat under the rail, and dragging then scrubs from there (right is forward). The ruler maps the cursor as it was at the press, so the scrolling doesn't feed back. The rulers now scrub in Perform too, but are inert while a recording runs.
+    - *Decided while building:*
+      - Escape backs out one level: it stops a count-in or recording, and otherwise leaves Perform.
+      - Leaving Perform is refused while a recording runs (with a toast) and while a note is held.
+      - When stopped, leaving Perform puts the stored playhead where the rail was.
+    - *Not migrated:* the old Lock Rail preference (`slidesynth.scrollCanvas`) is dropped rather than carried over, because it also meant "perform while playing". *Scroll during playback* starts off.
+    - *Fixed along the way (found in testing):*
+      - **Prism chord voice 0 was ignored when performing.** Perform and the Space-hold preview put the primary voice at the cursor, assuming chord voice 0 has offset 0. That's false for a symmetric chord, which centres on the cursor, and for a root octave offset (8.13). So a symmetric triad sounded and recorded its middle voice twice and never its lowest. Draw was right all along. The primary planchette still tracks the cursor (magnetic, HUD); what it sounds, records and draws on the rail adds voice 0's offset (`primaryChordOffset`).
+      - **Harmony planchettes froze on the rail** when the pointer left the canvas; only the primary was cleared.
+      - **The Draw tool's hover overlays** (the chord preview dots, the preview line, the Slice marker) froze where Perform was entered.
 - [ ] **16.3 Top bar, menus, Settings, Tempo drawer** *(M–L)*
   - **Top bar:**
     - the transport, with the Record split button and its menu, and Keep;
@@ -242,7 +259,7 @@ Implementation comes first: block out every control so it works, then hold the d
 - [ ] **16.4 Tool strip, Snap / Prism renames** *(M)*
   - **Tool strip:**
     - It replaces the Tools drawer.
-    - It holds the Perform entry.
+    - It can take over the Perform entry (a top-bar button since 16.2), unless 16.8 decides otherwise.
     - It shows the Prism chord badge on Draw and Perform.
   - **Snap drawer:** Magnetic becomes Gravity.
   - **Prism drawer:** "Tuning" becomes Intonation.

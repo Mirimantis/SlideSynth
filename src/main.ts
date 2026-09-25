@@ -70,15 +70,14 @@ import iconPlay from './assets/icons/play.svg?raw';
 import iconPause from './assets/icons/pause.svg?raw';
 import iconStop from './assets/icons/stop.svg?raw';
 import iconRecord from './assets/icons/record.svg?raw';
-import iconJam from './assets/icons/jam.svg?raw';
 import iconKeep from './assets/icons/keep.svg?raw';
 import iconLoop from './assets/icons/loop.svg?raw';
 import { canOpenLayer, createLayerTrack, newestLayerTrack, LAYER_TRACK_LIMIT } from './model/layer';
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
 import { effect, watch } from './state/reactive';
-import type { AppState, Composition, ToolMode, BezierCurve, TransportState } from './types';
-import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, isJamming, passRecordState, performPhase } from './state/transport';
+import type { AppState, Composition, ToolMode, BezierCurve, TransportState, PlanchetteState } from './types';
+import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, isOpenEnded, passRecordState, performPhase, forcesScrollView } from './state/transport';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -90,13 +89,7 @@ app.innerHTML = `
   <div id="toolbar">
     <div class="toolbar-row" id="toolbar-left"></div>
     <div class="toolbar-zone center">
-      <label class="toggle-switch" title="Lock the playhead rail at canvas centre during playback (the canvas scrolls past it). Off = stationary canvas with a moving playhead.">
-        <span class="toggle-switch-track">
-          <input type="checkbox" id="lock-rail-toggle" />
-          <span class="toggle-switch-thumb"></span>
-        </span>
-        <span class="toggle-switch-label">Lock Rail</span>
-      </label>
+      <button id="perform-toggle" class="perform-toggle" title="${commandTitle('perform.toggle')}" aria-pressed="false">Perform</button>
     </div>
     <div class="toolbar-zone right">
       <div class="transport-buttons transport">
@@ -104,7 +97,6 @@ app.innerHTML = `
         <button id="btn-pause" title="${commandTitle('transport.pause')}" disabled></button>
         <button id="btn-stop" title="${commandTitle('transport.stop')}"></button>
         <button id="btn-record" class="record-btn" title="${commandTitle('transport.record')}" hidden></button>
-        <button id="btn-jam" class="jam-btn" title="${commandTitle('transport.jam')}"></button>
         <button id="btn-keep" class="keep-btn" title="${commandTitle('perform.keep')}" disabled></button>
       </div>
       <div class="toolbar-toggles">
@@ -139,6 +131,15 @@ app.innerHTML = `
                 <span class="toggle-switch-thumb"></span>
               </span>
               <span class="toggle-switch-label">Layer</span>
+            </label>
+          </div>
+          <div class="transport-row">
+            <label class="toggle-switch" title="In compose mode, scroll the canvas past a fixed rail during playback instead of moving the playhead. Perform always scrolls.">
+              <span class="toggle-switch-track">
+                <input type="checkbox" id="scroll-canvas-toggle" />
+                <span class="toggle-switch-thumb"></span>
+              </span>
+              <span class="toggle-switch-label">Scroll during playback</span>
             </label>
           </div>
           <div class="transport-row">
@@ -568,9 +569,9 @@ function activateSpacePreview() {
       preview.updateScrubPosition(interaction.cursorWorld.x, state.composition);
       if (tone) startPrismDrawPreview(tone, interaction.cursorWorld.y);
       setPreviewActive(true);
-      // Classic-playhead mode: snap the playhead to the cursor so the user sees the scrub
+      // Page view: snap the playhead to the cursor so the user sees the scrub
       // location. Leaves it there on preview end (easy way to summon a far-away playhead).
-      if (!state.scrollCanvasEnabled) {
+      if (!effectiveScrollCanvas()) {
         store.setPlaybackPosition(Math.max(0, interaction.cursorWorld.x));
       }
     } else if (tone && interaction.cursorWorld) {
@@ -584,13 +585,13 @@ function activateSpacePreview() {
   }
 }
 
-/** Short-tap action: pause plain playback (a jam or recording stops instead),
- *  cancel a count-in, or start playing. */
+/** Short-tap action: pause playback (a recording stops instead), cancel a
+ *  count-in, or start playing. */
 function handleSpaceTap() {
   const t = store.getState().transport;
   if (isRolling(t)) transport({ type: 'pause' });
   else if (t.mode === 'countdown') transport({ type: 'escape' });
-  else transport({ type: 'play' });
+  else play();
 }
 
 // ── Interaction ─────────────────────────────────────────────────
@@ -604,6 +605,9 @@ let rulerScrubPreviewActive = false;
 // the dev server.
 const interaction = createInteraction(fgCanvas, viewport, {
   onPlayheadScrub(beats, phase) {
+    // Rail view: the scrubbed beat slides under the fixed rail as you drag
+    // (BACKLOG 16.2), so there the playhead always is the rail beat.
+    if (effectiveScrollCanvas()) scrollToBeat(beats);
     if (phase === 'start') {
       scrubWasPlaying = playback.isPlaying();
       if (scrubWasPlaying) {
@@ -645,7 +649,7 @@ const interaction = createInteraction(fgCanvas, viewport, {
       // composition preview is active, giving visual feedback that we're scrubbing
       // the whole canvas. The playhead stays wherever it last was when preview ends
       // — also a handy way to summon a far-away playhead.
-      if (!store.getState().scrollCanvasEnabled && !playback.isPlaying()) {
+      if (!effectiveScrollCanvas() && !playback.isPlaying()) {
         store.setPlaybackPosition(Math.max(0, worldX));
       }
     }
@@ -746,7 +750,6 @@ setIcon(document.getElementById('btn-play')!, iconPlay);
 setIcon(document.getElementById('btn-pause')!, iconPause);
 setIcon(document.getElementById('btn-stop')!, iconStop);
 setIcon(document.getElementById('btn-record')!, iconRecord);
-setIcon(document.getElementById('btn-jam')!, iconJam);
 setIcon(document.getElementById('btn-keep')!, iconKeep);
 // Top-bar icon toggles. Snap reuses the Snap drawer's icon so the two read as
 // the same feature — the button is the on/off, the drawer is the detail.
@@ -787,7 +790,6 @@ const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
 const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
 const btnRecord = document.getElementById('btn-record') as HTMLButtonElement;
-const btnJam = document.getElementById('btn-jam') as HTMLButtonElement;
 const btnKeep = document.getElementById('btn-keep') as HTMLButtonElement;
 const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
 const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
@@ -799,25 +801,32 @@ layerToggle.addEventListener('change', () => {
   store.setLayerMode(layerToggle.checked);
   layerToggle.blur();
 });
-const lockRailToggle = document.getElementById('lock-rail-toggle') as HTMLInputElement;
-// "Lock Rail" semantics (non-inverted): checked = rail locked at canvas centre =
-// the canvas scrolls during playback = scrollCanvasEnabled true. Unchecked =
-// stationary canvas with a moving playhead. Store API keeps the legacy
-// `scrollCanvasEnabled` name; only the label/polarity changed.
-lockRailToggle.checked = store.getState().scrollCanvasEnabled;
-lockRailToggle.addEventListener('change', () => {
-  store.setScrollCanvas(lockRailToggle.checked);
-  // Same reasoning as the boot case (BACKLOG 13.3): once the rail is where the
-  // next gesture lands, beat 0 belongs under it. Only on an empty composition —
-  // with content on the canvas, yanking the view out from under the user would
-  // be worse than leaving it, and playback re-centres on the playhead anyway.
-  if (lockRailToggle.checked && getCompositionLength(store.getComposition()) === 0) {
+// Compose mode's "scroll the canvas during playback" view option (BACKLOG
+// 16.2: the view half of the old Lock Rail switch). A temporary home in the
+// Transport drawer until the View menu (16.3).
+const scrollCanvasToggle = document.getElementById('scroll-canvas-toggle') as HTMLInputElement;
+scrollCanvasToggle.checked = store.getState().scrollCanvasEnabled;
+scrollCanvasToggle.addEventListener('change', () => {
+  store.setScrollCanvas(scrollCanvasToggle.checked);
+  if (!playback.isPlaying()) {
     const r = canvasContainer.getBoundingClientRect();
-    scrollViewportToBeat(viewport, 0, r.width, r.height);
+    if (effectiveScrollCanvas()) {
+      // The rail appears on the playhead, as when entering Perform.
+      scrollViewportToBeat(viewport, store.getState().playback.positionBeats, r.width, r.height);
+    } else {
+      viewport.clampOffset(r.width, r.height, minPanOffsetX(r.width));
+    }
     updateZoom();
     bgDirty = true;
   }
-  lockRailToggle.blur();
+  scrollCanvasToggle.blur();
+});
+// Perform (BACKLOG 16.2). An interim home where Lock Rail was; how you enter
+// Perform is the Perform session's to decide (16.8).
+const performToggle = document.getElementById('perform-toggle') as HTMLButtonElement;
+performToggle.addEventListener('click', () => {
+  commands.run('perform.toggle');
+  performToggle.blur();
 });
 const pitchHudToggle = document.getElementById('pitch-hud-toggle') as HTMLInputElement;
 watch(() => store.getState().pitchHudVisible, v => { pitchHudToggle.checked = v; });
@@ -878,15 +887,16 @@ function railBeat(): number {
   const r = canvasContainer.getBoundingClientRect();
   return Math.max(0, viewport.screenToWorld(r.width * RAIL_SCREEN_X_RATIO, 0).wx);
 }
-/** Minimum offsetX for clamping — negative when Scroll Canvas is on so beat 0 can
+/** Minimum offsetX for clamping — negative in the rail view so beat 0 can
  * reach the rail at canvas centre. */
 function minPanOffsetX(canvasWidth: number): number {
-  return store.getState().scrollCanvasEnabled
+  return effectiveScrollCanvas()
     ? -(canvasWidth * RAIL_SCREEN_X_RATIO) / viewport.state.zoomX
     : 0;
 }
-/** True when a Scroll-Canvas Playback state hijacks LMB for Perform. The tool
- *  handlers in interaction.ts ask this same function (BACKLOG 14.1). */
+/** True in Perform mode, where the left button plays the rail instead of
+ *  running the tools (BACKLOG 16.2). The tool handlers in interaction.ts ask
+ *  this same function (BACKLOG 14.1). */
 function isComposePerformActive(): boolean {
   return isPerformInputActive(store.getState());
 }
@@ -907,11 +917,13 @@ function updateRecordButtonVisuals() {
   btnRecord.classList.toggle('recording', isCapturing(t));
   btnRecord.disabled = st.selectedTrackId === null;
 
-  btnJam.classList.toggle('jamming', isJamming(t));
-  // A record session owns the transport; jam can't start (or stop) under it.
-  btnJam.disabled = isRecordArmed(t);
+  performToggle.classList.toggle('active', st.performMode);
+  document.body.classList.toggle('perform-mode', st.performMode);
+  performToggle.setAttribute('aria-pressed', String(st.performMode));
+  // A recording keeps you in Perform until it stops (see setPerformMode).
+  performToggle.disabled = st.performMode && forcesScrollView(t);
 
-  lockRailToggle.checked = st.scrollCanvasEnabled;
+  scrollCanvasToggle.checked = st.scrollCanvasEnabled;
   layerToggle.checked = st.layerModeEnabled;
 
   // Lock loop toggle while recording — both controls that expose it.
@@ -959,7 +971,6 @@ btnPause.addEventListener('click', () => commands.run('transport.pause'));
 btnStop.addEventListener('click', () => commands.run('transport.stop'));
 // Shift+click mirrors Shift+R — one obvious place for both record styles.
 btnRecord.addEventListener('click', (e) => commands.run(e.shiftKey ? 'transport.recordPass' : 'transport.record'));
-btnJam.addEventListener('click', () => commands.run('transport.jam'));
 btnKeep.addEventListener('click', () => commands.run('perform.keep'));
 
 bpmInput.addEventListener('change', () => {
@@ -1744,17 +1755,74 @@ function selectTool(tool: ToolMode) {
   }
 }
 
-/** Escape backs out: a count-in, recording or jam first; otherwise the edit
- *  in progress (transform box, or the curve being drawn) and Prism projection. */
+/** Escape backs out one level: a count-in or recording first; then Perform;
+ *  otherwise the edit in progress (transform box, or the curve being drawn)
+ *  and Prism projection. */
 function escapeCommand() {
   const before = store.getState().transport;
   transport({ type: 'escape' });
   if (store.getState().transport !== before) return;
-  if (!isComposePerformActive()) {
-    if (interaction.transformBox) interaction.dismissTransformBox();
-    else if (store.getState().activeTool === 'draw' && interaction.hasDrawTarget()) interaction.finishDrawing();
+  if (isComposePerformActive()) {
+    setPerformMode(false);
+    return;
   }
+  if (interaction.transformBox) interaction.dismissTransformBox();
+  else if (store.getState().activeTool === 'draw' && interaction.hasDrawTarget()) interaction.finishDrawing();
   if (store.getState().harmonicPrism.projectionSourceId) store.setPrismProjectionSource(null);
+}
+
+/** Play from stopped or paused. In Perform the clock is open-ended: it runs
+ *  until you stop it, which is what Jam used to be (BACKLOG 16.2). */
+function play(): void {
+  transport({ type: 'play', openEnded: store.getState().performMode });
+}
+
+/**
+ * Enter or leave Perform (BACKLOG 16.2). Returns whether the mode is now `on`.
+ *
+ * Entering ends whatever the edit tools had in flight, as switching tools
+ * does, and puts the rail on the playhead; if the transport is rolling, its
+ * clock becomes open-ended. Leaving hands the left button back to the active
+ * tool, and when stopped leaves the playhead where the rail was. It's refused
+ * while the left button is held, and while a recording runs (the mouse would
+ * silently stop feeding it).
+ */
+function setPerformMode(on: boolean): boolean {
+  const st = store.getState();
+  if (st.performMode === on) return true;
+  if (composeEngine.isLmbDown()) return false;
+  if (!on && forcesScrollView(st.transport)) {
+    showToast('Stop recording first', 2000);
+    return false;
+  }
+  const r = canvasContainer.getBoundingClientRect();
+  if (on) {
+    const wasRailView = effectiveScrollCanvas();
+    interaction.drawingCurve = null;
+    interaction.transformBox = null;
+    if (previewActive) { preview.stopAll(); setPreviewActive(false); }
+    store.setPerformMode(true);
+    if (isRolling(st.transport)) {
+      transport({ type: 'open-clock' });
+    } else if (!wasRailView) {
+      scrollViewportToBeat(viewport, st.playback.positionBeats, r.width, r.height);
+    }
+  } else {
+    if (!playback.isPlaying()) store.setPlaybackPosition(railBeat());
+    store.setPerformMode(false);
+    viewport.clampOffset(r.width, r.height, minPanOffsetX(r.width));
+    selectTool(st.activeTool);
+  }
+  updateZoom();
+  bgDirty = true;
+  return true;
+}
+
+/** A tool button or D / V / X / C. In Perform, picking a tool is also how
+ *  you go back to editing. */
+function chooseTool(tool: ToolMode) {
+  if (!setPerformMode(false)) return;
+  selectTool(tool);
 }
 
 /** Ctrl+H: project from the selected curve, or turn projection off. */
@@ -1788,11 +1856,11 @@ function compositionEdge(edge: 'start' | 'end'): number | null {
   return best;
 }
 
-/** Paste lands at the playhead. With Lock Rail on and stopped, the rail is
+/** Paste lands at the playhead. In the rail view while stopped, the rail is
  *  what reads as "here" — the stored playhead can lag behind a manual pan. */
 function pasteBeat(): number {
   const st = store.getState();
-  return st.scrollCanvasEnabled && !playback.isPlaying() ? railBeat() : st.playback.positionBeats;
+  return effectiveScrollCanvas() && !playback.isPlaying() ? railBeat() : st.playback.positionBeats;
 }
 
 /** Load a whole composition (file open, MIDI import) as one undoable step. */
@@ -1806,6 +1874,7 @@ function replaceComposition(comp: Composition) {
 }
 
 const notWhilePerforming = () => !isComposePerformActive();
+const notWhileSounding = () => !composeEngine.isLmbDown();
 
 const commands = createCommandRegistry({
   ...createEditCommands({ interaction, viewport, isPerformLocked: isComposePerformActive, pasteBeat }),
@@ -1835,9 +1904,9 @@ const commands = createCommandRegistry({
       setPreviewActive(false);
     },
   },
-  'transport.play': { run: () => transport({ type: 'play' }) },
-  // Plain playback pauses; a jam, recording or queued pass ends instead — a
-  // free-running clock or a capture has no paused state to resume.
+  'transport.play': { run: play },
+  // Playback pauses; a recording or queued pass ends instead — a capture has
+  // no paused state to resume.
   'transport.pause': { run: () => transport({ type: 'pause' }) },
   'transport.stop': {
     run() {
@@ -1848,11 +1917,14 @@ const commands = createCommandRegistry({
   },
   'transport.record': { run: toggleRecord },
   'transport.recordPass': { run: toggleRecordNextPass },
-  'transport.jam': { run: () => transport({ type: 'toggle-jam' }) },
   'transport.loop': { run: () => applyLoopEnabled(!store.getState().loopEnabled) },
   'transport.escape': { run: escapeCommand },
 
   // ── Perform ──
+  'perform.toggle': {
+    run: () => { setPerformMode(!store.getState().performMode); },
+    enabled: () => !composeEngine.isLmbDown(),
+  },
   'perform.keep': { run: keepLastPhrase },
   'perform.dropPass': { run: dropLastPass },
   // Dynamics swell (11.1): only on the key-swell source, so F is free otherwise.
@@ -1863,10 +1935,11 @@ const commands = createCommandRegistry({
   },
 
   // ── Tools ── (off while the left button performs, like the tool buttons)
-  'tool.draw': { run: () => selectTool('draw'), enabled: notWhilePerforming },
-  'tool.select': { run: () => selectTool('select'), enabled: notWhilePerforming },
-  'tool.delete': { run: () => selectTool('delete'), enabled: notWhilePerforming },
-  'tool.slice': { run: () => selectTool('scissors'), enabled: notWhilePerforming },
+  // Not while a note is held; otherwise a tool also leaves Perform.
+  'tool.draw': { run: () => chooseTool('draw'), enabled: notWhileSounding },
+  'tool.select': { run: () => chooseTool('select'), enabled: notWhileSounding },
+  'tool.delete': { run: () => chooseTool('delete'), enabled: notWhileSounding },
+  'tool.slice': { run: () => chooseTool('scissors'), enabled: notWhileSounding },
   'edit.finishCurve': {
     run: () => interaction.finishDrawing(),
     enabled: () => notWhilePerforming() && store.getState().activeTool === 'draw' && interaction.hasDrawTarget(),
@@ -2150,7 +2223,7 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
   const snapTarget = snapEngaged ? adaptive.target : null;
 
   // Perform context = the rail planchette is (or is about to be) the sounding
-  // instrument: scroll-canvas playback (jam / perform / record) or an armed
+  // instrument: Perform mode (rolling or auditioning) or an armed
   // session hovering before playback starts (idle-armed, countdown). Edit
   // tools and the free-planchette draw preview keep instant snap.
   const performContext = isComposePerformActive() || isRecordArmed(st.transport);
@@ -2182,10 +2255,7 @@ let prevSnapTarget: number | null = null;
 function composeUpdatePlanchette(sy: number) {
   lastComposeSy = sy;
   if (sy < RULER_HEIGHT && !composeEngine.isLmbDown()) {
-    store.setPlanchetteY('primary', null, null);
-    resetMagnetic(magneticState);
-    prevSnapTarget = null;
-    lastComposeSy = null;
+    clearPlanchettePitches();
     return;
   }
   const { cursorWorldY, snappedWorldY, snapTarget } = computeComposeCursorPitch(sy);
@@ -2200,6 +2270,20 @@ function composeUpdatePlanchette(sy: number) {
   // Drive harmony voices off the primary's snapped Y. No-op outside Prism Draw
   // perform (no harmony planchettes exist) so cheap to call unconditionally.
   updateHarmonyVoices(snappedWorldY);
+}
+
+/** The cursor left the pitch area: the mouse's planchettes have no pitch
+ *  until it's back. Prism harmonies are offsets of the primary, so they clear
+ *  with it — before 16.2's stopped-Perform audition they only existed during
+ *  playback, and a harmony left behind here stayed frozen on the rail. MIDI
+ *  planchettes follow held keys, not the mouse, and are left alone. */
+function clearPlanchettePitches() {
+  for (const p of store.getState().performance.planchettes) {
+    if (p.voiceId === 'primary' || p.voiceId.startsWith('harmony-')) store.setPlanchetteY(p.voiceId, null, null);
+  }
+  resetMagnetic(magneticState);
+  prevSnapTarget = null;
+  lastComposeSy = null;
 }
 
 /** Harmony voiceId for chord index i (1..N-1, since 0 = primary). */
@@ -2313,8 +2397,36 @@ function updateComposePerformPitch(snappedBaseY: number) {
   // Primary's pitch update; harmony pitch updates are driven by
   // composeUpdatePlanchette → updateHarmonyVoices.
   if (preview.isDrawPreviewActive('primary')) {
-    preview.updateDrawPitch(snappedBaseY, 'primary');
+    preview.updateDrawPitch(snappedBaseY + primaryChordOffset(), 'primary');
   }
+}
+
+/**
+ * Where the primary voice sits relative to the cursor's pitch while a Prism
+ * chord plays: chord voice 0's offset. It isn't always 0 — a symmetric chord
+ * centres on the cursor (its lowest voice sits below it), and a root octave
+ * offset (8.13) moves voice 0 too. Draw always applied it; the perform and
+ * Space-preview paths assumed 0, so a symmetric triad played its middle voice
+ * twice and never its lowest.
+ *
+ * The primary planchette itself keeps the cursor's pitch — magnetic physics,
+ * the snap pulse and the Pitch HUD follow the cursor — so everything that
+ * sounds, records or draws the primary voice adds this. 0 with Prism Draw off.
+ */
+function primaryChordOffset(): number {
+  const prism = store.getState().harmonicPrism;
+  return prism.drawMode ? (chordOffsets(prism.chordSpec)[0] ?? 0) : 0;
+}
+
+/** The planchettes at the pitches they sound: the primary moved by
+ *  primaryChordOffset(), the rest as stored. For capture and the rail. */
+function planchettesAsSounding(planchettes: PlanchetteState[]): PlanchetteState[] {
+  const off = primaryChordOffset();
+  if (off === 0) return planchettes;
+  const shift = (y: number | null) => (y == null ? null : y + off);
+  return planchettes.map(p => (p.voiceId === 'primary'
+    ? { ...p, cursorWorldY: shift(p.cursorWorldY), snappedWorldY: shift(p.snappedWorldY) }
+    : p));
 }
 function stopComposePerformSounding() {
   // Stop every active synth (primary + any harmonies). Planchette removal is
@@ -2332,7 +2444,7 @@ function stopComposePerformSounding() {
 function voiceYFromBase(voiceId: string, snappedBaseY: number, offsets: readonly number[]): number | null {
   let y: number;
   if (voiceId === 'primary') {
-    y = snappedBaseY;
+    y = snappedBaseY + primaryChordOffset();
   } else {
     const harmonyIdx = parseHarmonyIndex(voiceId);
     if (harmonyIdx == null) return null;
@@ -2359,7 +2471,7 @@ function parseHarmonyIndex(voiceId: string): number | null {
 function syncHarmonyPlanchettes() {
   const st = store.getState();
   const wantHarmonies = st.harmonicPrism.drawMode &&
-    (playback.isPlaying() || isRecordArmed(st.transport));
+    (st.performMode || playback.isPlaying() || isRecordArmed(st.transport));
 
   if (!wantHarmonies) {
     for (const p of st.performance.planchettes) {
@@ -2418,7 +2530,7 @@ function syncHarmonyPlanchettes() {
  *  but uses the Spacebar-preview path (no recording, no planchettes added —
  *  the active draw-mode preview dots already show the cursor cluster). */
 function startPrismDrawPreview(tone: import('./types').ToneDefinition, snappedBaseY: number) {
-  preview.startDrawPreview(tone, snappedBaseY, 'primary');
+  preview.startDrawPreview(tone, snappedBaseY + primaryChordOffset(), 'primary');
   const st = store.getState();
   if (!st.harmonicPrism.drawMode) return;
   const offsets = chordOffsets(st.harmonicPrism.chordSpec);
@@ -2432,7 +2544,7 @@ function startPrismDrawPreview(tone: import('./types').ToneDefinition, snappedBa
 
 /** Re-tune all currently-active idle preview voices from the primary's Y. */
 function updatePrismDrawPreview(snappedBaseY: number) {
-  preview.updateDrawPitch(snappedBaseY, 'primary');
+  preview.updateDrawPitch(snappedBaseY + primaryChordOffset(), 'primary');
   const st = store.getState();
   if (!st.harmonicPrism.drawMode) return;
   const offsets = chordOffsets(st.harmonicPrism.chordSpec);
@@ -2449,11 +2561,14 @@ function captureComposeRecordingSample() {
   const g = st.performance;
   // Capture runs whenever a voice is actually SOUNDING in a perform context —
   // not just while armed (BACKLOG 10.2). That is what fills the rolling buffer
-  // during an un-armed jam so "keep that" has something to commit. isLmbDown()
+  // during an un-armed Perform play so "keep that" has something to commit. isLmbDown()
   // can only be true inside isComposePerformActive(), so it already implies the
   // perform context and a running transport. Silent cursor movement is never
   // captured: "what was just played" means what was heard.
-  const lmbActive = composeEngine.isLmbDown();
+  // Since 16.2 the left button also sounds in Perform while stopped (an
+  // audition); with no clock running there's nothing to place, so only a
+  // rolling transport captures it.
+  const lmbActive = composeEngine.isLmbDown() && isRolling(st.transport);
   // Any rolling transport captures an armed MIDI track — plain Play included,
   // which used to spawn the note planchettes but never record them (15.2).
   const midiActive = st.midiArmedTrackId !== null && isRolling(st.transport);
@@ -2464,7 +2579,7 @@ function captureComposeRecordingSample() {
   // supports N parallel buffers. Per-voice gating: LMB voices when LMB is the
   // active source; MIDI voices when MIDI input is the armed source. Both can
   // run in parallel, recording into independent voices.
-  for (const p of g.planchettes) {
+  for (const p of planchettesAsSounding(g.planchettes)) {
     if (p.snappedWorldY == null) continue;
     const isMidiVoice = p.voiceId.startsWith('midi-');
     if (isMidiVoice ? !midiActive : !lmbActive) continue;
@@ -2600,7 +2715,7 @@ let currentLayerTrackId: string | null = null;
 /** One-shot so the track-cap toast doesn't fire on every commit. */
 let layerCapToastShown = false;
 
-/** Reset per-session layer state. Called on jam/record start and on stop. */
+/** Reset per-session layer state. Called when a session starts rolling and on stop. */
 function resetLayerSession() {
   currentLayerTrackId = null;
   layerCapToastShown = false;
@@ -2801,10 +2916,11 @@ function tickComposePerform() {
   }
 
   // Idle-window selection: armed recording keeps the short AFK timeout; an
-  // un-armed jam gets the long jam timeout; anything else never auto-stops.
+  // un-armed open-ended play (Perform) gets the long timeout; anything else
+  // never auto-stops.
   const idleTimeoutMs = anyArmed
     ? composeEngine.getAfkTimeoutMs()
-    : (isJamming(t) ? JAM_IDLE_TIMEOUT_MS : Infinity);
+    : (isOpenEnded(t) ? JAM_IDLE_TIMEOUT_MS : Infinity);
 
   composeEngine.tick({
     now: performance.now(),
@@ -2903,10 +3019,10 @@ function applyTransportEffects(prev: TransportState, next: TransportState, event
   }
 
   // Already rolling: the clock or capture changed. The play-range watch at the
-  // end of the file re-opens the range for jams and recordings.
+  // end of the file re-opens the range for open-ended plays and recordings.
   if (prev.clock !== next.clock) {
-    // Jam converts a running playback: a fresh session, so its idle timer
-    // starts now and the next pass opens a new layer.
+    // Entering Perform opens a running playback's clock: a fresh session, so
+    // its idle timer starts now and the next pass opens a new layer.
     ensureResumed();
     composeEngine.startSession(performance.now());
     resetLayerSession();
@@ -2935,13 +3051,13 @@ function applyTransportEffects(prev: TransportState, next: TransportState, event
 }
 
 /** The engine's play range `[wrapTo, end]` for a rolling transport. Loop on:
- *  the loop markers. Loop off: plain Play ends with the content; jams and every
- *  kind of capture keep scrolling open-ended. */
+ *  the loop markers. Loop off: plain Play ends with the content; Play in
+ *  Perform and every kind of capture keep scrolling open-ended. */
 function playRangeFor(t: TransportState): [number, number] {
   const st = store.getState();
   const c = st.composition;
   if (st.loopEnabled) return [c.loopStartBeats, c.loopEndBeats];
-  const openEnded = t.clock === 'jam' || t.capture !== 'none';
+  const openEnded = t.clock === 'open' || t.capture !== 'none';
   return [0, openEnded ? OPEN_END_BEAT : getCompositionLength(c)];
 }
 
@@ -3008,6 +3124,8 @@ function endPerformSession(prev: TransportState): void {
 /** R / the Record button. Needs a track to record onto. */
 function toggleRecord(): void {
   if (store.getState().selectedTrackId === null) return;
+  // Recording is a performance: it enters Perform (BACKLOG 16.2).
+  if (!setPerformMode(true)) return;
   transport({ type: 'toggle-record', audioNow: getAudioContext().currentTime });
 }
 
@@ -3029,6 +3147,7 @@ function toggleRecordNextPass(): void {
       applyLoopEnabled(true);
       showToast('Record next Pass: Loop On', 2000);
     }
+    if (!setPerformMode(true)) return;
   }
   transport({ type: 'toggle-pass-record' });
 }
@@ -3041,7 +3160,7 @@ function toggleRecordNextPass(): void {
 /** Live performance's share of canvas pointer input. */
 const performInput = {
   /** Every move, in every mode: the rail planchette and pitch HUD follow the
-   *  cursor, and an un-armed jam counts cursor movement as presence for its
+   *  cursor, and an un-armed Perform play counts cursor movement as presence for its
    *  idle auto-stop. */
   track(e: PointerEvent) {
     composeUpdatePlanchette(e.clientY - fgCanvas.getBoundingClientRect().top);
@@ -3082,10 +3201,7 @@ const performInput = {
   },
   leave() {
     if (composeEngine.isLmbDown()) return;
-    store.setPlanchetteY('primary', null, null);
-    resetMagnetic(magneticState);
-    prevSnapTarget = null;
-    lastComposeSy = null;
+    clearPlanchettePitches();
   },
 };
 
@@ -3093,6 +3209,7 @@ createInputRouter({
   canvas: fgCanvas,
   isPerforming: isComposePerformActive,
   isInRuler: e => e.clientY - fgCanvas.getBoundingClientRect().top < RULER_HEIGHT,
+  isRulerLocked: () => forcesScrollView(store.getState().transport),
   perform: performInput,
   pan: createPanGesture(fgCanvas),
   tool: interaction.input,
@@ -3176,7 +3293,7 @@ function updateCountdownOverlayDom(state: AppState) {
 function updateAfkWarningDom(state: AppState) {
   const t = state.transport;
   const armed = isRecordArmed(t) || state.midiArmedTrackId !== null;
-  const shouldShow = (armed || isJamming(t)) && isRolling(t) && playback.isPlaying();
+  const shouldShow = (armed || isOpenEnded(t)) && isRolling(t) && playback.isPlaying();
   if (!shouldShow) {
     if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
     return;
@@ -3269,7 +3386,7 @@ function runFrame() {
   if (fgDirty || bgDirty || animating || wasAnimating) {
     fgDirty = false;
     // Compose UI affordances that follow the same state the canvas draws.
-    toolPanel.setDisabled(isComposePerformActive());
+    toolPanel.setDisabled(composeEngine.isLmbDown());
     updateKeepButtonDom();
     updatePitchHudDom(state);
     updateCountdownOverlayDom(state);
@@ -3432,10 +3549,14 @@ function draw() {
     renderProjectionSourceHighlight(fgCtx, viewport, prismSource);
   }
 
-  // Draw preview line when in draw mode (hidden during Ctrl-select, and when the
-  // cursor has left the canvas so the planchette/dashed preview doesn't freeze
-  // at its last position).
-  if (state.activeTool === 'draw' && interaction.cursorWorld && interaction.cursorInCanvas) {
+  // The active tool's hover overlays (draw preview line, Prism chord preview,
+  // slice marker) follow the cursor only while the tool owns the pointer: not
+  // after the cursor has left the canvas, and not in Perform, where the tools
+  // get no pointer moves and the overlays would freeze where Perform began.
+  const toolHoverVisible = !state.performMode && interaction.cursorInCanvas;
+
+  // Draw preview line when in draw mode (hidden during Ctrl-select).
+  if (state.activeTool === 'draw' && interaction.cursorWorld && toolHoverVisible) {
     // Use the drawing curve, or the single selected curve if not actively drawing
     const singleId = store.getSelectedCurveId();
     const previewCurve = interaction.drawingCurve
@@ -3485,15 +3606,11 @@ function draw() {
 
   // Harmonic Prism Draw mode: render the multi-planchette chord preview at the
   // cursor. Each click will place N grouped sibling curves at these Y offsets.
-  // Hidden during Playback / Record / countdown — the rail planchettes show
-  // the active or imminent tone positions instead, and a stationary chord
-  // preview at the cursor would be visually conflicting.
-  const isPerformActiveOrPending = state.transport.mode === 'playing'
-    || state.transport.mode === 'countdown';
+  // In Perform the rail planchettes show the chord instead.
   if (state.activeTool === 'draw'
       && state.harmonicPrism.drawMode
       && interaction.cursorWorld
-      && !isPerformActiveOrPending) {
+      && toolHoverVisible) {
     const snap = currentSnapConfig({ zoomX: viewport.state.zoomX, atBeat: interaction.cursorWorld.x });
     const snapped = snapToGrid(interaction.cursorWorld.x, interaction.cursorWorld.y, snap);
     const cursorScreenX = viewport.worldToScreen(snapped.wx, 0).sx;
@@ -3509,7 +3626,7 @@ function draw() {
   }
 
   // Scissors preview dot
-  if (state.activeTool === 'scissors' && interaction.scissorsPreview) {
+  if (state.activeTool === 'scissors' && interaction.scissorsPreview && toolHoverVisible) {
     const scr = viewport.worldToScreen(interaction.scissorsPreview.x, interaction.scissorsPreview.y);
     fgCtx.beginPath();
     fgCtx.arc(scr.sx, scr.sy, 5, 0, Math.PI * 2);
@@ -3560,7 +3677,8 @@ function draw() {
   // visually promise a tone is sounding when none is.
   const railPlanchetteVisible = railVisible
     && !freePlanchetteVisible
-    && (playback.isPlaying()
+    && (state.performMode
+        || playback.isPlaying()
         || isRecordArmed(state.transport)
         || composeEngine.isLmbDown());
   if (railVisible) {
@@ -3577,7 +3695,7 @@ function draw() {
     } else if (railPlanchetteVisible) {
       renderPlanchettes(
         fgCtx, viewport, rect.width, rect.height,
-        state.performance.planchettes,
+        planchettesAsSounding(state.performance.planchettes),
         composeEngine.getLastLoopWrapAt(),
         state.harmonicPrism.drawMode,
         planchetteDynamicsOf,
@@ -3739,7 +3857,7 @@ watch(
 
 // The tool can change from several places (hotkeys, track click, Ctrl-hold in
 // interaction.ts), so the panel follows the store (BACKLOG 14.2).
-watch(() => store.getState().activeTool, tool => toolPanel.updateTool(tool));
+watch(() => (store.getState().performMode ? null : store.getState().activeTool), tool => toolPanel.updateTool(tool));
 
 // These read exactly what they show and skip DOM work when it hasn't changed.
 const propContentEl = document.getElementById('prop-content')!;
@@ -3755,7 +3873,7 @@ watch(() => isRolling(store.getState().transport), updatePlayState);
 // Keep the engine's play range in step with the transport, Loop and the loop
 // markers, so toggling Loop, dragging a marker, or arming mid-play takes
 // effect on the next wrap. Loop on: the markers. Loop off: plain Play ends with
-// the content; jams and every kind of capture stay open-ended (14.7) — which
+// the content; Play in Perform and every kind of capture stay open-ended (14.7) — which
 // is also what re-opens the range when R arms a running playback.
 watch(
   () => {
@@ -3793,7 +3911,7 @@ resizeCanvases();
   viewport.setZoomX(rect.width / visibleBeats);
   viewport.setZoomY((rect.height - viewport.topInset) / visibleCents);
   viewport.state.offsetY = midPitch + visibleCents / 2 + viewport.topInset / viewport.state.zoomY;
-  // With Lock Rail on, the rail — not the left edge — is where the next gesture
+  // In the rail view, the rail — not the left edge — is where the next gesture
   // lands, so beat 0 belongs under it (BACKLOG 13.3). Otherwise a fresh
   // composition starts drawing at whatever beat the rail happens to sit over.
   if (store.getState().scrollCanvasEnabled) {

@@ -41,7 +41,7 @@ export interface TickArgs {
   isPlaying: boolean;
   phase: PerformancePhase;
   /** Idle window before onAfkTimeout fires. The caller picks the timeout for
-   *  the current session kind (armed recording vs. un-armed jam); pass
+   *  the current session kind (armed recording vs. un-armed Perform play); pass
    *  Infinity to disable the idle auto-stop entirely. */
   idleTimeoutMs: number;
   countdownStartedAt: number;
@@ -59,7 +59,7 @@ export interface PerformanceEngine {
   markActivity(now: number): void;
 
   /** Reset per-session flags (sessionHistorySnapshotted, lastTickBeat). Called on arm / re-arm.
-   *  Deliberately does NOT drop captured phrases: arming mid-jam is a re-arm, and wiping
+   *  Deliberately does NOT drop captured phrases: arming mid-play is a re-arm, and wiping
    *  what the player just performed at that moment would defeat retrospective capture.
    *  Time-based eviction ages the buffer out instead; clearAllPhrases() handles the hard
    *  resets (composition load). */

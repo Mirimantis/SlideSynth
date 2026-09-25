@@ -122,13 +122,13 @@ export const DEFAULT_MAGNETIC_DAMPING = 6;
 export const MIN_CANVAS_EXTENT = 32;    // empty composition still has a usable grid
 export const SCROLL_BUFFER = 64;        // generous open space past the last point
 export const MAX_CANVAS_EXTENT = 10000; // memory cap (~83 min at 120 BPM)
-/** End of the "open-ended" play range used by jam mode and loop-off recording.
+/** End of the "open-ended" play range used by Play in Perform and loop-off recording.
  *  Tied to MAX_CANVAS_EXTENT so the free-running clock stops exactly where the
  *  viewport (and memory budget) ends — the practical "endless" ceiling. */
 export const OPEN_END_BEAT = MAX_CANVAS_EXTENT;
 
-// ── Jam mode ────────────────────────────────────────────────────
-/** Idle auto-stop for an un-armed jam session (no recording at stake, so much
+// ── Open-ended play (Perform; was Jam mode) ─────────────────────
+/** Idle auto-stop for un-armed Perform playback (no recording at stake, so much
  *  longer than the armed-recording AFK timeout). 10 minutes. */
 export const JAM_IDLE_TIMEOUT_MS = 600_000;
 /** How long a finished phrase stays keepable by retrospective capture

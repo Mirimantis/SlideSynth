@@ -5,9 +5,12 @@ import type { PassRecordState, PerformancePhase, TransportState } from '../types
  *
  * One value answers "what is the transport doing": `mode` (stopped, paused,
  * counting in to a record, or rolling), `clock` (plain Play, which ends at the
- * end of the content, or the open-ended jam clock) and `capture` (what a
- * rolling transport is recording). It replaces five flags that used to be set
- * in hand-written combinations by six different functions.
+ * end of the content, or the open-ended clock Play runs in Perform) and
+ * `capture` (what a rolling transport is recording). It replaces five flags
+ * that used to be set in hand-written combinations by six different functions.
+ *
+ * Jam used to be its own mode with its own clock (BACKLOG 10.1). Since 16.2 it
+ * is simply Play in Perform: the caller says whether a Play is open-ended.
  *
  * This module is pure: `transition` decides the next state and nothing else.
  * The controller in main.ts runs the side effects of each change (audio,
@@ -26,20 +29,22 @@ export const TRANSPORT_STOPPED: TransportState = {
 };
 
 export type TransportEvent =
-  /** Play button, or Space tap while stopped / paused. */
-  | { type: 'play' }
+  /** Play button, or Space tap while stopped / paused. `openEnded` in
+   *  Perform: the clock runs until stopped instead of ending with the content. */
+  | { type: 'play'; openEnded: boolean }
   /** Pause button, or Space tap while rolling. */
   | { type: 'pause' }
   /** Stop button, AFK timeout, file open, or the transport reaching its end. */
   | { type: 'stop' }
-  /** Escape: stops a count-in, a recording or a jam; otherwise does nothing. */
+  /** Escape: stops a count-in or a recording; otherwise does nothing. */
   | { type: 'escape' }
   /** R — open-ended record. */
   | { type: 'toggle-record'; audioNow: number }
   /** Shift+R — record exactly the next full loop pass (BACKLOG 10.5). */
   | { type: 'toggle-pass-record' }
-  /** J — the free-running jam clock (BACKLOG 10.1). */
-  | { type: 'toggle-jam' }
+  /** Perform was entered while rolling: the clock becomes open-ended. Leaving
+   *  Perform sends nothing, so a running clock isn't cut short. */
+  | { type: 'open-clock' }
   /** The record count-in finished. */
   | { type: 'countdown-elapsed' }
   /** The playhead wrapped from loop-out back to loop-in. */
@@ -57,21 +62,22 @@ const rolling = (clock: TransportState['clock'], capture: TransportState['captur
 export function transition(s: TransportState, e: TransportEvent): TransportState {
   switch (e.type) {
     case 'play':
-      if (s.mode === 'stopped' || s.mode === 'paused') return rolling('play', 'none');
+      if (s.mode === 'stopped' || s.mode === 'paused') return rolling(e.openEnded ? 'open' : 'play', 'none');
       return s;
 
     case 'pause':
       if (s.mode !== 'playing') return s;
-      // Only plain playback has a meaningful paused state to resume into; a
-      // jam, a recording or a queued pass-record ends instead.
-      if (s.clock === 'play' && s.capture === 'none') return { ...s, mode: 'paused' };
+      // Playback, open-ended or not, pauses; Play resumes it with whichever
+      // clock the mode then calls for. A recording or a queued pass-record
+      // ends instead: capture has no paused state.
+      if (s.capture === 'none') return { ...TRANSPORT_STOPPED, mode: 'paused' };
       return TRANSPORT_STOPPED;
 
     case 'stop':
       return s.mode === 'stopped' ? s : TRANSPORT_STOPPED;
 
     case 'escape':
-      if (s.mode === 'countdown' || isRecordArmed(s) || isJamming(s)) return TRANSPORT_STOPPED;
+      if (s.mode === 'countdown' || isRecordArmed(s)) return TRANSPORT_STOPPED;
       return s;
 
     case 'toggle-record':
@@ -98,12 +104,8 @@ export function transition(s: TransportState, e: TransportEvent): TransportState
       if (s.mode === 'playing') return { ...s, capture: 'pass-queued' };
       return rolling('play', 'pass-recording');
 
-    case 'toggle-jam':
-      if (isJamming(s)) return TRANSPORT_STOPPED;
-      // A record session owns the transport; jam can't start under it.
-      if (s.mode === 'countdown' || isRecordArmed(s)) return s;
-      if (s.mode === 'playing') return { ...s, clock: 'jam' };
-      return rolling('jam', 'none');
+    case 'open-clock':
+      return s.mode === 'playing' && s.clock === 'play' ? { ...s, clock: 'open' } : s;
 
     case 'countdown-elapsed':
       return s.mode === 'countdown' ? rolling('play', 'armed') : s;
@@ -129,7 +131,8 @@ export const isRecordArmed = (s: TransportState): boolean =>
 export const isCapturing = (s: TransportState): boolean =>
   s.mode === 'playing' && (s.capture === 'armed' || s.capture === 'pass-recording');
 
-export const isJamming = (s: TransportState): boolean => s.mode === 'playing' && s.clock === 'jam';
+/** Rolling on the open-ended clock: Play in Perform, which used to be a jam. */
+export const isOpenEnded = (s: TransportState): boolean => s.mode === 'playing' && s.clock === 'open';
 
 /** The one-pass record state (BACKLOG 10.5), for the Record button's amber
  *  queued look. */
@@ -137,12 +140,12 @@ export const passRecordState = (s: TransportState): PassRecordState =>
   s.capture === 'pass-queued' ? 'queued' : s.capture === 'pass-recording' ? 'recording' : 'off';
 
 /** Phase for the performance engine's tick: count-in, rolling (loop-wrap
- *  detection + idle timeout run), or idle. Plain Play is 'playing' too, so a
- *  phrase held across the loop seam is sealed there like in a jam. */
+ *  detection + idle timeout run), or idle. Every rolling transport is
+ *  'playing', so a phrase held across the loop seam is always sealed there. */
 export const performPhase = (s: TransportState): PerformancePhase =>
   s.mode === 'countdown' ? 'countdown' : s.mode === 'playing' ? 'playing' : 'idle';
 
-/** Capture-owned sessions force the scrolling rail view, so the view doesn't
- *  switch modes at the moment capture starts. */
+/** Capture-owned sessions keep the scrolling rail view even if Perform is
+ *  left mid-recording, so the view never jumps while capture runs. */
 export const forcesScrollView = (s: TransportState): boolean =>
-  isRecordArmed(s) || isJamming(s) || s.capture === 'pass-queued';
+  isRecordArmed(s) || s.capture === 'pass-queued';

@@ -17,7 +17,8 @@ export function createToolPanel(
   container: HTMLElement,
   callbacks: ToolPanelCallbacks,
 ): {
-  updateTool(tool: ToolMode): void;
+  /** Light the active tool's button; null lights none (in Perform). */
+  updateTool(tool: ToolMode | null): void;
   setDisabled(disabled: boolean): void;
 } {
   container.innerHTML = `
@@ -31,15 +32,15 @@ export function createToolPanel(
 
   const toolBtns = container.querySelectorAll('.tool-btn[data-tool]');
   toolBtns.forEach(btn => {
+    // The lit button follows the store (updateTool), not the click: a click
+    // can be refused, e.g. leaving Perform mid-recording.
     btn.addEventListener('click', () => {
-      toolBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
       callbacks.onToolChange(btn.getAttribute('data-tool') as ToolMode);
     });
   });
 
   return {
-    updateTool(tool: ToolMode) {
+    updateTool(tool: ToolMode | null) {
       toolBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-tool') === tool));
     },
     setDisabled(disabled: boolean) {

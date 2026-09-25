@@ -64,11 +64,14 @@ describe('command catalog', () => {
     expect(commandForKey(key('y', 'KeyY', { ctrlKey: true }))).toBe('edit.redo');
     expect(commandForKey(key('Z', 'KeyZ', { ctrlKey: true, shiftKey: true }))).toBe('edit.redo');
     expect(commandForKey(key('q', 'KeyQ'))).toBeNull();
+    // BACKLOG 16.2: P enters Perform; J (Jam) is unbound.
+    expect(commandForKey(key('p', 'KeyP'))).toBe('perform.toggle');
+    expect(commandForKey(key('j', 'KeyJ'))).toBeNull();
   });
 
   it('builds tooltips and shortcut text from the catalog', () => {
     expect(commandTitle('tool.draw')).toBe('Draw (D)');
-    expect(commandTitle('transport.jam')).toBe('Jam (J) — free-running clock: sound on, nothing recorded');
+    expect(commandTitle('perform.keep')).toBe('Keep that (K) — commit the phrase you just played');
     expect(commandTitle('file.save')).toBe('Save Composition');
     expect(shortcutText('edit.redo')).toBe('Ctrl+Shift+Z / Ctrl+Y');
   });

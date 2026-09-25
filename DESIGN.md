@@ -180,7 +180,7 @@ BACKLOG 16.2–16.7 implement this spec. Anything not settled here is left to th
 
 Glissandograph is two things: a simple DAW for composing, and a musical instrument with a recording studio attached. **Perform is an explicit mode, and it looks different.** It replaces the hidden rule that a rolling transport with Lock Rail on turns the left button into an instrument.
 
-- **Entry.** Until the Perform session decides how you enter Perform, it is a button in the tool strip plus the **P** key. That is easy to reach and cheap to reshape later.
+- **Entry.** Until the Perform session decides how you enter Perform, it is a **Perform** button in the top bar (where Lock Rail was) plus the **P** key. That is easy to reach and cheap to reshape later. Picking a tool, or Escape, also leaves Perform.
 - **The left button's meaning is always visible.** In compose mode, the highlighted tool says what the left button does. In Perform, it always plays.
 - **Perform uses the rail view.** Entering Perform snaps the rail to the centre, on the playhead, which also shows at a glance that the mode has changed. The planchette appears on the rail and follows the mouse's Y. Compose mode never shows a planchette.
 - **In Perform with the transport stopped**, the left button auditions: it sounds the planchette's pitch with Snap and Gravity live, captures nothing, and doesn't start the clock.

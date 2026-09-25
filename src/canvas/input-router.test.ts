@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { routePress, type PressContext } from './input-router';
 
-const base: PressContext = { button: 0, altKey: false, performing: false, inRuler: false, toolWantsAlt: false };
+const base: PressContext = { button: 0, altKey: false, performing: false, inRuler: false, rulerLocked: false, toolWantsAlt: false };
 const press = (over: Partial<PressContext>) => routePress({ ...base, ...over });
 
 describe('routePress (BACKLOG 15.2)', () => {
@@ -14,9 +14,13 @@ describe('routePress (BACKLOG 15.2)', () => {
     expect(press({ performing: true })).not.toBe('tool');
   });
 
-  it('rulers go to the tools when editing (scrub, loop markers) and are inert while performing', () => {
+  it('rulers go to the tools (scrub, loop markers) in both modes, and are inert under a recording', () => {
     expect(press({ inRuler: true })).toBe('tool');
-    expect(press({ inRuler: true, performing: true })).toBeNull();
+    expect(press({ inRuler: true, performing: true })).toBe('tool');
+    expect(press({ inRuler: true, performing: true, rulerLocked: true })).toBeNull();
+    expect(press({ inRuler: true, rulerLocked: true })).toBeNull();
+    // The lock is only about the rulers.
+    expect(press({ performing: true, rulerLocked: true })).toBe('perform');
   });
 
   it('middle button always pans', () => {
