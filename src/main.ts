@@ -76,7 +76,7 @@ import { canOpenLayer, createLayerTrack, newestLayerTrack, LAYER_TRACK_LIMIT } f
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
 import { effect, watch } from './state/reactive';
-import type { AppState, Composition, ToolMode, BezierCurve, TransportState } from './types';
+import type { AppState, Composition, ToolMode, BezierCurve, TransportState, PlanchetteState } from './types';
 import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, isOpenEnded, passRecordState, performPhase, forcesScrollView } from './state/transport';
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -2397,8 +2397,36 @@ function updateComposePerformPitch(snappedBaseY: number) {
   // Primary's pitch update; harmony pitch updates are driven by
   // composeUpdatePlanchette → updateHarmonyVoices.
   if (preview.isDrawPreviewActive('primary')) {
-    preview.updateDrawPitch(snappedBaseY, 'primary');
+    preview.updateDrawPitch(snappedBaseY + primaryChordOffset(), 'primary');
   }
+}
+
+/**
+ * Where the primary voice sits relative to the cursor's pitch while a Prism
+ * chord plays: chord voice 0's offset. It isn't always 0 — a symmetric chord
+ * centres on the cursor (its lowest voice sits below it), and a root octave
+ * offset (8.13) moves voice 0 too. Draw always applied it; the perform and
+ * Space-preview paths assumed 0, so a symmetric triad played its middle voice
+ * twice and never its lowest.
+ *
+ * The primary planchette itself keeps the cursor's pitch — magnetic physics,
+ * the snap pulse and the Pitch HUD follow the cursor — so everything that
+ * sounds, records or draws the primary voice adds this. 0 with Prism Draw off.
+ */
+function primaryChordOffset(): number {
+  const prism = store.getState().harmonicPrism;
+  return prism.drawMode ? (chordOffsets(prism.chordSpec)[0] ?? 0) : 0;
+}
+
+/** The planchettes at the pitches they sound: the primary moved by
+ *  primaryChordOffset(), the rest as stored. For capture and the rail. */
+function planchettesAsSounding(planchettes: PlanchetteState[]): PlanchetteState[] {
+  const off = primaryChordOffset();
+  if (off === 0) return planchettes;
+  const shift = (y: number | null) => (y == null ? null : y + off);
+  return planchettes.map(p => (p.voiceId === 'primary'
+    ? { ...p, cursorWorldY: shift(p.cursorWorldY), snappedWorldY: shift(p.snappedWorldY) }
+    : p));
 }
 function stopComposePerformSounding() {
   // Stop every active synth (primary + any harmonies). Planchette removal is
@@ -2416,7 +2444,7 @@ function stopComposePerformSounding() {
 function voiceYFromBase(voiceId: string, snappedBaseY: number, offsets: readonly number[]): number | null {
   let y: number;
   if (voiceId === 'primary') {
-    y = snappedBaseY;
+    y = snappedBaseY + primaryChordOffset();
   } else {
     const harmonyIdx = parseHarmonyIndex(voiceId);
     if (harmonyIdx == null) return null;
@@ -2502,7 +2530,7 @@ function syncHarmonyPlanchettes() {
  *  but uses the Spacebar-preview path (no recording, no planchettes added —
  *  the active draw-mode preview dots already show the cursor cluster). */
 function startPrismDrawPreview(tone: import('./types').ToneDefinition, snappedBaseY: number) {
-  preview.startDrawPreview(tone, snappedBaseY, 'primary');
+  preview.startDrawPreview(tone, snappedBaseY + primaryChordOffset(), 'primary');
   const st = store.getState();
   if (!st.harmonicPrism.drawMode) return;
   const offsets = chordOffsets(st.harmonicPrism.chordSpec);
@@ -2516,7 +2544,7 @@ function startPrismDrawPreview(tone: import('./types').ToneDefinition, snappedBa
 
 /** Re-tune all currently-active idle preview voices from the primary's Y. */
 function updatePrismDrawPreview(snappedBaseY: number) {
-  preview.updateDrawPitch(snappedBaseY, 'primary');
+  preview.updateDrawPitch(snappedBaseY + primaryChordOffset(), 'primary');
   const st = store.getState();
   if (!st.harmonicPrism.drawMode) return;
   const offsets = chordOffsets(st.harmonicPrism.chordSpec);
@@ -2551,7 +2579,7 @@ function captureComposeRecordingSample() {
   // supports N parallel buffers. Per-voice gating: LMB voices when LMB is the
   // active source; MIDI voices when MIDI input is the armed source. Both can
   // run in parallel, recording into independent voices.
-  for (const p of g.planchettes) {
+  for (const p of planchettesAsSounding(g.planchettes)) {
     if (p.snappedWorldY == null) continue;
     const isMidiVoice = p.voiceId.startsWith('midi-');
     if (isMidiVoice ? !midiActive : !lmbActive) continue;
@@ -3667,7 +3695,7 @@ function draw() {
     } else if (railPlanchetteVisible) {
       renderPlanchettes(
         fgCtx, viewport, rect.width, rect.height,
-        state.performance.planchettes,
+        planchettesAsSounding(state.performance.planchettes),
         composeEngine.getLastLoopWrapAt(),
         state.harmonicPrism.drawMode,
         planchetteDynamicsOf,

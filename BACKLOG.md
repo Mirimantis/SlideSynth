@@ -242,6 +242,10 @@ Implementation comes first: block out every control so it works, then hold the d
       - Leaving Perform is refused while a recording runs (with a toast) and while a note is held.
       - When stopped, leaving Perform puts the stored playhead where the rail was.
     - *Not migrated:* the old Lock Rail preference (`slidesynth.scrollCanvas`) is dropped rather than carried over, because it also meant "perform while playing". *Scroll during playback* starts off.
+    - *Fixed along the way (found in testing):*
+      - **Prism chord voice 0 was ignored when performing.** Perform and the Space-hold preview put the primary voice at the cursor, assuming chord voice 0 has offset 0. That's false for a symmetric chord, which centres on the cursor, and for a root octave offset (8.13). So a symmetric triad sounded and recorded its middle voice twice and never its lowest. Draw was right all along. The primary planchette still tracks the cursor (magnetic, HUD); what it sounds, records and draws on the rail adds voice 0's offset (`primaryChordOffset`).
+      - **Harmony planchettes froze on the rail** when the pointer left the canvas; only the primary was cleared.
+      - **The Draw tool's hover overlays** (the chord preview dots, the preview line, the Slice marker) froze where Perform was entered.
 - [ ] **16.3 Top bar, menus, Settings, Tempo drawer** *(M–L)*
   - **Top bar:**
     - the transport, with the Record split button and its menu, and Keep;
