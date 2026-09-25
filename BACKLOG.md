@@ -216,7 +216,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
 
 Implementation comes first: block out every control so it works, then hold the design sessions. Each implementation item moves the chrome it touches onto Preact components (finishing 15.4's "still to migrate") and updates [help.html](help.html) in the same PR. Suggested order: 16.2 → 16.3 → 16.4 → 16.5, with 16.6 and 16.7 at any point.
 
-- [x] **16.2 Perform mode + one capture model** *(L)*
+- [x] **16.2 Perform mode + one capture model** *(L, PR #81)*
   - **Perform mode:**
     - An explicit Perform mode, entered from a Perform button in the tool strip or with P, for now.
     - The input router asks the mode, not Lock Rail plus the transport, whether a press performs.
@@ -229,7 +229,7 @@ Implementation comes first: block out every control so it works, then hold the d
     - Make Pause a real pause in Perform.
   - **Retire the Lock Rail switch.** *Scroll canvas during playback* becomes a workspace preference, with a temporary toggle until 16.3's View menu. Migrate the saved `scrollCanvasEnabled` value to it.
   - **Scrubbing in the rail view** scrolls the content live under the rail.
-  - **Done (this PR):**
+  - **Done (PR #81):**
     - `AppState.performMode` is the one answer to "does the left button play?" (`isPerformInputActive`). The rail view shows in Perform, with *Scroll during playback* on, or while a recording runs.
     - The transport's jam clock is now the `open` clock. Play in Perform is open-ended; entering Perform mid-play sends `open-clock`. Pause is a real pause for any playback; only capture ends instead. J, the Jam button and `toggle-jam` are gone.
     - While stopped, Perform auditions: the planchette and Prism harmonies sound with magnetic feel, but capture needs a rolling transport, so nothing lands in the Keep buffer.
