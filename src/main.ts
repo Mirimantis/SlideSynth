@@ -2255,10 +2255,7 @@ let prevSnapTarget: number | null = null;
 function composeUpdatePlanchette(sy: number) {
   lastComposeSy = sy;
   if (sy < RULER_HEIGHT && !composeEngine.isLmbDown()) {
-    store.setPlanchetteY('primary', null, null);
-    resetMagnetic(magneticState);
-    prevSnapTarget = null;
-    lastComposeSy = null;
+    clearPlanchettePitches();
     return;
   }
   const { cursorWorldY, snappedWorldY, snapTarget } = computeComposeCursorPitch(sy);
@@ -2273,6 +2270,20 @@ function composeUpdatePlanchette(sy: number) {
   // Drive harmony voices off the primary's snapped Y. No-op outside Prism Draw
   // perform (no harmony planchettes exist) so cheap to call unconditionally.
   updateHarmonyVoices(snappedWorldY);
+}
+
+/** The cursor left the pitch area: the mouse's planchettes have no pitch
+ *  until it's back. Prism harmonies are offsets of the primary, so they clear
+ *  with it — before 16.2's stopped-Perform audition they only existed during
+ *  playback, and a harmony left behind here stayed frozen on the rail. MIDI
+ *  planchettes follow held keys, not the mouse, and are left alone. */
+function clearPlanchettePitches() {
+  for (const p of store.getState().performance.planchettes) {
+    if (p.voiceId === 'primary' || p.voiceId.startsWith('harmony-')) store.setPlanchetteY(p.voiceId, null, null);
+  }
+  resetMagnetic(magneticState);
+  prevSnapTarget = null;
+  lastComposeSy = null;
 }
 
 /** Harmony voiceId for chord index i (1..N-1, since 0 = primary). */
@@ -3162,10 +3173,7 @@ const performInput = {
   },
   leave() {
     if (composeEngine.isLmbDown()) return;
-    store.setPlanchetteY('primary', null, null);
-    resetMagnetic(magneticState);
-    prevSnapTarget = null;
-    lastComposeSy = null;
+    clearPlanchettePitches();
   },
 };
 
@@ -3513,10 +3521,14 @@ function draw() {
     renderProjectionSourceHighlight(fgCtx, viewport, prismSource);
   }
 
-  // Draw preview line when in draw mode (hidden during Ctrl-select, and when the
-  // cursor has left the canvas so the planchette/dashed preview doesn't freeze
-  // at its last position).
-  if (state.activeTool === 'draw' && interaction.cursorWorld && interaction.cursorInCanvas) {
+  // The active tool's hover overlays (draw preview line, Prism chord preview,
+  // slice marker) follow the cursor only while the tool owns the pointer: not
+  // after the cursor has left the canvas, and not in Perform, where the tools
+  // get no pointer moves and the overlays would freeze where Perform began.
+  const toolHoverVisible = !state.performMode && interaction.cursorInCanvas;
+
+  // Draw preview line when in draw mode (hidden during Ctrl-select).
+  if (state.activeTool === 'draw' && interaction.cursorWorld && toolHoverVisible) {
     // Use the drawing curve, or the single selected curve if not actively drawing
     const singleId = store.getSelectedCurveId();
     const previewCurve = interaction.drawingCurve
@@ -3566,15 +3578,11 @@ function draw() {
 
   // Harmonic Prism Draw mode: render the multi-planchette chord preview at the
   // cursor. Each click will place N grouped sibling curves at these Y offsets.
-  // Hidden during Playback / Record / countdown — the rail planchettes show
-  // the active or imminent tone positions instead, and a stationary chord
-  // preview at the cursor would be visually conflicting.
-  const isPerformActiveOrPending = state.transport.mode === 'playing'
-    || state.transport.mode === 'countdown';
+  // In Perform the rail planchettes show the chord instead.
   if (state.activeTool === 'draw'
       && state.harmonicPrism.drawMode
       && interaction.cursorWorld
-      && !isPerformActiveOrPending) {
+      && toolHoverVisible) {
     const snap = currentSnapConfig({ zoomX: viewport.state.zoomX, atBeat: interaction.cursorWorld.x });
     const snapped = snapToGrid(interaction.cursorWorld.x, interaction.cursorWorld.y, snap);
     const cursorScreenX = viewport.worldToScreen(snapped.wx, 0).sx;
@@ -3590,7 +3598,7 @@ function draw() {
   }
 
   // Scissors preview dot
-  if (state.activeTool === 'scissors' && interaction.scissorsPreview) {
+  if (state.activeTool === 'scissors' && interaction.scissorsPreview && toolHoverVisible) {
     const scr = viewport.worldToScreen(interaction.scissorsPreview.x, interaction.scissorsPreview.y);
     fgCtx.beginPath();
     fgCtx.arc(scr.sx, scr.sy, 5, 0, Math.PI * 2);
