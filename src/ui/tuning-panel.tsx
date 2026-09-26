@@ -12,8 +12,8 @@ import { PitchCircle, type PitchCircleActions } from './pitch-circle';
 /**
  * The Tuning drawer (BACKLOG 13.8; spec in DESIGN.md › Tuning spec): the
  * pitch circle (c) over Tuning, Root, Scale, Tuned from (for tunings other
- * than 12-EDO), Tune A4, the Pitch lines switch and (b, for tunings other
- * than 12-EDO) the 12-EDO reference switch.
+ * than 12-EDO), Tune A4, the Pitch lines switch, (b, for tunings other than
+ * 12-EDO) the 12-EDO reference switch, and (d) Import / Export .scl.
  */
 
 export interface TuningActions extends PitchCircleActions {
@@ -25,6 +25,10 @@ export interface TuningActions extends PitchCircleActions {
   setPitchLinesVisible(visible: boolean): void;
   setReferenceLines(visible: boolean): void;
   setReferenceHz(hz: number): void;
+  /** Pick a .scl file and use it (13.8 (d)); main.ts reports a bad file. */
+  importScl(): void;
+  /** Download the notes you hear as a .scl file. */
+  exportScl(): void;
 }
 
 const PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -32,6 +36,8 @@ const TABLE_GROUPS: readonly TuningGroup[] = ['Just intonation', 'Historical', '
 /** The Tuning select's value for "Equal divisions (type N)". */
 const EQUAL_DIVISIONS = 'edo';
 const TWELVE = 'edo-12';
+/** The Tuning select's value for the imported .scl tuning. */
+const IMPORTED = 'imported';
 
 const blur = (e: Event) => (e.currentTarget as HTMLElement).blur();
 const value = (e: Event) => (e.currentTarget as HTMLSelectElement | HTMLInputElement).value;
@@ -40,7 +46,12 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
   const st = store.getState();
   const ref = st.tuning;
   const tuning = resolveTuning(ref);
-  const selected = isTwelveEdo(ref) ? TWELVE : ref.kind === 'edo' ? EQUAL_DIVISIONS : ref.id;
+  const selected = isTwelveEdo(ref) ? TWELVE
+    : ref.kind === 'edo' ? EQUAL_DIVISIONS
+    : ref.kind === 'imported' ? IMPORTED
+    : ref.id;
+  // The imported tuning in use, else the last one imported.
+  const imported = ref.kind === 'imported' ? ref : st.importedTuning;
   const scales = scalesFor(tuning);
   const scaleGroups = [...new Set(scales.map(s => s.group))];
   const custom = customFits(st.customScale, tuning) ? st.customScale : null;
@@ -62,6 +73,7 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
             const v = value(e);
             if (v === TWELVE) actions.setTuning({ ...TWELVE_EDO });
             else if (v === EQUAL_DIVISIONS) actions.setTuning({ kind: 'edo', divisions: 19, equave: 'octave' });
+            else if (v === IMPORTED) { if (imported) actions.setTuning(imported); }
             else actions.setTuning({ kind: 'table', id: v });
             blur(e);
           }}
@@ -75,8 +87,16 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
               ))}
             </optgroup>
           ))}
+          {imported && (
+            <optgroup label="Imported (.scl)">
+              <option value={IMPORTED}>{`${imported.name} (${imported.degrees.length} notes)`}</option>
+            </optgroup>
+          )}
         </select>
       </div>
+      {tuning.description && (
+        <div class="tuning-description" title={tuning.description}>{tuning.description}</div>
+      )}
       {ref.kind === 'edo' && !isTwelveEdo(ref) && (
         <EqualDivisions divisions={ref.divisions} equave={ref.equave} onChange={actions.setTuning} />
       )}
@@ -141,6 +161,18 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
           onChange={actions.setReferenceLines}
         />
       )}
+      <div class="transport-row tuning-files">
+        <button
+          id="scl-import-btn" class="snap-preset-btn"
+          title="Load a Scala .scl tuning file. It becomes the Imported tuning; Root, Tuned from and Tune A4 still come from here"
+          onClick={e => { blur(e); actions.importScl(); }}
+        >Import .scl…</button>
+        <button
+          id="scl-export-btn" class="snap-preset-btn"
+          title="Save the notes you hear as a Scala .scl file: the scale (or the whole tuning with All notes), counted from the root"
+          onClick={e => { blur(e); actions.exportScl(); }}
+        >Export .scl…</button>
+      </div>
     </div>
   );
 }

@@ -306,7 +306,18 @@ export function downloadFile(content: string, filename: string, mimeType: string
 /**
  * Open a file picker and read the selected file as text.
  */
-export function openFile(accept: string = '.json'): Promise<string> {
+export async function openFile(accept: string = '.json'): Promise<string> {
+  return (await openTextFile(accept)).text;
+}
+
+/** A file too large for what it's being opened as. */
+export class FileTooLargeError extends Error {}
+
+/**
+ * Open a file picker and read the selected file as text, with its name.
+ * `maxBytes` refuses a larger file before reading it.
+ */
+export function openTextFile(accept: string, maxBytes = Infinity): Promise<{ name: string; text: string }> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -317,8 +328,12 @@ export function openFile(accept: string = '.json'): Promise<string> {
         reject(new Error('No file selected'));
         return;
       }
+      if (file.size > maxBytes) {
+        reject(new FileTooLargeError(`${file.name} is too large`));
+        return;
+      }
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
+      reader.onload = () => resolve({ name: file.name, text: reader.result as string });
       reader.onerror = () => reject(reader.error);
       reader.readAsText(file);
     });

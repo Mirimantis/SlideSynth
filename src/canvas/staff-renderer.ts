@@ -163,7 +163,9 @@ function renderPitchLines(
   // Labels on the left edge. The root's always; main lines (naturals, the
   // scale's notes) once a twelfth of the period is 10 px tall; every line once
   // the smallest step is 18 px. Earlier ones win where labels would collide.
-  const mainLabels = (grid.period / 12) * zoom >= 10;
+  // A tuning named by numbers waits until at least every other label fits,
+  // so a 192-note tuning doesn't show a column of scattered numbers.
+  const mainLabels = (grid.period / 12) * zoom >= 10 && (grid.lettered || stepPx >= LABEL_GAP_PX / 2);
   const allLabels = stepPx >= 18;
   const tiers = [
     visible.filter(l => l.isRoot),

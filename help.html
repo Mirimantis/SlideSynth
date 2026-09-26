@@ -858,6 +858,8 @@
           own colour: D major in Werckmeister isn't C major moved up a tone.</li>
         <li><strong>Traditional</strong> — Slendro and Pelog, approximations of Javanese
           gamelan tunings (real ensembles vary).</li>
+        <li><strong>Imported (.scl)</strong> — a tuning you've loaded with
+          <strong>Import .scl…</strong> (see <em>Scala files</em> below).</li>
         <li><strong>Tuned from</strong> appears for every tuning except 12-EDO: which standard
           note the tuning's first degree sits on (C by default). Moving it keeps your root on
           the same pitch.</li>
@@ -900,6 +902,33 @@
           faint dashed lines on the 12 standard notes, with C named at the right edge, to show
           where the tuning sits against them. It's display only: nothing snaps to it. Where a
           note of the tuning is right on a standard note, only the tuning's line is drawn.</li>
+      </ul>
+    </div>
+  </details>
+  <details>
+    <summary>Scala files (.scl)</summary>
+    <div class="detail-body">
+      <p>
+        Scala's <strong>.scl</strong> format is the common way to share tunings: the Scala
+        archive alone has thousands.
+      </p>
+      <ul>
+        <li><strong>Import .scl…</strong> (bottom of the Tuning drawer) loads a file as the
+          Imported tuning. Its name appears in the Tuning menu and its description under it.
+          The file only lists the notes, so Root, Tuned from and Tune A4 still come from the
+          drawer: the file's first note sits on Tuned from (C unless you change it).</li>
+        <li>An imported tuning is saved with the composition, so the file isn't needed again.
+          The last one imported stays in the Tuning menu after you pick another tuning.</li>
+        <li>Notes are named like the built-in tunings: letters for 12 notes to the octave
+          (with the ratio where the file gave one), otherwise ratios or numbers.</li>
+        <li>Tunings that don't repeat at the octave work too: the file's last note is the
+          period. Files can have up to 1,200 notes (at most 1,200 to the octave), with a period
+          from 100 to 7,200 cents. A file the app can't use says why.</li>
+        <li><strong>Export .scl…</strong> saves the notes you hear, counted from the root: the
+          scale if one is chosen, otherwise the whole tuning, with the period last. Notes the
+          tuning knows as ratios are written as ratios (D major in 5-limit just intonation
+          starts 10/9, 5/4), others in cents. Scala's keyboard mapping files (.kbm) aren't
+          supported.</li>
       </ul>
     </div>
   </details>

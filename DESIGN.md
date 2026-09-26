@@ -96,7 +96,8 @@ src/
 │                    #   metronome, midi-input, dynamics-bus, voice-allocation
 ├── canvas/          # viewport, interaction (tool mouse handling, ~1,400 lines), performance-engine
 │                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), and one renderer per layer
-├── tuning/          # tuning.ts: tunings, scales, degree names, and the pitch set the staff and snap use (13.8)
+├── tuning/          # tuning.ts: tunings, scales, degree names, and the pitch set the staff and snap use (13.8);
+│                    #   scl.ts: Scala .scl import and export
 ├── ui/              # Preact (.tsx): top-bar, menu, tool-strip, settings-dialog, tempo-panel, snap-panel,
 │                    #   prism-panel, tuning-panel, pitch-circle, track-list, property-panel, tool-property-panel.
 │                    #   Vanilla DOM: drawer, tone builder/picker, older dialogs, HUDs
@@ -351,6 +352,11 @@ The scale is the pitch grid; frets (13.16) are exceptions and additions on top o
 - **Import** reads a Scala file into an Imported tuning. `.scl` carries no root, reference frequency or note names, so those come from the app (Root, Tune A4, degree numbers). Its description line is untrusted display text.
 - **Export** writes the notes you hear, from the root: the scale if one is chosen, otherwise the whole tuning. `.kbm` (MIDI key mapping) is out of scope.
 - Very large or non-octave files work, because a scale's steps and period are already free floats. The staff and snap targets for big files need a performance check.
+- *(Built in 13.8 (d).)*
+  - The composition stores the whole imported tuning, and keeps the last import on offer in the Tuning menu.
+  - Imported tunings are checked on every load: up to 1,200 notes, a period of 100–7,200 ¢.
+  - Export writes ratios where the tuning has them for both notes, cents otherwise.
+  - Measured: 192 notes draw in about 1.5 ms, and the 1,200-note limit in about 7 ms.
 
 #### Consequences elsewhere
 
