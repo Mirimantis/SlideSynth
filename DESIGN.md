@@ -247,7 +247,7 @@ Scrubbing the ruler is audible by default, replacing the Space-hold scrub previe
     - Guides: show, lock, add X, add Y.
     - Snap on/off is not repeated in the drawer; it is the top-bar switch.
     - Later: an animated waveform showing what Force, Spring and Damping do (13.15).
-  - **Tuning**: unchanged (Key, Scale, Tune A4) until the Tuning session (13.8) redesigns it.
+  - **Tuning**: a pitch circle over Tuning / Root / Scale, Tune A4 and a pitch-lines switch. See [Tuning spec](#tuning-spec-138-decided-2026-09-26).
   - **Harmonic Prism**: unchanged except for names. The chord "Tuning" field becomes **Intonation** (Just / Equal). While Prism Draw is on, the Draw tool and the Perform entry carry a chord badge, so the mode is visible without opening the drawer.
 - **Right panel:**
   - **Tool** (was Tool Properties): the active tool's settings. For example, Draw's preview mode, auto-smoothing and handle length. In Perform it shows the performed-volume control (today's Transport-drawer "Dynamics": Fixed, or Key swell with F held), which gets a clearer name in the Perform session.
@@ -278,6 +278,91 @@ Every colour, in both the CSS and the canvas renderers, comes from one set of na
 - **Left icon rail → drawers:** Transport (Loop, Layer, Pitch HUD, Perf HUD, BPM, time signature, metronome, dynamics source, MIDI device), Tools (Draw, Select, Delete, Slice), Snap (preset, magnetic Force/Spring/Damping, guides), Harmonic Prism, Tuning (Key/scale, Tune A4).
 - **Centre:** staff canvas with top and bottom rulers and zoom sliders; the Parameters Graph (volume lane of the selected curve) below it, resizable.
 - **Right panel:** Tool Properties, Object Properties, Tracks (+ Track, + Tone).
+
+### Tuning spec (13.8, decided 2026-09-26)
+
+The Key and Scale dropdowns mixed two different axes: the **tuning** (which pitches exist) and the **scale** (which of them the piece uses). `24tet` and `thai-7tet` are tunings sitting in a scale list, and the maqams fuse both. The Key could only be one of 12 notes, so a 19-tone tuning couldn't have a root on most of its own degrees. Research: [.claude/plans/13.8-tuning-taxonomy-research.md](.claude/plans/13.8-tuning-taxonomy-research.md).
+
+#### Three controls, plus reference and pitch lines
+
+- **Tuning** — which pitches exist.
+  - **12-EDO** (the default).
+  - **Equal divisions:** type N (5–72); optionally divide the 3:1 twelfth instead of the octave (Bohlen–Pierce).
+  - **Just intonation:** a short curated list.
+  - **Historical:** ¼-comma meantone, Pythagorean, Werckmeister III, Kirnberger III, Vallotti.
+  - **Traditional:** Slendro and Pelog, labelled as approximations.
+  - **Imported (.scl)** and **Custom** (from frets, below).
+  - Overlapping entry points are fine: 19-EDO is under Equal divisions, while ¼-comma meantone (a different tuning) is under Historical.
+- **Root** — which degree of the tuning is home, picked from the tuning's own degrees. The names depend on the tuning:
+  - letter names for 12-EDO and the meantone EDOs (19, 31), where letters still work;
+  - degree numbers for other equal divisions;
+  - ratios (5/4) for just intonation.
+- **Scale** — which degrees the piece uses, filtered to the tuning.
+  - 12-EDO: today's list without the four stray tunings.
+  - 24-EDO: Maqam Rast and Bayati, as real scales.
+  - Every tuning offers **All notes**, replacing the Key menu's old "Chromatic".
+  - **Custom:** built on the pitch circle (Shift+click).
+- **One root.** The exception is historical temperaments: they're deliberately unequal, so the note their table is anchored on matters separately from the key. For those tunings only, a **Tuned from: C** field appears.
+- **Tune A4** stays as it is: the reference frequency, applied only in the cents → Hz conversion. The grid never moves.
+- **Pitch lines: show / hide** replaces the Key menu's "None". It's a display mode, not a tuning. Hidden, the staff draws no lines and snapping has no fallback grid (8.19's behaviour).
+
+#### The staff follows the tuning
+
+- The staff's lines are the tuning's degrees, labelled by the naming rule above. Non-12 tunings are no longer drawn as 12-EDO with microtonal lines dashed on top, so the app is tuning-agnostic rather than a 12-EDO tool with microtonal decoration.
+- For non-12 tunings, an optional faint **12-EDO reference layer** helps with orientation.
+- Snapping without a scale rounds to the tuning's degrees, not to 100-cent steps.
+- The octave highlight marks the root, not C (absorbs 13.9).
+- 12-EDO stays the default, so the default view doesn't change.
+
+#### The drawer: a pitch circle over the controls
+
+- **The pitch circle** shows one period of the tuning (an octave, or the tuning's repeat when it isn't octave-based):
+  - the tuning's degrees as ticks around the rim;
+  - the scale's degrees as filled dots;
+  - the root marked with a ring;
+  - for non-12 tunings, a faint inner ring of the 12 standard notes, so you can see how far each degree sits from them.
+- **Gestures:** click a degree to hear it; double-click to make it the root; Shift+click to add it to or remove it from the scale (making a Custom scale).
+- **Below the circle:**
+  - Tuning, Root and Scale;
+  - Tune A4 with its cents readout;
+  - the Pitch lines switch;
+  - Import .scl… and Export .scl….
+
+#### Frets and the scale
+
+The scale is the pitch grid; frets (13.16) are exceptions and additions on top of it. Both are lists of pitch targets for snapping: the scale's are generated (root plus steps, repeated every period, not individually selectable), while each fret is stored, selectable and labelled, and wins over the scale lines within its reach. Custom scales therefore stay scales (they keep a root, repeat every period, name their degrees and give the Prism its steps), but the two convert both ways:
+
+- **Scale → frets:** each scale degree becomes an octave fret (13.18), ready to nudge by ear on the canvas (hold A while dragging) and label.
+- **Frets → scale:** the octave frets' pitch classes become the scale.
+  - If every one lands on a degree of the current tuning, the result is a **Custom scale**.
+  - If not, it's a **Custom tuning** with All notes. Frets are exact pitches, so the tuning / scale split stays honest.
+  - Single (non-repeating) frets are one-off pitches and stay behind as frets.
+- Round trip: explode a scale, tune it by ear, promote it back.
+
+#### .scl files
+
+- **Import** reads a Scala file into an Imported tuning. `.scl` carries no root, reference frequency or note names, so those come from the app (Root, Tune A4, degree numbers). Its description line is untrusted display text.
+- **Export** writes the notes you hear, from the root: the scale if one is chosen, otherwise the whole tuning. `.kbm` (MIDI key mapping) is out of scope.
+- Very large or non-octave files work, because a scale's steps and period are already free floats. The staff and snap targets for big files need a performance check.
+
+#### Consequences elsewhere
+
+- **Harmonic Prism:** Intonation's "Equal" means the current tuning's equal steps (12-EDO steps only when the tuning is 12-EDO).
+- **Octave frets (13.18):** "Octaves" repeats every period of the tuning, which is the octave except in non-octave tunings.
+- **Files:** `scaleRoot` (0–11) becomes a degree index into the tuning. The composition version goes up, with a migration:
+
+  | Old | New |
+  |---|---|
+  | Key 0–11 + scale | 12-EDO, that degree as root, same scale |
+  | Key "Chromatic" | 12-EDO, All notes |
+  | Key "None" | 12-EDO, pitch lines hidden |
+  | `24tet` | 24-EDO, All notes |
+  | `thai-7tet` | 7-EDO, All notes |
+  | `maqam-rast`, `maqam-bayati` | 24-EDO, Maqam Rast / Bayati |
+  | `slendro`, `pelog` | the Traditional tuning, All notes |
+  | scale `chromatic` | All notes |
+
+  The golden-format test gets a compatibility shim.
 
 ---
 
