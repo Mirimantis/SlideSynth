@@ -3,7 +3,7 @@ import { createParamViewport } from './canvas/param-viewport';
 import { renderParamGraph } from './canvas/param-graph-renderer';
 import { createParamInteraction } from './canvas/param-interaction';
 import { displayedLane } from './model/lane';
-import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, KEEP_BUFFER_MS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, centsToReferenceAHz, referenceAHzToCents } from './constants';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, KEEP_BUFFER_MS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToFrequency, setReferenceAHz, centsToReferenceAHz, referenceAHzToCents } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
@@ -53,7 +53,6 @@ import { createTrack } from './model/track';
 import { getCompositionLength, measureLengthInBeats } from './model/composition';
 import { computeMultiCurveBBox, pitchPoints } from './model/curve';
 import { createGroupId } from './model/curve-groups';
-import { chordOffsets } from './utils/harmonics';
 import { showToast } from './ui/toast';
 import { commandSpec, primaryShortcut, type CommandId } from './commands/catalog';
 import { createCommandRegistry } from './commands/registry';
@@ -62,7 +61,7 @@ import { ToolStrip } from './ui/tool-strip';
 import { SnapPanel, type SnapActions } from './ui/snap-panel';
 import { PrismPanel } from './ui/prism-panel';
 import { TuningPanel, type TuningActions } from './ui/tuning-panel';
-import { pitchSetFor, tuningKey } from './tuning/tuning';
+import { pitchName, prismOffsets, staffGridFor, tuningKey } from './tuning/tuning';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
 import { createDrawerRail } from './ui/drawer';
@@ -291,11 +290,12 @@ function writePitchHud(snappedY: number | null, rawY: number | null, dynamics: n
     hudRawCents.textContent = '';
     return;
   }
-  // Y is cents; the HUD shows the nearest 12-TET line + signed ¢ remainder.
-  const nearestLine = Math.round(snappedY / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
-  const cents = Math.round(snappedY - nearestLine);
-  hudSnapName.textContent = centsToNoteName(snappedY);
-  hudSnapCents.textContent = formatCents(cents);
+  // Y is cents; the HUD names the tuning's nearest note (13.8 (b)) and the
+  // signed ¢ remainder.
+  const st = store.getState();
+  const snapName = pitchName(st, snappedY);
+  hudSnapName.textContent = snapName.name;
+  hudSnapCents.textContent = formatCents(Math.round(snapName.offset));
   // Hz reflects the current global tuning offset since centsToFrequency reads
   // the module-level reference A4. A=432 etc. shifts every readout in lockstep.
   hudSnapHz.textContent = formatHz(centsToFrequency(snappedY));
@@ -305,11 +305,10 @@ function writePitchHud(snappedY: number | null, rawY: number | null, dynamics: n
     && rawY >= MIN_PITCH_CENTS - CENTS_PER_SEMITONE / 2
     && rawY <= MAX_PITCH_CENTS + CENTS_PER_SEMITONE / 2;
   if (hasRaw) {
-    const rawNearestLine = Math.round(rawY! / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
-    const rawCents = Math.round(rawY! - rawNearestLine);
+    const rawName = pitchName(st, rawY!);
     hudSep.textContent = '·';
-    hudRawName.textContent = centsToNoteName(rawY!);
-    hudRawCents.textContent = formatCents(rawCents);
+    hudRawName.textContent = rawName.name;
+    hudRawCents.textContent = formatCents(Math.round(rawName.offset));
   } else {
     hudSep.textContent = '';
     hudRawName.textContent = '';
@@ -722,6 +721,7 @@ const tuningActions: TuningActions = {
   setScale(scaleId) { history.snapshot(); store.setScaleId(scaleId); },
   setTunedFrom(pc) { history.snapshot(); store.setTunedFrom(pc); },
   setPitchLinesVisible(visible) { history.snapshot(); store.setPitchLinesVisible(visible); },
+  setReferenceLines(visible) { history.snapshot(); store.setReferenceLines(visible); },
   setReferenceHz(hz) {
     const cents = referenceAHzToCents(hz);
     if (Math.abs(cents - store.getComposition().tuningOffsetCents) < 1e-6) return;
@@ -1622,7 +1622,7 @@ function updateHarmonyVoices(snappedBaseY: number) {
   const st = store.getState();
   const planchettes = st.performance.planchettes;
   if (planchettes.length <= 1) return; // only primary present — no harmonies active
-  const offsets = chordOffsets(st.harmonicPrism.chordSpec);
+  const offsets = prismOffsets(st.harmonicPrism.chordSpec, st);
   for (let i = 1; i < offsets.length; i++) {
     const voiceId = harmonyVoiceId(i - 1);
     const planchette = planchettes.find(p => p.voiceId === voiceId);
@@ -1708,7 +1708,7 @@ function startComposePerformSounding(snappedBaseY: number) {
   // (which runs every frame and tracks drawMode + playback/record state).
   // Just spin up a synth for each currently-active voice.
   const st = store.getState();
-  const offsets = chordOffsets(st.harmonicPrism.chordSpec);
+  const offsets = prismOffsets(st.harmonicPrism.chordSpec, st);
   for (const p of st.performance.planchettes) {
     const y = voiceYFromBase(p.voiceId, snappedBaseY, offsets);
     if (y == null) continue;
@@ -1739,8 +1739,9 @@ function updateComposePerformPitch(snappedBaseY: number) {
  * sounds, records or draws the primary voice adds this. 0 with Prism Draw off.
  */
 function primaryChordOffset(): number {
-  const prism = store.getState().harmonicPrism;
-  return prism.drawMode ? (chordOffsets(prism.chordSpec)[0] ?? 0) : 0;
+  const st = store.getState();
+  const prism = st.harmonicPrism;
+  return prism.drawMode ? (prismOffsets(prism.chordSpec, st)[0] ?? 0) : 0;
 }
 
 /** The planchettes at the pitches they sound: the primary moved by
@@ -1806,7 +1807,7 @@ function syncHarmonyPlanchettes() {
     return;
   }
 
-  const offsets = chordOffsets(st.harmonicPrism.chordSpec);
+  const offsets = prismOffsets(st.harmonicPrism.chordSpec, st);
   const desiredHarmonyIds = new Set<string>();
   for (let i = 1; i < offsets.length; i++) desiredHarmonyIds.add(harmonyVoiceId(i - 1));
 
@@ -1858,7 +1859,7 @@ function startPrismDrawPreview(tone: import('./types').ToneDefinition, snappedBa
   preview.startDrawPreview(tone, snappedBaseY + primaryChordOffset(), 'primary');
   const st = store.getState();
   if (!st.harmonicPrism.drawMode) return;
-  const offsets = chordOffsets(st.harmonicPrism.chordSpec);
+  const offsets = prismOffsets(st.harmonicPrism.chordSpec, st);
   for (let i = 1; i < offsets.length; i++) {
     const voiceId = harmonyVoiceId(i - 1);
     const y = snappedBaseY + offsets[i]!;
@@ -1872,7 +1873,7 @@ function updatePrismDrawPreview(snappedBaseY: number) {
   preview.updateDrawPitch(snappedBaseY + primaryChordOffset(), 'primary');
   const st = store.getState();
   if (!st.harmonicPrism.drawMode) return;
-  const offsets = chordOffsets(st.harmonicPrism.chordSpec);
+  const offsets = prismOffsets(st.harmonicPrism.chordSpec, st);
   for (let i = 1; i < offsets.length; i++) {
     const voiceId = harmonyVoiceId(i - 1);
     if (!preview.isDrawPreviewActive(voiceId)) continue;
@@ -2811,7 +2812,10 @@ function draw() {
 
     const measureLen = measureLengthInBeats(comp);
     bgCtx.clearRect(0, 0, rect.width, rect.height);
-    renderStaff(bgCtx, viewport, rect.width, rect.height, measureLen, pitchSetFor(state));
+    renderStaff(
+      bgCtx, viewport, rect.width, rect.height, measureLen,
+      state.hidePitchLines ? null : staffGridFor(state), state.referenceLines,
+    );
     renderRuler(bgCtx, viewport, rect.width, measureLen, comp.bpm);
     bgDirty = false;
   }
@@ -2847,7 +2851,7 @@ function draw() {
       fgCtx,
       viewport,
       prismSource,
-      state.harmonicPrism.chordSpec,
+      prismOffsets(state.harmonicPrism.chordSpec, state),
       state.harmonicPrism.projectionOctaveRange,
       rect.width,
       rect.height,
@@ -2950,7 +2954,7 @@ function draw() {
       viewport,
       cursorScreenX,
       snapped.wy,
-      state.harmonicPrism.chordSpec,
+      prismOffsets(state.harmonicPrism.chordSpec, state),
       rect.height,
       RULER_HEIGHT,
     );
@@ -3167,7 +3171,7 @@ watch(
   () => {
     const st = store.getState();
     const c = st.composition;
-    return `${c.bpm}|${c.beatsPerMeasure}/${c.timeSignatureDenominator}|${tuningKey(st.tuning)}|${st.root}|${st.scaleId}|${st.tunedFrom}|${st.hidePitchLines}`;
+    return `${c.bpm}|${c.beatsPerMeasure}/${c.timeSignatureDenominator}|${tuningKey(st.tuning)}|${st.root}|${st.scaleId}|${st.tunedFrom}|${st.hidePitchLines}|${st.referenceLines}`;
   },
   () => { bgDirty = true; },
 );

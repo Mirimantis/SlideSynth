@@ -1,4 +1,5 @@
-import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_SEMITONE, CENTS_PER_OCTAVE } from '../constants';
+import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_SEMITONE, CENTS_PER_OCTAVE, centsToNoteName } from '../constants';
+import { chordOffsets, type ChordSpec, type ChordSteps } from '../utils/harmonics';
 
 /**
  * Tunings (BACKLOG 13.8, spec in DESIGN.md › Tuning spec).
@@ -177,26 +178,53 @@ function meantoneNames(n: number): string[] {
 
 const meantoneCache = new Map<number, string[]>();
 
-/** A degree's name: a letter where the tuning has letters, else its number
- *  (1-based, as musicians count), with the ratio for just intonation. */
-export function degreeName(tuning: Tuning, tunedFrom: number, degree: number): string {
+/** What a degree is called: its letter (where the tuning has letters), its
+ *  ratio (just intonation) and its number (1-based, as musicians count). */
+interface DegreeParts {
+  letter: string | null;
+  ratio: string | null;
+  number: string;
+}
+
+function degreeParts(tuning: Tuning, tunedFrom: number, degree: number): DegreeParts {
   const n = tuning.degrees.length;
   const d = ((degree % n) + n) % n;
-  const ratio = tuning.ratios?.[d];
+  const ratio = tuning.ratios?.[d] ?? null;
+  let letter: string | null = null;
   if (tuning.naming === 'letters') {
     if (n === 12) {
-      const letter = PITCH_CLASS_NAMES[(((tunedFrom + d) % 12) + 12) % 12]!;
-      return ratio ? `${letter} (${ratio})` : letter;
-    }
-    // A meantone EDO: letters only while degree 0 is on C.
-    if (tunedFrom === 0) {
+      letter = PITCH_CLASS_NAMES[(((tunedFrom + d) % 12) + 12) % 12]!;
+    } else if (tunedFrom === 0) {
+      // A meantone EDO: letters only while degree 0 is on C.
       let names = meantoneCache.get(n);
       if (!names) meantoneCache.set(n, names = meantoneNames(n));
-      return names[d]!;
+      letter = names[d]!;
     }
   }
+  return { letter, ratio, number: String(d + 1) };
+}
+
+/** A degree's name: a letter where the tuning has letters, else its number,
+ *  with the ratio for just intonation. */
+export function degreeName(tuning: Tuning, tunedFrom: number, degree: number): string {
+  const { letter, ratio, number } = degreeParts(tuning, tunedFrom, degree);
+  if (letter) return ratio ? `${letter} (${ratio})` : letter;
   if (tuning.naming === 'ratios' && ratio) return ratio;
-  return String(d + 1);
+  return number;
+}
+
+/** A note's name on the staff and in the pitch readout: letter and octave
+ *  ("Eb4"), or the degree's number or ratio. `nearest` adds the nearest
+ *  standard note ("6 ≈D4") to a name that doesn't say where it is. */
+function noteName(tuning: Tuning, tunedFrom: number, degree: number, cents: number, nearest: boolean): string {
+  const { letter, ratio, number } = degreeParts(tuning, tunedFrom, degree);
+  if (letter) {
+    // The octave of the nearest standard note, so B#4 and Cb5 sit where they sound.
+    const octave = Math.floor(Math.round(cents / CENTS_PER_SEMITONE) / 12) - 1;
+    return ratio ? `${letter}${octave} ${ratio}` : `${letter}${octave}`;
+  }
+  const name = tuning.naming === 'ratios' && ratio ? ratio : number;
+  return nearest ? `${name} ≈${centsToNoteName(cents)}` : name;
 }
 
 // ── Scales ──────────────────────────────────────────────────────
@@ -264,20 +292,17 @@ export interface PitchSettings {
   hidePitchLines: boolean;
 }
 
-/** The staff's and snapping's view of the pitch grid. */
+/** Snapping's view of the pitch grid (the staff's is `staffGridFor`). */
 export interface PitchSet {
   /** Absolute cents of every note in the grid across the pitch range, ascending. */
   notes: readonly number[];
-  /** 12-EDO with every note: the plain chromatic staff. */
-  plainChromatic: boolean;
-  /** Every note sits on a 12-EDO line (within a cent). */
-  onTwelveEdo: boolean;
 }
 
 const pitchSets = new Map<string, PitchSet>();
 
-/** The notes the staff draws and snapping aims at; null when pitch lines are
- *  hidden (no lines, and nothing to snap to but frets and Prism echoes).
+/** The notes snapping aims at: the scale's, or every note of the tuning with
+ *  All notes. Null when pitch lines are hidden (no lines, and nothing to snap
+ *  to but frets and Prism echoes).
  *  Shared between callers: don't mutate. */
 export function pitchSetFor(s: PitchSettings): PitchSet | null {
   if (s.hidePitchLines) return null;
@@ -306,13 +331,119 @@ export function pitchSetFor(s: PitchSettings): PitchSet | null {
   }
   notes.sort((a, b) => a - b);
   const deduped = notes.filter((c, i) => i === 0 || c - notes[i - 1]! > 1e-6);
-  const set: PitchSet = {
-    notes: deduped,
-    plainChromatic: isTwelveEdo(s.tuning) && scale === null,
-    onTwelveEdo: deduped.every(c => Math.abs(c - Math.round(c / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE) < 1),
-  };
+  const set: PitchSet = { notes: deduped };
   pitchSets.set(key, set);
   return set;
+}
+
+// ── The staff ───────────────────────────────────────────────────
+
+/** One pitch line on the staff (13.8 (b)): a note of the tuning. */
+export interface StaffLine {
+  /** Absolute cents. */
+  cents: number;
+  /** Which degree of the tuning (0-based). */
+  degree: number;
+  isRoot: boolean;
+  /** In the scale; every line is, with All notes. */
+  inScale: boolean;
+  /** Drawn as a main line: a letter without a sharp or flat, or any note of
+   *  a tuning that names its notes by number or ratio. */
+  natural: boolean;
+  label: string;
+}
+
+/** The staff's lines for a tuning, root and scale. */
+export interface StaffGrid {
+  /** Every note of the tuning across the pitch range, ascending. */
+  lines: readonly StaffLine[];
+  /** A scale narrows the tuning: lines outside it are dimmed. */
+  hasScale: boolean;
+  /** The smallest gap between neighbouring lines, in cents. */
+  minStep: number;
+  /** The tuning's repeat, in cents. */
+  period: number;
+  /** 12-EDO: no 12-EDO reference layer, it would sit on every line. */
+  twelveEdo: boolean;
+}
+
+const staffGrids = new Map<string, StaffGrid>();
+
+/** The staff's lines: every note of the tuning, flagged with the root and the
+ *  scale. Pitch lines hidden is the caller's business. Cached; don't mutate. */
+export function staffGridFor(s: Omit<PitchSettings, 'hidePitchLines'>): StaffGrid {
+  const tuning = resolveTuning(s.tuning);
+  const n = tuning.degrees.length;
+  const scale = s.scaleId === ALL_NOTES ? null : getScale(s.scaleId);
+  const fits = !!scale && scale.size === n;
+  const key = `${tuning.key}|${s.root}|${fits ? scale!.id : ALL_NOTES}|${s.tunedFrom}`;
+  const hit = staffGrids.get(key);
+  if (hit) return hit;
+
+  const inScale = new Set(fits ? scale!.degrees.map(step => (s.root + step) % n) : tuning.degrees.map((_, i) => i));
+  const anchor = s.tunedFrom * CENTS_PER_SEMITONE;
+  const lines: StaffLine[] = [];
+  const first = Math.floor((MIN_PITCH_CENTS - anchor) / tuning.period) - 1;
+  const last = Math.ceil((MAX_PITCH_CENTS - anchor) / tuning.period) + 1;
+  for (let k = first; k <= last; k++) {
+    tuning.degrees.forEach((offset, degree) => {
+      const cents = roundCents(anchor + k * tuning.period + offset);
+      if (cents < MIN_PITCH_CENTS - 1e-6 || cents > MAX_PITCH_CENTS + 1e-6) return;
+      const isRoot = degree === s.root;
+      const parts = degreeParts(tuning, s.tunedFrom, degree);
+      lines.push({
+        cents,
+        degree,
+        isRoot,
+        inScale: inScale.has(degree),
+        natural: parts.letter ? !/[#b]/.test(parts.letter) : true,
+        label: noteName(tuning, s.tunedFrom, degree, cents, isRoot),
+      });
+    });
+  }
+  const gaps = tuning.degrees.map((d, i) => (tuning.degrees[i + 1] ?? tuning.period) - d);
+  const grid: StaffGrid = {
+    lines,
+    hasScale: fits,
+    minStep: Math.min(...gaps),
+    period: tuning.period,
+    twelveEdo: isTwelveEdo(s.tuning),
+  };
+  staffGrids.set(key, grid);
+  return grid;
+}
+
+/** A pitch named by the tuning (the pitch readout): the nearest note of the
+ *  tuning, and how far the pitch is from it in cents. */
+export function pitchName(s: Omit<PitchSettings, 'hidePitchLines'>, cents: number): { name: string; offset: number } {
+  const tuning = resolveTuning(s.tuning);
+  const degree = nearestDegree(tuning, s.tunedFrom, cents);
+  const anchor = s.tunedFrom * CENTS_PER_SEMITONE + tuning.degrees[degree]!;
+  const note = anchor + Math.round((cents - anchor) / tuning.period) * tuning.period;
+  return { name: noteName(tuning, s.tunedFrom, degree, note, true), offset: cents - note };
+}
+
+// ── The Harmonic Prism ──────────────────────────────────────────
+
+/** The steps the Prism's "Equal" intonation counts in (13.8 (b)): the
+ *  tuning's notes, counted from the root. Null for 12-EDO, whose steps are the
+ *  chord tables' own semitones. */
+export function chordStepsFor(s: Pick<PitchSettings, 'tuning' | 'root'>): ChordSteps | null {
+  if (isTwelveEdo(s.tuning)) return null;
+  const tuning = resolveTuning(s.tuning);
+  const n = tuning.degrees.length;
+  const root = ((s.root % n) + n) % n;
+  const from = tuning.degrees[root]!;
+  const intervals = tuning.degrees.map((_, k) => {
+    const i = root + k;
+    return tuning.degrees[i % n]! - from + (i >= n ? tuning.period : 0);
+  });
+  return { intervals, period: tuning.period };
+}
+
+/** The Prism chord's voice offsets in the current tuning. */
+export function prismOffsets(spec: ChordSpec, s: Pick<PitchSettings, 'tuning' | 'root'>): number[] {
+  return chordOffsets(spec, chordStepsFor(s));
 }
 
 /** Drop float noise so equal pitches compare equal (0.0001 ¢ is inaudible). */

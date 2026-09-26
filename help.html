@@ -849,10 +849,29 @@
         <li>Scales: Western modes, pentatonic/blues, other Western and world scales for any
           12-note tuning; Maqam Rast and Bayati for 24-EDO. A scale that doesn't fit the
           tuning plays as All notes.</li>
-        <li>With a scale on the standard lines, the staff highlights its notes (sharps and
-          flats in the scale stand out) and dims the rest. Notes between the standard lines
-          (quarter tones, historical and just tunings) draw as extra lines, dashed where they
-          fall between semitones.</li>
+      </ul>
+    </div>
+  </details>
+  <details>
+    <summary>The staff</summary>
+    <div class="detail-body">
+      <ul>
+        <li>The staff's lines are the tuning's notes: 19-EDO draws 19 lines to the octave,
+          Slendro five. Snapping with All notes pulls to every one of them.</li>
+        <li>The <strong>root</strong>'s lines are the bold ones, marking each octave (or each
+          repeat, in a tuning like Bohlen–Pierce that doesn't repeat at the octave).</li>
+        <li>With a scale, its notes are highlighted (sharps and flats in the scale stand out)
+          and the rest dimmed.</li>
+        <li>Labels use the tuning's names: letters and octave (Db4, E#3), with the ratio in
+          just intonation, or numbers. A numbered root line also names the standard note it's
+          nearest (5 ≈D4). The pitch readout while drawing names the nearest note the same way,
+          and how many cents you are from it.</li>
+        <li>Zoomed out, lines outside the scale fade so a 72-note tuning doesn't fill the
+          canvas; zoom in to see them.</li>
+        <li><strong>12-EDO reference</strong> (on by default, for every tuning except 12-EDO) —
+          faint dashed lines on the 12 standard notes, with C named at the right edge, to show
+          where the tuning sits against them. It's display only: nothing snaps to it. Where a
+          note of the tuning is right on a standard note, only the tuning's line is drawn.</li>
       </ul>
     </div>
   </details>
@@ -934,7 +953,7 @@
           together; chord shape stays constant.</li>
         <li>Harmonies that fall outside the staff range are silenced
           and hidden from the rail until they come back into range.</li>
-        <li>If you change tuning (12-TET ↔ Just Intonation) or chord
+        <li>If you change intonation (Equal ↔ Just) or chord
           quality while still holding LMB, the active harmonies retune
           live to the new spec.</li>
         <li>Voice <em>count</em> is locked at LMB-down — switching to
@@ -1005,7 +1024,11 @@
         <li><strong>Stacking</strong> — the interval used to stack voices. Tertian (3rds) for conventional harmony, Quartal (4ths) for modal/jazz, Quintal (5ths) for open sound, Secondal (2nds) for clusters.</li>
         <li><strong>Quality</strong> — major / minor / dominant / diminished / augmented / sus2 / sus4. Fully applies to tertian; limited options for other stackings.</li>
         <li><strong>Voices</strong> — 2 (dyad) through 5 (pentad). More voices extend the chord: triad → 7th → 9th.</li>
-        <li><strong>Intonation</strong> — Equal (12-TET, grid-aligned) or Just (pure acoustic ratios).</li>
+        <li><strong>Intonation</strong> — Equal or Just (pure acoustic ratios). Equal builds the
+          chord in the Tuning drawer's steps: 12-TET semitones in 12-EDO, the nearest steps in
+          another equal division (a major third is 6 steps of 19-EDO), and in an unequal tuning
+          such as Werckmeister its own intervals counted from the root, so a chord on the root
+          lands on the staff's lines. Just ignores the tuning.</li>
         <li><strong>Direction</strong> — voices sit above the base, below, or around it.</li>
         <li><strong>Octaves ±</strong> — how many octaves above and below the source to echo (0–3).</li>
       </ul>

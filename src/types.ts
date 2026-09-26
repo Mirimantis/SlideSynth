@@ -102,6 +102,9 @@ export interface SnapSettings {
   /** Pitch lines hidden (8.19's "None"): the staff draws no lines and Y has
    *  no grid to snap to. Frets and Prism echoes still pull. */
   hidePitchLines: boolean;
+  /** The faint 12-EDO reference lines under a tuning other than 12-EDO
+   *  (13.8 (b)). Display only. */
+  referenceLines: boolean;
   magneticEnabled: boolean;
   magneticStrength: number;     // 0..1
   magneticSpringK: number;      // 1..50
@@ -274,6 +277,7 @@ export interface AppState {
   scaleId: string;
   tunedFrom: number;
   hidePitchLines: boolean;
+  referenceLines: boolean;
   magneticEnabled: boolean;
   magneticStrength: number;
   magneticSpringK: number;

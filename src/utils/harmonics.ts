@@ -6,7 +6,9 @@
 // ratios; conversion to cents happens at the output boundary.
 //
 // Two tuning paths:
-//   • 12-TET: additive semitone steps from a compact interval pattern.
+//   • 12-TET ("Equal"): additive semitone steps from a compact interval
+//     pattern. In a tuning other than 12-EDO (13.8 (b)) each voice moves to
+//     the tuning's nearest step, counted from the root: `ChordSteps`.
 //   • Just Intonation: prescribed frequency-ratio chains per
 //     (stacking, quality, numVoices). Ratios stay as ratios until a single
 //     final log2 conversion — never sum steps of individual intervals for
@@ -26,6 +28,15 @@ export type ChordQuality =
 export type TuningSystem = '12-TET' | 'just-intonation';
 export type Direction = 'up' | 'down' | 'symmetric';
 export type NumVoices = 2 | 3 | 4 | 5;
+
+/** A tuning's steps for "Equal" intonation (13.8 (b)): its notes counted from
+ *  the root. Built by tuning/tuning.ts `chordStepsFor`. */
+export interface ChordSteps {
+  /** Cents above the root of each note in one period, ascending from 0. */
+  intervals: readonly number[];
+  /** The tuning's repeat, in cents. */
+  period: number;
+}
 
 export interface ChordSpec {
   stacking: StackingStyle;
@@ -178,6 +189,23 @@ function chordOffsets12TET(spec: ChordSpec): number[] {
   return offsets;
 }
 
+/** 12-TET offsets moved onto a tuning's steps: each voice takes the step
+ *  nearest its 12-TET interval, and stays above the voice below it so no two
+ *  voices merge in a coarse tuning. */
+function onSteps(offsets: number[], steps: ChordSteps): number[] {
+  const n = steps.intervals.length;
+  const at = (m: number) => Math.floor(m / n) * steps.period + steps.intervals[m % n]!;
+  let prev = -1;
+  return offsets.map(target => {
+    let best = prev + 1;
+    for (let m = best + 1; at(m) <= target + steps.period; m++) {
+      if (Math.abs(at(m) - target) < Math.abs(at(best) - target)) best = m;
+    }
+    prev = best;
+    return at(best);
+  });
+}
+
 /** JI offsets in CENTS (exact 1200·log2 of the ratio chain). */
 function chordOffsetsJI(spec: ChordSpec): number[] {
   if (spec.stacking === 'tertian') {
@@ -213,10 +241,14 @@ function applyDirection(offsets: number[], direction: Direction): number[] {
  * Returns one number per voice. Offsets are additive in cents space, so
  * `baseY + offsets[i]` gives the voice's pitch regardless of whether the
  * base sits on a 12-TET line or between lines.
+ *
+ * `steps`: the current tuning's, for Equal intonation outside 12-EDO. Null
+ * (12-EDO) keeps the semitone tables.
  */
-export function chordOffsets(spec: ChordSpec): number[] {
-  const base =
-    spec.tuning === '12-TET' ? chordOffsets12TET(spec) : chordOffsetsJI(spec);
+export function chordOffsets(spec: ChordSpec, steps: ChordSteps | null = null): number[] {
+  const base = spec.tuning === '12-TET'
+    ? (steps ? onSteps(chordOffsets12TET(spec), steps) : chordOffsets12TET(spec))
+    : chordOffsetsJI(spec);
   const directed = applyDirection(base, spec.direction);
   // 8.13: per-voice octave offsets. Apply after direction so "voice N up an
   // octave" reads consistently regardless of up/down/symmetric direction.

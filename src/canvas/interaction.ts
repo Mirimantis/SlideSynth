@@ -8,7 +8,7 @@ import { pointSelectionOf, pointCount, hasPoint, type PointRef, type PointSelect
 import { snapToGrid } from '../utils/snap';
 import { currentSnapConfig } from '../state/snap-config';
 import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
-import { chordOffsets } from '../utils/harmonics';
+import { prismOffsets } from '../tuning/tuning';
 import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/curve-groups';
 import { nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
@@ -1245,7 +1245,7 @@ function handleDrawClickPrism(istate: InteractionState, worldPt: Vec2): void {
   if (!track) return;
 
   const spec = state.harmonicPrism.chordSpec;
-  const offsets = chordOffsets(spec);
+  const offsets = prismOffsets(spec, state);
   if (offsets.length === 0) return;
 
   // Identify a chord-cluster primary to extend, if any:

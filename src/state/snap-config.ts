@@ -1,7 +1,7 @@
 import type { AppState, Composition } from '../types';
 import type { SnapConfig } from '../utils/snap';
 import { getAdaptiveSubdivisions } from '../utils/snap';
-import { pitchSetFor } from '../tuning/tuning';
+import { pitchSetFor, prismOffsets } from '../tuning/tuning';
 import { computeProjectionTargetsAtX } from '../canvas/projection-renderer';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { store } from './store';
@@ -43,7 +43,7 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
     }
     if (source) {
       projectionTargets = computeProjectionTargetsAtX(
-        source, prism.chordSpec, prism.projectionOctaveRange, q.atBeat,
+        source, prismOffsets(prism.chordSpec, st), prism.projectionOctaveRange, q.atBeat,
       );
     }
   }

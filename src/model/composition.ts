@@ -18,6 +18,7 @@ export function createDefaultSnapSettings(): SnapSettings {
     scaleId: ALL_NOTES,
     tunedFrom: 0,
     hidePitchLines: false,
+    referenceLines: true,
     magneticEnabled: DEFAULT_MAGNETIC_ENABLED,
     magneticStrength: DEFAULT_MAGNETIC_STRENGTH,
     magneticSpringK: DEFAULT_MAGNETIC_SPRING_K,

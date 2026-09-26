@@ -448,6 +448,14 @@ body.perform-mode #canvas-container::after {
   color: var(--text-dim);
 }
 
+/* A switch that doesn't apply right now (e.g. 12-EDO reference with pitch lines hidden). */
+.toggle-switch:has(input:disabled) {
+  opacity: 0.45;
+}
+.toggle-switch:has(input:disabled) .toggle-switch-label {
+  cursor: default;
+}
+
 .toolbar-time-display {
   font-size: 0.75rem;
   color: var(--text-dim);

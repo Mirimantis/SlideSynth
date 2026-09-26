@@ -94,9 +94,9 @@
   --staff-key-label-c: #99bbdd;
   --staff-key-label: #667788;
   --staff-key-label-out: #333;
-  /* Microtonal scale degrees. */
-  --staff-micro-line: #4a6a8a;
-  --staff-micro-label: #6688aa;
+  /* The faint 12-EDO reference layer under other tunings (13.8 (b)). */
+  --staff-ref-line: #2c3848;
+  --staff-ref-label: #4a5a6c;
   /* Beat lines: measure, beat, then eighth / sixteenth-quarter / finest subdivision. */
   --staff-measure: #556;
   --staff-beat: #334;

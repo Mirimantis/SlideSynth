@@ -313,6 +313,7 @@ The Key and Scale dropdowns mixed two different axes: the **tuning** (which pitc
 - For non-12 tunings, an optional faint **12-EDO reference layer** helps with orientation.
 - Snapping without a scale rounds to the tuning's degrees, not to 100-cent steps.
 - The octave highlight marks the root, not C (absorbs 13.9).
+- *(Built in 13.8 (b).)* The reference layer is a drawer switch, on by default. Labels thin out by zoom as 12-EDO's did, and zoomed out, lines outside the scale fade. The draw HUD names the nearest note of the tuning.
 - 12-EDO stays the default, so the default view doesn't change.
 
 #### The drawer: a pitch circle over the controls
@@ -348,7 +349,7 @@ The scale is the pitch grid; frets (13.16) are exceptions and additions on top o
 
 #### Consequences elsewhere
 
-- **Harmonic Prism:** Intonation's "Equal" means the current tuning's equal steps (12-EDO steps only when the tuning is 12-EDO).
+- **Harmonic Prism:** Intonation's "Equal" means the current tuning's equal steps (12-EDO steps only when the tuning is 12-EDO). *(Built in 13.8 (b): each voice takes the tuning's step nearest its 12-TET interval, counted from the root. For unequal tables that's the table's own intervals from the root, since a chord's offsets must stay constant along a curve.)*
 - **Octave frets (13.18):** "Octaves" repeats every period of the tuning, which is the octave except in non-octave tunings.
 - **Files:** `scaleRoot` (0–11) becomes a degree index into the tuning. The composition version goes up, with a migration:
 

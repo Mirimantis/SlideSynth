@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-  ALL_NOTES, TWELVE_EDO, clampDivisions, degreeName, nearestDegree, nearestNote, pitchSetFor, resolveTuning, rootCents, scalesFor,
+  ALL_NOTES, TWELVE_EDO, chordStepsFor, clampDivisions, degreeName, nearestDegree, nearestNote, pitchName, pitchSetFor,
+  prismOffsets, resolveTuning, rootCents, scalesFor, staffGridFor,
   type PitchSettings, type TuningRef,
 } from './tuning';
+import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 import { migrateSnapSettings } from '../export/json-export';
 import { snapToGrid, findAdaptiveSnap, type SnapConfig } from '../utils/snap';
 import { MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
@@ -18,7 +20,6 @@ const classes = (ns: readonly number[]) =>
 describe('pitch sets (BACKLOG 13.8)', () => {
   it('12-EDO with every note is the plain chromatic grid', () => {
     const set = pitchSetFor(settings())!;
-    expect(set.plainChromatic).toBe(true);
     expect(set.notes[0]).toBe(MIN_PITCH_CENTS);
     expect(set.notes[set.notes.length - 1]).toBe(MAX_PITCH_CENTS);
     expect(set.notes.every(n => n % 100 === 0)).toBe(true);
@@ -26,7 +27,6 @@ describe('pitch sets (BACKLOG 13.8)', () => {
 
   it('a scale counts from the root', () => {
     expect(classes(notes({ root: 2, scaleId: 'major' }))).toEqual([100, 200, 400, 600, 700, 900, 1100]);
-    expect(pitchSetFor(settings({ scaleId: 'major' }))!.plainChromatic).toBe(false);
   });
 
   it('in an unequal tuning, the root moves over a fixed table', () => {
@@ -103,6 +103,90 @@ describe('degree names (BACKLOG 13.8)', () => {
   it('other tunings number their degrees, or give ratios', () => {
     expect(name({ kind: 'edo', divisions: 22, equave: 'octave' }, 5)).toBe('6');
     expect(name({ kind: 'table', id: 'ji-harmonics-8-16' }, 1)).toBe('9/8');
+  });
+});
+
+describe('the staff follows the tuning (BACKLOG 13.8 (b))', () => {
+  const grid = (over: Partial<PitchSettings> = {}) => staffGridFor(settings(over));
+  const line = (over: Partial<PitchSettings>, cents: number) => grid(over).lines.find(l => Math.abs(l.cents - cents) < 0.01)!;
+
+  it('12-EDO draws every semitone, named as before, the root in bold', () => {
+    const g = grid();
+    expect(g.lines).toHaveLength(pitchSetFor(settings())!.notes.length);
+    expect(line({}, 6000)).toMatchObject({ label: 'C4', isRoot: true, natural: true, inScale: true });
+    expect(line({}, 6100)).toMatchObject({ label: 'C#4', isRoot: false, natural: false });
+    expect(g.hasScale).toBe(false);
+    expect(g.twelveEdo).toBe(true);
+  });
+
+  it('the octave marker follows the root (absorbs 13.9)', () => {
+    expect(line({ root: 8, scaleId: 'harmonic-minor' }, 6800)).toMatchObject({ label: 'G#4', isRoot: true, inScale: true });
+    expect(line({ root: 8, scaleId: 'harmonic-minor' }, 6000)).toMatchObject({ isRoot: false, inScale: false });
+  });
+
+  it('draws the tuning’s own notes, not 12-EDO with extras', () => {
+    const edo19: TuningRef = { kind: 'edo', divisions: 19, equave: 'octave' };
+    const g = grid({ tuning: edo19 });
+    expect(g.minStep).toBeCloseTo(1200 / 19, 6);
+    expect(g.lines.filter(l => l.cents >= 6000 && l.cents < 7200)).toHaveLength(19);
+    expect(line({ tuning: edo19 }, 6000 + 1200 / 19 * 2).label).toBe('Db4');
+    // B# sits just below C5 and keeps octave 4.
+    expect(line({ tuning: edo19 }, 6000 + 1200 / 19 * 18).label).toBe('B#4');
+  });
+
+  it('numbers a tuning without letters, and says where its root is', () => {
+    const edo22: TuningRef = { kind: 'edo', divisions: 22, equave: 'octave' };
+    expect(line({ tuning: edo22 }, 6000).label).toBe('1 ≈C4');
+    expect(line({ tuning: edo22 }, 6000 + 1200 / 22 * 5).label).toBe('6');
+    expect(line({ tuning: { kind: 'table', id: 'ji-harmonics-8-16' } }, 6000 + 1200 * Math.log2(9 / 8)).label).toBe('9/8');
+    expect(line({ tuning: { kind: 'table', id: 'ji-5-limit' } }, 6000 + 1200 * Math.log2(5 / 4)).label).toBe('E4 5/4');
+  });
+
+  it('non-octave tunings repeat every period', () => {
+    const g = grid({ tuning: { kind: 'edo', divisions: 13, equave: 'tritave' } });
+    expect(g.period).toBeCloseTo(1901.955, 2);
+    const roots = g.lines.filter(l => l.isRoot).map(l => l.cents);
+    expect(roots[1]! - roots[0]!).toBeCloseTo(1901.955, 2);
+  });
+
+  it('the pitch readout names the tuning’s nearest note', () => {
+    expect(pitchName(settings(), 6130)).toEqual({ name: 'C#4', offset: 30 });
+    const n = pitchName(settings({ tuning: { kind: 'edo', divisions: 22, equave: 'octave' } }), 6000 + 1200 / 22 * 5 + 3);
+    expect(n.name).toMatch(/^6 ≈/);
+    expect(n.offset).toBeCloseTo(3, 6);
+  });
+});
+
+describe('the Prism’s Equal counts in the tuning’s steps (BACKLOG 13.8 (b))', () => {
+  const chord = (over: Partial<ChordSpec> = {}): ChordSpec => ({ ...DEFAULT_CHORD_SPEC, ...over });
+  const offsets = (tuning: TuningRef, over: Partial<ChordSpec> = {}, root = 0) => prismOffsets(chord(over), { tuning, root });
+
+  it('12-EDO keeps the semitone tables', () => {
+    expect(chordStepsFor({ tuning: TWELVE_EDO, root: 0 })).toBeNull();
+    expect(offsets(TWELVE_EDO)).toEqual([0, 400, 700]);
+  });
+
+  it('an equal division takes its nearest steps', () => {
+    const step = 1200 / 19;
+    const out = offsets({ kind: 'edo', divisions: 19, equave: 'octave' });
+    expect(out.map(c => Math.round(c / step))).toEqual([0, 6, 11]);
+  });
+
+  it('an unequal table counts from the root', () => {
+    const werck = resolveTuning({ kind: 'table', id: 'werckmeister-3' });
+    const out = offsets({ kind: 'table', id: 'werckmeister-3' }, {}, 2);   // D major
+    expect(out[1]).toBeCloseTo(werck.degrees[6]! - werck.degrees[2]!, 6);   // D → F#
+    expect(out[2]).toBeCloseTo(werck.degrees[9]! - werck.degrees[2]!, 6);   // D → A
+  });
+
+  it('keeps voices apart in a coarse tuning', () => {
+    const out = offsets({ kind: 'edo', divisions: 5, equave: 'octave' }, { stacking: 'secondal', quality: 'minor' });
+    expect(new Set(out).size).toBe(out.length);
+  });
+
+  it('Just stays pure in any tuning', () => {
+    const out = offsets({ kind: 'edo', divisions: 19, equave: 'octave' }, { tuning: 'just-intonation' });
+    expect(out[1]).toBeCloseTo(1200 * Math.log2(5 / 4), 6);
   });
 });
 

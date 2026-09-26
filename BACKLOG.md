@@ -389,7 +389,7 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
 - [x] **13.6 Audition a Y guide's pitch while dragging** *(S — done in 16.6, PR #85)*
   - Sounds the snapped pitch on the current track's tone. Sequence after 13.5.
   - **Absorbed by 16.6** (2026-09-24): the key is hold A, not Space. Y guides can already be dragged, so this doesn't need to wait for 13.5.
-- [ ] **13.9 Octave highlight follows the key root** *(S — absorbed by 13.8 (b))*
+- [x] **13.9 Octave highlight follows the key root** *(S — done in 13.8 (b))*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
 - [ ] **13.11 Recording simplification density** *(S–M)*
@@ -491,11 +491,21 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
         - **Beyond the spec:**
           - **Tuned from** shows for every tuning except 12-EDO, not only historical ones. The migration needs it (Thai 7-TET or Pelog on D becomes that tuning tuned from D), and for any tuning but 12-EDO it decides where the tuning sits.
           - An old "C + Chromatic scale" file now shows the plain chromatic staff instead of every line highlighted: it's All notes, the same pitches.
-    - [ ] **(b) Staff, labels and snap per tuning** *(M)*
+    - [x] **(b) Staff, labels and snap per tuning** *(M)*
       - The staff draws the tuning's degrees, named by the naming rule, with the optional 12-EDO reference layer.
       - Snapping without a scale falls back to the tuning's degrees.
       - The octave highlight follows the root (absorbs 13.9).
       - Prism "Equal" intonation uses the tuning's steps.
+      - **Done (this PR):**
+        - **Staff** (`canvas/staff-renderer.ts`): draws `staffGridFor()`'s lines (`tuning/tuning.ts`), every note of the tuning flagged root / in scale / natural and labelled by the naming rule with the octave (Db4, E4 5/4) or a number; a numbered root line adds its nearest standard note (5 ≈D4).
+          - The root's lines are the bold markers, so 12-EDO with root C looks as before.
+          - Labels: the root always, naturals and the scale's notes once a twelfth of the period is 10 px, every note once the smallest step is 18 px (12-EDO's old thresholds), skipping any that would collide.
+          - Zoomed out, lines outside the scale fade as neighbours close from 4 to 1.5 px.
+        - **12-EDO reference layer:** a "12-EDO reference" switch in the Tuning drawer (tunings other than 12-EDO; greyed while pitch lines are hidden). `SnapSettings.referenceLines`, default on; older files take the default, so no version bump. Dashed lines on standard notes no tuning line is within 3 px of, and C's name at the right edge. The `staff-micro-*` theme tokens became `staff-ref-*`.
+        - **Snap:** already the tuning's degrees since (a); unchanged.
+        - **Pitch readout:** the draw HUD names the tuning's nearest note and the cents from it (`pitchName`).
+        - **Prism:** `chordOffsets(spec, steps)` moves each Equal voice to the tuning's nearest step, keeping voices apart. The steps are the tuning's intervals counted from the root (`chordStepsFor`), so offsets stay constant along a curve. The Intonation option reads "Equal (19-EDO)" etc. outside 12-EDO. Echo renderers and snap targets take offsets instead of the chord spec.
+        - **Decision:** for unequal tables (Werckmeister, just intonation) "the tuning's steps" is its intervals from the root: a chord on the root sits on the staff's lines; on other degrees it keeps the root's interval shapes.
     - [ ] **(c) The pitch-circle drawer** *(M)*
       - Rim ticks, scale dots, the root ring, and the 12-EDO inner ring.
       - Click to hear, double-click for root, Shift+click to toggle a degree (Custom scale).
