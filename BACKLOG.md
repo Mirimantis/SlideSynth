@@ -471,12 +471,12 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - `.scl` import and export.
   - Research, with sources: [.claude/plans/13.8-tuning-taxonomy-research.md](.claude/plans/13.8-tuning-taxonomy-research.md).
   - **Build in this order:**
-    - [x] **(a) Tuning model + migration** *(M)*
+    - [x] **(a) Tuning model + migration** *(M, PR #88)*
       - Tuning, Root (a degree index), Scale, Pitch lines, and "Tuned from" for historical temperaments.
       - The built-in tunings: 12-EDO, equal divisions (N, octave or 3:1), a curated just-intonation list, the historical tables, Slendro and Pelog.
       - The composition version goes up, with the migration table in the spec and a golden-format shim.
       - The Tuning drawer's controls switch to the three new dropdowns. The circle comes in (c).
-      - **Done (this PR):**
+      - **Done (PR #88):**
         - **`src/tuning/tuning.ts`:**
           - the tuning catalog (equal divisions, the just, historical and traditional tables) and the scales, now counted in degrees;
           - degree names: letters for 12-note tunings and 19/31-EDO, ratios for just intonation, numbers otherwise;
