@@ -281,7 +281,7 @@ Implementation comes first: block out every control so it works, then hold the d
       - Loop (L) is refused while a recording runs, matching its button.
       - Loop-marker dragging reads Loop from the store, not from the old drawer checkbox.
       - Below ~1150 px wide, the Perform button joins the top-bar row instead of centring over the canvas, where it would cover the menus.
-- [x] **16.4 Tool strip, Snap / Prism renames** *(M)*
+- [x] **16.4 Tool strip, Snap / Prism renames** *(M, PR #83)*
   - **Tool strip:**
     - It replaces the Tools drawer.
     - It can take over the Perform entry (a top-bar button since 16.2), unless 16.8 decides otherwise.
@@ -289,7 +289,7 @@ Implementation comes first: block out every control so it works, then hold the d
   - **Snap drawer:** Magnetic becomes Gravity.
   - **Prism drawer:** "Tuning" becomes Intonation.
   - The Tuning drawer is untouched until 13.8.
-  - **Done (this PR):**
+  - **Done (PR #83):**
     - **Tool strip** (`ui/tool-strip.tsx`) in the left rail, *below* the drawer icons and a divider (the user's call; the spec had it above):
       - Draw, Select, Delete and Slice as icons, plus the Perform entry, which moves here from the top bar. Each runs its catalog command.
       - The lit tool follows the store. In Perform, Perform is lit (violet) and no tool is. A recording keeps Perform lit but unclickable.
