@@ -323,10 +323,10 @@ Implementation comes first: block out every control so it works, then hold the d
       - while dragging a Y guide, the guide's pitch on the active track's tone, retuned as it moves (13.6).
     - The audition re-syncs every frame while A is held, so it picks up a guide drag that starts mid-hold and the cursor coming back onto the canvas. Nothing sounds while a recording is armed. Losing window focus stops it (the keyup would never arrive).
     - The old Space-hold ruler scrub preview is gone; audible scrubbing (16.3) covers it.
-- [x] **16.7 Theme tokens** *(M)*
+- [x] **16.7 Theme tokens** *(M, PR #86)*
   - Move every colour onto one set of named tokens. Today there are ~130 literal colours across `styles/*.css` and ~60 in the canvas renderers and `constants.ts`. The canvas should read the same tokens as the CSS, not a parallel list.
   - No visual change; it's the groundwork that lets 16.9 restyle the app without touching layout or logic.
-  - **Done (this PR):**
+  - **Done (PR #86):**
     - **`styles/theme.css`**, linked first by index.html and help.html, defines every colour as a token.
       - Channels: `--accent-rgb` and the like, for alpha variants.
       - Chrome: surfaces, text, borders, states (record, solo, danger, gold, perform, …).
