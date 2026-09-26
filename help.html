@@ -257,7 +257,7 @@
     holds the drawer icons; each opens a <strong>drawer</strong> that slides out over the
     canvas edge — <strong>Tempo</strong> (BPM, time signature, metronome),
     <strong>Snap</strong> (presets, Gravity, guides), <strong>Harmonic Prism</strong>, and
-    <strong>Tuning</strong> (tuning, root, scale, reference pitch). One drawer is open at a time;
+    <strong>Tuning</strong> (pitch circle, tuning, root, scale, reference pitch). One drawer is open at a time;
     <kbd>Escape</kbd> or a click on the canvas closes it. Below a divider sits the
     <strong>tool strip</strong>, always visible: <strong>Draw</strong>, <strong>Select</strong>,
     <strong>Delete</strong>, <strong>Slice</strong> and <strong>Perform</strong>. The active
@@ -815,6 +815,34 @@
     <li><strong>Scale</strong> — which notes the piece uses, counted from the root;
       <strong>All notes</strong> uses every note of the tuning.</li>
   </ul>
+  <details>
+    <summary>The pitch circle</summary>
+    <div class="detail-body">
+      <p>
+        The top of the Tuning drawer shows one octave of the tuning around a circle, C at the
+        top (a tuning that doesn't repeat at the octave, like Bohlen–Pierce, puts its first
+        note there instead).
+      </p>
+      <ul>
+        <li>Each note of the tuning is a tick on the rim, named outside it. The scale's notes
+          are filled dots, and the root has a ring. The root and scale are also shown in the
+          middle.</li>
+        <li>For tunings other than 12-EDO, a faint inner ring marks the 12 standard notes, so
+          you can see how far each note of the tuning is from them.</li>
+        <li><strong>Press</strong> a note to hear it on the current track's tone, for as long
+          as you hold it.</li>
+        <li><strong>Double-click</strong> a note to make it the root. Like choosing a root in
+          the menu, the scale moves with it: double-clicking D in C major gives D major.</li>
+        <li><strong>Shift+click</strong> a note to add it to the scale or take it out. That
+          makes a <strong>Custom</strong> scale, starting from the scale you had (with All notes,
+          every note is in, so Shift+click takes one out). The root always stays in, and
+          putting every note back is All notes again. Each change can be undone.</li>
+        <li>Your Custom scale is kept when you pick another scale, and stays in the Scale menu
+          (as "Custom (5 notes)") for any tuning with the same number of notes. It's saved with
+          the composition.</li>
+      </ul>
+    </div>
+  </details>
   <details>
     <summary>Tunings</summary>
     <div class="detail-body">

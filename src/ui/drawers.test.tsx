@@ -96,6 +96,32 @@ describe('Tuning drawer (BACKLOG 13.8)', () => {
     expect(html).not.toContain('Dorian');
   });
 
+  it('draws the pitch circle: a tick per degree, a dot per scale note, a ring on the root (13.8 (c))', () => {
+    store.setRoot(2);
+    store.setScaleId('major');
+    const html = panel();
+    expect(html.match(/class="pitch-circle-tick"/g)).toHaveLength(12);
+    expect(html.match(/class="pitch-circle-dot"/g)).toHaveLength(7);
+    expect(html.match(/class="pitch-circle-root"/g)).toHaveLength(1);
+    expect(html).toMatch(/class="pitch-circle-degree in-scale root" data-degree="2"/);
+    expect(html).not.toContain('pitch-circle-standard');   // 12-EDO has no inner ring
+  });
+
+  it('other octave tunings get the 12-note inner ring; Bohlen–Pierce doesn’t', () => {
+    store.setTuning({ kind: 'edo', divisions: 19, equave: 'octave' });
+    expect(panel().match(/class="pitch-circle-standard-dot"/g)).toHaveLength(12);
+    store.setTuning({ kind: 'edo', divisions: 13, equave: 'tritave' });
+    expect(panel()).not.toContain('pitch-circle-standard');
+  });
+
+  it('offers the Custom scale once there is one that fits', () => {
+    expect(panel()).not.toContain('value="custom"');
+    store.toggleScaleDegree(1);
+    const html = panel();
+    expect(html).toMatch(/<option[^>]*selected[^>]*value="custom"[^>]*>Custom \(11 notes\)</);
+    expect(html).toContain('Custom (11 notes)</text>');
+  });
+
   it('a historical table keeps the 12-note scales', () => {
     store.setTuning({ kind: 'table', id: 'werckmeister-3' });
     const html = panel();

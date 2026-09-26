@@ -513,10 +513,27 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
         - **Pitch readout:** the draw HUD names the tuning's nearest note and the cents from it (`pitchName`).
         - **Prism:** `chordOffsets(spec, steps)` moves each Equal voice to the tuning's nearest step, keeping voices apart. The steps are the tuning's intervals counted from the root (`chordStepsFor`), so offsets stay constant along a curve. The Intonation option reads "Equal (19-EDO)" etc. outside 12-EDO. Echo renderers and snap targets take offsets instead of the chord spec.
         - **Decision:** for unequal tables (Werckmeister, just intonation) "the tuning's steps" is its intervals from the root: a chord on the root sits on the staff's lines; on other degrees it keeps the root's interval shapes.
-    - [ ] **(c) The pitch-circle drawer** *(M)*
+    - [x] **(c) The pitch-circle drawer** *(M, PR #90)*
       - Rim ticks, scale dots, the root ring, and the 12-EDO inner ring.
       - Click to hear, double-click for root, Shift+click to toggle a degree (Custom scale).
       - The drawer's layout per the spec, on a Preact component.
+      - **Done (PR #90):**
+        - **`ui/pitch-circle.tsx`** (SVG, Preact) at the top of the Tuning drawer:
+          - one period, C at the top for octave tunings (degree 0 for others);
+          - a tick per degree; names on the rim up to 24 degrees, then only the root and the natural letters;
+          - filled dots for the scale, a ring on the root, and the root and scale named in the middle;
+          - the 12-note inner ring for octave tunings other than 12-EDO.
+        - **Gestures:**
+          - press and hold to hear (the current track's tone, `circle-audition` voice, octave 4; silent while a recording is armed);
+          - double-click for the root;
+          - Shift+click toggles a degree. Each is one undo step.
+        - **Custom scale:** `scaleId: 'custom'` plus `SnapSettings.customScale` (`{size, steps}`, steps from the root).
+          - It starts from the chosen scale (All notes: every degree). The root can't be taken out; a scale of every degree becomes All notes.
+          - It's kept when another scale or tuning is chosen, and offered in the Scale menu ("Custom (n notes)") for tunings of its size.
+          - Older files load with none, so no format bump; a pre-(c) app reads 'custom' as All notes.
+          - `scaleSteps()` in `tuning.ts` now resolves any scale for snapping, the staff and the store.
+        - **Decision:** double-click sets the root the way the Root menu does, so a scale moves with it (C major → D major), Custom scales included. The alternative, keeping the dots where they are and changing only which one is home (C major → D Dorian), is noted under Deferred.
+        - Import / Export .scl buttons come with (d).
     - [ ] **(d) `.scl` import and export** *(S–M)*
       - Import into an Imported tuning, with the description line treated as untrusted text.
       - Export the notes you hear, from the root.
@@ -527,6 +544,7 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
   - **Deferred:**
     - **(e) Scale generator for other equal divisions** — MOS: large and small step counts plus mode rotation; the MIT `moment-of-symmetry` library covers the maths. A second editor, so its own item.
     - **Retuning on the circle** — dragging a degree around the pitch circle to make a Custom tuning directly. The frets route (f) covers it for now.
+    - **"Make home" on the circle** — a gesture (e.g. Alt+double-click) that changes the root but keeps the same notes: C major's dots with A as home is A natural minor. Recognise a named scale when the rotation is one, else keep it Custom.
 - [ ] **13.21 Prism chords per note in unequal tunings** *(M — first slice S)*
   - Since 13.8 (b), Equal intonation in an unequal tuning (Werckmeister, meantone, just intonation) builds every chord from the root's intervals. So a chord on any other note is the root chord moved, and every key sounds the same.
   - **Add a second option**, e.g. Intonation **Tuning (per note)** beside **Equal (from root)**: the chord uses the tuning's own notes above the base, as a keyboard in that temperament would. E major's third in Werckmeister is wider than C major's.

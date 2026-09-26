@@ -16,6 +16,7 @@ export function createDefaultSnapSettings(): SnapSettings {
     tuning: { ...TWELVE_EDO },
     root: 0,
     scaleId: ALL_NOTES,
+    customScale: null,
     tunedFrom: 0,
     hidePitchLines: false,
     referenceLines: true,

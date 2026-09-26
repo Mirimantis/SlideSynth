@@ -386,6 +386,8 @@ window.addEventListener('blur', () => dynamics.setSwellHeld(false));
 let auditionHeld = false;
 /** Voice for a dragged Y guide's pitch — separate from the Draw voices. */
 const GUIDE_AUDITION_VOICE = 'guide-audition';
+/** Voice for a pitch-circle degree held down in the Tuning drawer (13.8 (c)). */
+const CIRCLE_AUDITION_VOICE = 'circle-audition';
 
 function activeTone() {
   const st = store.getState();
@@ -404,7 +406,10 @@ function stopAudition() {
   if (preview.isDrawPreviewActive(GUIDE_AUDITION_VOICE)) preview.stopDrawPreview(GUIDE_AUDITION_VOICE);
 }
 // A's keyup never arrives while the window is unfocused; don't leave it sounding.
-window.addEventListener('blur', () => { if (auditionHeld) stopAudition(); });
+window.addEventListener('blur', () => {
+  if (auditionHeld) stopAudition();
+  if (preview.isDrawPreviewActive(CIRCLE_AUDITION_VOICE)) preview.stopDrawPreview(CIRCLE_AUDITION_VOICE);
+});
 
 /** Keep what's sounding in step with what A is held over. Runs on press and
  *  every frame while held, so the audition picks up a guide drag that starts
@@ -719,6 +724,18 @@ const tuningActions: TuningActions = {
   setTuning(ref) { history.snapshot(); store.setTuning(ref); },
   setRoot(degree) { history.snapshot(); store.setRoot(degree); },
   setScale(scaleId) { history.snapshot(); store.setScaleId(scaleId); },
+  toggleScaleDegree(degree) { history.snapshot(); store.toggleScaleDegree(degree); },
+  audition(cents) {
+    // The pitch circle's press-to-hear (13.8 (c)). Nothing sounds while a
+    // recording is armed: the take owns the audio.
+    const tone = activeTone();
+    if (cents === null || !tone || isRecordArmed(store.getState().transport)) {
+      if (preview.isDrawPreviewActive(CIRCLE_AUDITION_VOICE)) preview.stopDrawPreview(CIRCLE_AUDITION_VOICE);
+      return;
+    }
+    if (preview.isDrawPreviewActive(CIRCLE_AUDITION_VOICE)) preview.updateDrawPitch(cents, CIRCLE_AUDITION_VOICE);
+    else preview.startDrawPreview(tone, cents, CIRCLE_AUDITION_VOICE);
+  },
   setTunedFrom(pc) { history.snapshot(); store.setTunedFrom(pc); },
   setPitchLinesVisible(visible) { history.snapshot(); store.setPitchLinesVisible(visible); },
   setReferenceLines(visible) { history.snapshot(); store.setReferenceLines(visible); },

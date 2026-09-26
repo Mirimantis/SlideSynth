@@ -3,20 +3,20 @@ import { useState } from 'preact/hooks';
 import { store } from '../state/store';
 import { centsToReferenceAHz } from '../constants';
 import {
-  ALL_NOTES, MAX_EDO, MIN_EDO, TUNING_TABLES, TWELVE_EDO,
-  clampDivisions, degreeName, isTwelveEdo, resolveTuning, scalesFor,
+  ALL_NOTES, CUSTOM_SCALE, MAX_EDO, MIN_EDO, TUNING_TABLES, TWELVE_EDO,
+  clampDivisions, customFits, degreeName, getScale, isTwelveEdo, resolveTuning, scaleSteps, scalesFor,
   type Equave, type TuningGroup, type TuningRef,
 } from '../tuning/tuning';
+import { PitchCircle, type PitchCircleActions } from './pitch-circle';
 
 /**
- * The Tuning drawer's controls (BACKLOG 13.8 (a); spec in DESIGN.md › Tuning
- * spec): Tuning, Root, Scale, Tuned from (for tunings other than 12-EDO),
- * Tune A4, the Pitch lines switch and (13.8 (b), for tunings other than
- * 12-EDO) the 12-EDO reference switch. 13.8 (c) puts the pitch circle above
- * them.
+ * The Tuning drawer (BACKLOG 13.8; spec in DESIGN.md › Tuning spec): the
+ * pitch circle (c) over Tuning, Root, Scale, Tuned from (for tunings other
+ * than 12-EDO), Tune A4, the Pitch lines switch and (b, for tunings other
+ * than 12-EDO) the 12-EDO reference switch.
  */
 
-export interface TuningActions {
+export interface TuningActions extends PitchCircleActions {
   /** Each is one undo step; main.ts takes the snapshot and redraws. */
   setTuning(ref: TuningRef): void;
   setRoot(degree: number): void;
@@ -43,8 +43,15 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
   const selected = isTwelveEdo(ref) ? TWELVE : ref.kind === 'edo' ? EQUAL_DIVISIONS : ref.id;
   const scales = scalesFor(tuning);
   const scaleGroups = [...new Set(scales.map(s => s.group))];
+  const custom = customFits(st.customScale, tuning) ? st.customScale : null;
+  const customName = custom ? `Custom (${custom.steps.length} notes)` : '';
+  const steps = scaleSteps(st, tuning);
+  const scaleValue = steps === null ? ALL_NOTES : st.scaleId;
+  const scaleName = steps === null ? 'All notes'
+    : st.scaleId === CUSTOM_SCALE ? customName : getScale(st.scaleId)?.name ?? '';
   return (
     <div class="drawer-section tuning-panel">
+      <PitchCircle actions={actions} scaleName={scaleName} />
       <div class="transport-row">
         <label for="tuning-select">Tuning</label>
         <select
@@ -91,10 +98,11 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
         <select
           id="tuning-scale"
           title="Which notes the piece uses"
-          value={scales.some(s => s.id === st.scaleId) ? st.scaleId : ALL_NOTES}
+          value={scaleValue}
           onChange={e => { actions.setScale(value(e)); blur(e); }}
         >
           <option value={ALL_NOTES}>All notes</option>
+          {custom && <option value={CUSTOM_SCALE}>{customName}</option>}
           {scaleGroups.map(group => (
             <optgroup key={group} label={group}>
               {scales.filter(s => s.group === group).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}

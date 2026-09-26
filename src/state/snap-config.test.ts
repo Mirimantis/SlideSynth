@@ -24,6 +24,7 @@ function sources(over: Partial<SnapSources> = {}): SnapSources {
     tuning: { kind: 'edo', divisions: 12, equave: 'octave' },
     root: 0,
     scaleId: 'all',
+    customScale: null,
     tunedFrom: 0,
     hidePitchLines: false,
     guidesVisible: true,
