@@ -389,7 +389,7 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
 - [x] **13.6 Audition a Y guide's pitch while dragging** *(S — done in 16.6, PR #85)*
   - Sounds the snapped pitch on the current track's tone. Sequence after 13.5.
   - **Absorbed by 16.6** (2026-09-24): the key is hold A, not Space. Y guides can already be dragged, so this doesn't need to wait for 13.5.
-- [ ] **13.9 Octave highlight follows the key root** *(S)*
+- [ ] **13.9 Octave highlight follows the key root** *(S — absorbed by 13.8 (b))*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
 - [ ] **13.11 Recording simplification density** *(S–M)*
@@ -419,6 +419,8 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
   - Toggling back to Single keeps only the originally placed fret; the other instances disappear.
   - **Data:** an optional field on the guide (e.g. `repeat: 'octave'`) that round-trips; the stored `position` stays the originally placed one. Dragging an instance moves that position by the drag's delta.
   - **Snap:** the one snap-config builder (15.6) expands a repeating fret into its octave targets, so snapping, Gravity and rendering all agree.
+  - **Non-octave tunings** (13.8): "Octaves" repeats every period of the tuning, which is the octave except in tunings like Bohlen–Pierce.
+  - Octave frets are what 13.8 (f) converts to and from a scale.
 - [ ] **13.19 Per-fret gravity** *(M–L, own planning session)*
   - Feasibility of letting a fret carry its own snap parameters. New frets follow the universal Snap settings; a per-fret toggle enables custom settings: Gravity on/off, Force, Spring, Damping and an **effect distance** (reach).
   - Within its reach, a custom fret takes precedence over the canvas's scale lines.
@@ -460,18 +462,39 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - reuses 8.23's non-active dimming for the fade.
 
 ### Snap, harmony & tuning
-- [ ] **13.8 Tuning / key / scale model rework** *(L, own planning session)*
-  - The Key + Scale dropdowns mix two orthogonal axes: the **tuning** (which pitch classes exist) and the **subset/mode**. `24tet` and `thai-7tet` are tunings sitting in a mode list, and the maqams fuse both.
-  - **Direction (settled 2026-08-10):** no strict cascade.
-    - Group like with like into overlapping sections.
-    - Parameterize the generative families: EDO by N and equave, possibly MOS, JI by limit.
-    - Allow `.scl` import.
-    - Keep reference pitch as a separate, always-visible control.
-    - Recommended core: **Tuning / Root / Scale** as three controls.
-  - **Load-bearing data change:** `scaleRoot` is quantized to 12-EDO (0–11). Generalize it to a cents offset or degree index, with a migration and golden-format shim.
-  - **Open question:** does the staff keep the 12-EDO substrate under non-12 tunings? This decides whether the app is a 12-EDO tool with microtonal decoration or genuinely tuning-agnostic.
-  - **This session also owns the Tuning drawer's redesign** (decided in 16.1): make it more visually intuitive than today's dropdowns. The drawer stays separate from Snap.
-  - The full research report, with sources and ten open questions, is in [.claude/plans/13.8-tuning-taxonomy-research.md](.claude/plans/13.8-tuning-taxonomy-research.md).
+- [ ] **13.8 Tuning / key / scale model rework** *(L — planning session held 2026-09-26)*
+  - **Spec:** [DESIGN.md › Tuning spec](DESIGN.md#tuning-spec-138-decided-2026-09-26). In short:
+    - **Tuning / Root / Scale** replace Key + Scale; Tune A4 stays separate; "None" becomes a Pitch lines switch.
+    - The staff follows the tuning.
+    - The drawer is a **pitch circle** over the controls.
+    - Frets and scales convert both ways.
+    - `.scl` import and export.
+  - Research, with sources: [.claude/plans/13.8-tuning-taxonomy-research.md](.claude/plans/13.8-tuning-taxonomy-research.md).
+  - **Build in this order:**
+    - [ ] **(a) Tuning model + migration** *(M)*
+      - Tuning, Root (a degree index), Scale, Pitch lines, and "Tuned from" for historical temperaments.
+      - The built-in tunings: 12-EDO, equal divisions (N, octave or 3:1), a curated just-intonation list, the historical tables, Slendro and Pelog.
+      - The composition version goes up, with the migration table in the spec and a golden-format shim.
+      - The Tuning drawer's controls switch to the three new dropdowns. The circle comes in (c).
+    - [ ] **(b) Staff, labels and snap per tuning** *(M)*
+      - The staff draws the tuning's degrees, named by the naming rule, with the optional 12-EDO reference layer.
+      - Snapping without a scale falls back to the tuning's degrees.
+      - The octave highlight follows the root (absorbs 13.9).
+      - Prism "Equal" intonation uses the tuning's steps.
+    - [ ] **(c) The pitch-circle drawer** *(M)*
+      - Rim ticks, scale dots, the root ring, and the 12-EDO inner ring.
+      - Click to hear, double-click for root, Shift+click to toggle a degree (Custom scale).
+      - The drawer's layout per the spec, on a Preact component.
+    - [ ] **(d) `.scl` import and export** *(S–M)*
+      - Import into an Imported tuning, with the description line treated as untrusted text.
+      - Export the notes you hear, from the root.
+      - A performance check with a large file (e.g. 43 or 192 notes).
+    - [ ] **(f) Frets ↔ scale** *(M — after 13.18 and (c))*
+      - Scale → octave frets.
+      - Octave frets → a Custom scale, or a Custom tuning if any fret is off the tuning's degrees. Single frets stay as they are.
+  - **Deferred:**
+    - **(e) Scale generator for other equal divisions** — MOS: large and small step counts plus mode rotation; the MIT `moment-of-symmetry` library covers the maths. A second editor, so its own item.
+    - **Retuning on the circle** — dragging a degree around the pitch circle to make a Custom tuning directly. The frets route (f) covers it for now.
 - [ ] **13.15 Gravity feel preview** *(M)*
   - A small animated waveform in the Snap drawer showing what Force, Spring and Damping do: its amplitude, frequency and falloff change as you move the sliders.
   - Drive it from the real `snap-magnetic` integrator (a step response into a well), so the preview is the feel, not an illustration of it.
