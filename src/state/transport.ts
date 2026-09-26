@@ -29,10 +29,10 @@ export const TRANSPORT_STOPPED: TransportState = {
 };
 
 export type TransportEvent =
-  /** Play button, or Space tap while stopped / paused. `openEnded` in
+  /** Play button, or Space while stopped / paused. `openEnded` in
    *  Perform: the clock runs until stopped instead of ending with the content. */
   | { type: 'play'; openEnded: boolean }
-  /** Pause button, or Space tap while rolling. */
+  /** Pause button, or Space while rolling. */
   | { type: 'pause' }
   /** Stop button, AFK timeout, file open, or the transport reaching its end. */
   | { type: 'stop' }

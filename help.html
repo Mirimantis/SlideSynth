@@ -584,15 +584,15 @@
   <!-- Live Audio Preview -->
   <h2 id="preview">Live Audio Preview</h2>
   <p>
-    Hold <kbd>Space</kbd> to hear a live preview of the note at the cursor position.
-    This lets you audition pitches before placing points, making melodic exploration
-    much faster.
+    Hold <kbd>A</kbd> to <strong>audition</strong>: hear a live preview of the note at the
+    cursor position. This lets you try pitches before placing points, making melodic
+    exploration much faster. (<kbd>Space</kbd> is only Play / Pause.)
   </p>
   <details>
     <summary>Preview details</summary>
     <div class="detail-body">
       <ul>
-        <li><strong>Draw preview</strong> — in Draw mode, hold <kbd>Space</kbd> with the cursor
+        <li><strong>Draw preview</strong> — in Draw mode, hold <kbd>A</kbd> with the cursor
             over the canvas. The <strong>Tool</strong> panel offers two modes:
             <ul>
               <li><strong>Tone only</strong> (default) — hear the current track's tone at
@@ -604,14 +604,15 @@
                   audition the new pitch against the rest of the composition.</li>
             </ul>
         </li>
-        <li><strong>Scrub preview</strong> — while click-dragging in the ruler to scrub,
-            hold <kbd>Space</kbd> to hear all active curves at the current playhead position.
-            Drag left/right to hear how the composition sounds at each point in time.</li>
+        <li><strong>Guide pitch</strong> — while dragging a horizontal (pitch) guide in the
+            Select tool, hold <kbd>A</kbd> to hear the guide's pitch on the current track's
+            tone as it moves. Snap applies, so you hear exactly where it will land.</li>
+        <li><strong>Scrubbing</strong> the ruler needs no key: it plays what's under the
+            playhead as you drag. Turn <strong>Audible scrub</strong> off in Settings for
+            silent scrubbing.</li>
         <li>Pitch respects snap and scale settings — if snap is on with a scale selected,
             you'll hear scale-quantised notes.</li>
-        <li>Release <kbd>Space</kbd> to stop the preview.</li>
-        <li>When the cursor is not over the canvas or you're not in Draw mode,
-            <kbd>Space</kbd> works as the normal play/pause toggle.</li>
+        <li>Release <kbd>A</kbd> to stop. Nothing sounds while a recording is armed.</li>
       </ul>
     </div>
   </details>

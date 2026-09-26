@@ -69,6 +69,14 @@ describe('command catalog', () => {
     expect(commandForKey(key('j', 'KeyJ'))).toBeNull();
   });
 
+  it('Space is Play/Pause only; holding A auditions (BACKLOG 16.6)', () => {
+    const spec = (id: string) => COMMAND_SPECS.find(c => c.id === id)!;
+    expect(commandForKey(key(' ', 'Space'))).toBe('transport.playPause');
+    expect(spec('transport.playPause').hold).toBeFalsy();
+    expect(commandForKey(key('a', 'KeyA'))).toBe('preview.audition');
+    expect(spec('preview.audition').hold).toBe(true);
+  });
+
   it('builds tooltips and shortcut text from the catalog', () => {
     expect(commandTitle('tool.draw')).toBe('Draw (D)');
     expect(commandTitle('perform.keep')).toBe('Keep that (K) — commit the phrase you just played');

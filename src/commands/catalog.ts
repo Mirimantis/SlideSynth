@@ -21,7 +21,7 @@ export interface CommandSpec {
   readonly keys?: readonly string[];
   /** Continues the label in tooltips and on the help page ("Label — description"). */
   readonly description?: string;
-  /** A held key: its release goes to the command too (Space tap-vs-hold, F swell). */
+  /** A held key: its release goes to the command too (A audition, F swell). */
   readonly hold?: boolean;
   /** Ignore keyboard auto-repeat (toggles and one-shot perform actions). */
   readonly once?: boolean;
@@ -29,8 +29,7 @@ export interface CommandSpec {
 
 export const COMMANDS = [
   // ── Transport ──
-  { id: 'transport.playPause', label: 'Play / Pause', section: 'Transport', keys: ['Space'], hold: true,
-    description: 'tap to play or pause; hold for a live preview in Draw, or while scrubbing the ruler' },
+  { id: 'transport.playPause', label: 'Play / Pause', section: 'Transport', keys: ['Space'], once: true },
   { id: 'transport.play', label: 'Play', section: 'Transport' },
   { id: 'transport.pause', label: 'Pause', section: 'Transport' },
   { id: 'transport.stop', label: 'Stop', section: 'Transport', description: 'rewinds the playhead' },
@@ -63,6 +62,8 @@ export const COMMANDS = [
   { id: 'tool.slice', label: 'Slice', section: 'Tools', keys: ['C'], description: 'click a curve to split it' },
   { id: 'edit.finishCurve', label: 'Finish curve', section: 'Tools', keys: ['Enter'], description: 'end the curve you’re drawing' },
   { id: 'snap.toggle', label: 'Snap', section: 'Tools', keys: ['S'], description: 'toggle snap' },
+  { id: 'preview.audition', label: 'Audition', section: 'Tools', keys: ['A'], hold: true,
+    description: 'hold to hear the pitch under the Draw cursor, or a Y guide’s pitch while you drag it' },
 
   // ── Edit ──
   { id: 'edit.undo', label: 'Undo', section: 'Edit', keys: ['Ctrl+Z'] },

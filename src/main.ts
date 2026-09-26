@@ -381,29 +381,66 @@ watch(() => store.getState().dynamicsSource, source => dynamics.setSource(source
 // would leave the swell latched on. Releasing on blur is the cheap fix.
 window.addEventListener('blur', () => dynamics.setSwellHeld(false));
 
-// Spacebar tap-vs-hold: under this threshold, Space is a transport tap (play / pause /
-// stop-recording). Past it, Space becomes a hold-to-preview. The timer fires the preview
-// activation so a quick tap never triggers audio preview.
-const SPACE_HOLD_MS = 250;
-let spaceHoldTimer: number | null = null;
+// ── Audition: hold A (BACKLOG 16.6) ───────────────────────────
+// Space is Play/Pause only. Holding A auditions: in Draw, the pitch under the
+// cursor (with the composition too, per Draw Preview); while dragging a Y
+// guide, the guide's pitch (13.6). Scrubbing the ruler is audible on its own
+// (Settings › Audible scrub), so it needs no key.
+let auditionHeld = false;
+/** Voice for a dragged Y guide's pitch — separate from the Draw voices. */
+const GUIDE_AUDITION_VOICE = 'guide-audition';
 
-/** Start the preview appropriate to current context (Draw cursor, scrubbing). No-op during recording. */
-function activateSpacePreview() {
-  spaceHoldTimer = null;
-  const state = store.getState();
-  if (isRecordArmed(state.transport)) return;
-  const inDrawContext = state.activeTool === 'draw'
+function activeTone() {
+  const st = store.getState();
+  const track = st.composition.tracks.find(t => t.id === st.selectedTrackId);
+  return track ? st.composition.toneLibrary.find(t => t.id === track.toneId) ?? null : null;
+}
+
+function startAudition() {
+  auditionHeld = true;
+  syncAudition();
+}
+
+function stopAudition() {
+  auditionHeld = false;
+  if (previewActive) { preview.stopAll(); setPreviewActive(false); }
+  if (preview.isDrawPreviewActive(GUIDE_AUDITION_VOICE)) preview.stopDrawPreview(GUIDE_AUDITION_VOICE);
+}
+// A's keyup never arrives while the window is unfocused; don't leave it sounding.
+window.addEventListener('blur', () => { if (auditionHeld) stopAudition(); });
+
+/** Keep what's sounding in step with what A is held over. Runs on press and
+ *  every frame while held, so the audition picks up a guide drag that starts
+ *  mid-hold, or the cursor coming back onto the canvas. Nothing sounds while
+ *  a recording is armed: the take owns the audio. */
+function syncAudition() {
+  if (!auditionHeld) return;
+  const st = store.getState();
+  if (isRecordArmed(st.transport)) return;
+
+  // A dragged Y guide sounds its own pitch.
+  const guide = interaction.draggingGuideId
+    ? st.composition.guides.find(g => g.id === interaction.draggingGuideId)
+    : undefined;
+  const tone = activeTone();
+  if (guide?.orientation === 'y' && tone) {
+    if (preview.isDrawPreviewActive(GUIDE_AUDITION_VOICE)) preview.updateDrawPitch(guide.position, GUIDE_AUDITION_VOICE);
+    else preview.startDrawPreview(tone, guide.position, GUIDE_AUDITION_VOICE);
+    return;
+  }
+  if (preview.isDrawPreviewActive(GUIDE_AUDITION_VOICE)) preview.stopDrawPreview(GUIDE_AUDITION_VOICE);
+
+  // In Draw, the cursor's pitch. onCursorMove retunes it as the cursor moves.
+  if (previewActive) return;
+  const inDrawContext = st.activeTool === 'draw'
+    && !st.performMode
     && interaction.cursorInCanvas
     && interaction.cursorScreenY >= RULER_HEIGHT
     && interaction.cursorWorld !== null;
-  const inScrubContext = interaction.scrubbing;
-
   if (inDrawContext) {
-    const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-    const tone = track ? state.composition.toneLibrary.find(t => t.id === track.toneId) : null;
-    if (state.drawPreviewMode === 'composition' && interaction.cursorWorld) {
-      preview.startScrubPreview(state.composition);
-      preview.updateScrubPosition(interaction.cursorWorld.x, state.composition);
+    if (st.drawPreviewMode === 'composition' && interaction.cursorWorld) {
+      preview.startScrubPreview(st.composition);
+      preview.updateScrubPosition(interaction.cursorWorld.x, st.composition);
       if (tone) startPrismDrawPreview(tone, interaction.cursorWorld.y);
       setPreviewActive(true);
       // Page view: snap the playhead to the cursor so the user sees the scrub
@@ -415,16 +452,12 @@ function activateSpacePreview() {
       startPrismDrawPreview(tone, interaction.cursorWorld.y);
       setPreviewActive(true);
     }
-  } else if (inScrubContext) {
-    preview.startScrubPreview(state.composition);
-    preview.updateScrubPosition(state.playback.positionBeats, state.composition);
-    setPreviewActive(true);
   }
 }
 
-/** Short-tap action: pause playback (a recording stops instead), cancel a
- *  count-in, or start playing. */
-function handleSpaceTap() {
+/** Space: pause playback (a recording stops instead), cancel a count-in, or
+ *  start playing. */
+function playPause() {
   const t = store.getState().transport;
   if (isRolling(t)) transport({ type: 'pause' });
   else if (t.mode === 'countdown') transport({ type: 'escape' });
@@ -434,7 +467,7 @@ function handleSpaceTap() {
 // ── Interaction ─────────────────────────────────────────────────
 let scrubWasPlaying = false;
 // True while a ruler-drag is driving the scrub preview, so we can stop it cleanly on release
-// without interfering with a spacebar-driven preview.
+// without interfering with a hold-A audition.
 let rulerScrubPreviewActive = false;
 // Dev-only debug accessor: lets the verification harness probe interaction
 // + store state. Stripped by the bundler in production via tree-shaking on
@@ -1212,30 +1245,8 @@ const commands = createCommandRegistry({
   ...createEditCommands({ interaction, viewport, isPerformLocked: isComposePerformActive, pasteBeat }),
 
   // ── Transport ──
-  'transport.playPause': {
-    // Tap vs hold: a release before SPACE_HOLD_MS is a transport tap; past it,
-    // Space becomes hold-to-preview.
-    run() {
-      if (spaceHoldTimer !== null) window.clearTimeout(spaceHoldTimer);
-      spaceHoldTimer = window.setTimeout(activateSpacePreview, SPACE_HOLD_MS);
-    },
-    // Timer still pending: a tap. Timer fired but no preview started (e.g.
-    // recording): still a tap, so the transport responds. Otherwise the end of
-    // a hold: stop the preview.
-    release() {
-      const wasTap = spaceHoldTimer !== null;
-      if (spaceHoldTimer !== null) {
-        window.clearTimeout(spaceHoldTimer);
-        spaceHoldTimer = null;
-      }
-      if (wasTap || !previewActive) {
-        handleSpaceTap();
-        return;
-      }
-      preview.stopAll();
-      setPreviewActive(false);
-    },
-  },
+  'transport.playPause': { run: playPause },
+  'preview.audition': { run: startAudition, release: stopAudition },
   'transport.play': { run: play },
   // Playback pauses; a recording or queued pass ends instead — a capture has
   // no paused state to resume.
@@ -1762,7 +1773,7 @@ function updateComposePerformPitch(snappedBaseY: number) {
  * chord plays: chord voice 0's offset. It isn't always 0 — a symmetric chord
  * centres on the cursor (its lowest voice sits below it), and a root octave
  * offset (8.13) moves voice 0 too. Draw always applied it; the perform and
- * Space-preview paths assumed 0, so a symmetric triad played its middle voice
+ * audition paths assumed 0, so a symmetric triad played its middle voice
  * twice and never its lowest.
  *
  * The primary planchette itself keeps the cursor's pitch — magnetic physics,
@@ -1880,10 +1891,10 @@ function syncHarmonyPlanchettes() {
   }
 }
 
-// ── Prism idle preview (Spacebar) ──────────────────────────────
-/** Start the Spacebar idle preview as a Prism chord cluster when drawMode is
+// ── Prism idle preview (hold-A audition) ─────────────────────
+/** Start the idle audition as a Prism chord cluster when drawMode is
  *  on, otherwise a single voice. Mirrors the perform-time multi-voice setup
- *  but uses the Spacebar-preview path (no recording, no planchettes added —
+ *  but uses the audition path (no recording, no planchettes added —
  *  the active draw-mode preview dots already show the cursor cluster). */
 function startPrismDrawPreview(tone: import('./types').ToneDefinition, snappedBaseY: number) {
   preview.startDrawPreview(tone, snappedBaseY + primaryChordOffset(), 'primary');
@@ -2580,7 +2591,7 @@ createInputRouter({
 });
 
 // Input moves state the store doesn't hold (cursor position, drags, marquee,
-// hover, Space-hold preview), so any of it asks for a redraw (15.5). Capture
+// hover, hold-A audition), so any of it asks for a redraw (15.5). Capture
 // phase, so this runs even when a handler stops propagation.
 for (const el of [fgCanvas, paramCanvas]) {
   for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'pointerenter', 'pointerleave', 'lostpointercapture', 'wheel', 'dblclick', 'contextmenu']) {
@@ -2734,6 +2745,7 @@ function runFrame() {
   // so toggling the HUD on instantly has 2 s of accurate p50/p99.
   pushFrameTime(performance.now());
   tickFrame();
+  syncAudition();
 
   const state = store.getState();
   keepable.value = composeEngine.getKeepablePhraseCount();
@@ -3095,7 +3107,7 @@ function draw() {
     renderMarquee(fgCtx, viewport, interaction.marquee.startWorld, interaction.marquee.currentWorld);
   }
 
-  // Free planchette: Idle + Space-hold draw preview + cursor over canvas.
+  // Free planchette: Idle + hold-A audition + cursor over canvas.
   // Rendered at cursor X so the user sees exactly where they'd place / are hearing.
   if (freePlanchetteVisible && interaction.cursorWorld) {
     const cursorWorld = interaction.cursorWorld;
