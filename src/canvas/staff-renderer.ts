@@ -1,22 +1,30 @@
 import type { Viewport } from './viewport';
 import {
-  MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_SEMITONE,
-  centsToNoteName, isCCents, isNaturalCents,
+  MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_SEMITONE, centsToNoteName, isCCents,
   DEFAULT_BEATS_PER_MEASURE, SUBDIVISIONS_PER_BEAT,
 } from '../constants';
-import type { PitchSet } from '../tuning/tuning';
+import type { StaffGrid, StaffLine } from '../tuning/tuning';
 import { getAdaptiveBeatStep } from '../utils/snap';
 import { themeColor } from '../theme/theme';
+
+/** Lines outside the scale fade out as neighbouring notes close from 4 px to
+ *  1.5 px apart, so a 72-note tuning zoomed out isn't a solid block. */
+const FADE_FROM_PX = 4;
+const FADE_TO_PX = 1.5;
+/** Labels closer than this to a label already drawn are skipped. */
+const LABEL_GAP_PX = 9;
+/** A 12-EDO reference line this close to a note of the tuning isn't drawn. */
+const REFERENCE_CLEAR_PX = 3;
 
 /**
  * Render the background staff grid onto a canvas.
  * Draws horizontal note lines and vertical beat/subdivision lines.
  *
- * The pitch lines follow the pitch set (13.8): 12-EDO with All notes is the
- * plain chromatic staff; a set on 12-EDO lines highlights its notes and dims
- * the rest; a set off those lines draws its notes over the chromatic staff,
- * dashed where they fall between its lines. A null set (pitch lines hidden)
- * draws none. 13.8 (b) replaces the 12-EDO substrate with the tuning's own.
+ * The pitch lines are the tuning's notes (13.8 (b)): the root's lines are the
+ * bold octave markers, main lines are the natural letters (or every note of a
+ * tuning named by number or ratio), and with a scale its notes are highlighted
+ * and the rest dimmed. `reference` adds a faint 12-EDO layer under a tuning
+ * other than 12-EDO. A null grid (pitch lines hidden) draws none.
  */
 export function renderStaff(
   ctx: CanvasRenderingContext2D,
@@ -24,7 +32,8 @@ export function renderStaff(
   width: number,
   height: number,
   measureLen: number = DEFAULT_BEATS_PER_MEASURE,
-  pitchSet: PitchSet | null = null,
+  grid: StaffGrid | null = null,
+  reference: boolean = false,
 ): void {
   ctx.clearRect(0, 0, width, height);
 
@@ -34,118 +43,12 @@ export function renderStaff(
 
   const minBeat = Math.floor(topLeft.wx);
   const maxBeat = Math.ceil(bottomRight.wx);
-  // Visible pitch range snapped outward to 12-TET lines (100-cent grid).
-  const minNote = Math.floor(bottomRight.wy / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
-  const maxNote = Math.ceil(topLeft.wy / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
 
-  const hasScale = pitchSet !== null && !pitchSet.plainChromatic;
-  const microtonalScale = hasScale && !pitchSet.onTwelveEdo;
-  // For microtonal sets, don't dim/highlight integer lines — keep default styling
-  const highlightIntegers = hasScale && !microtonalScale;
-  const inSet = new Set(highlightIntegers ? pitchSet.notes.map(Math.round) : []);
-  const isInScale = (n: number) => inSet.has(n);
-  // Pitch lines hidden (8.19): no lines or labels at all.
-  const drawPitchLines = pitchSet !== null;
-
-  // ── Horizontal note lines ──────────────────────────────────
-  if (drawPitchLines) {
-    for (let n = Math.max(minNote, MIN_PITCH_CENTS); n <= Math.min(maxNote, MAX_PITCH_CENTS); n += CENTS_PER_SEMITONE) {
-      const { sy } = vp.worldToScreen(0, n);
-
-      if (highlightIntegers) {
-        const inScale = isInScale(n);
-        if (inScale) {
-          if (isCCents(n)) {
-            ctx.strokeStyle = themeColor('staff-key-c');
-            ctx.lineWidth = 2.0;
-          } else if (isNaturalCents(n)) {
-            ctx.strokeStyle = themeColor('staff-key-natural');
-            ctx.lineWidth = 1.0;
-          } else {
-            ctx.strokeStyle = themeColor('staff-key-accidental');
-            ctx.lineWidth = 1.0;
-          }
-        } else {
-          ctx.strokeStyle = themeColor('staff-key-out');
-          ctx.lineWidth = 0.3;
-        }
-      } else {
-        if (isCCents(n)) {
-          ctx.strokeStyle = themeColor('staff-line-c');
-          ctx.lineWidth = 1.5;
-        } else if (isNaturalCents(n)) {
-          ctx.strokeStyle = themeColor('staff-line-natural');
-          ctx.lineWidth = 0.8;
-        } else {
-          ctx.strokeStyle = themeColor('staff-line-accidental');
-          ctx.lineWidth = 0.5;
-        }
-      }
-
-      ctx.beginPath();
-      ctx.moveTo(0, sy);
-      ctx.lineTo(width, sy);
-      ctx.stroke();
-
-      // Note labels on the left edge
-      // When a scale is active, show labels for all in-scale notes at moderate zoom
-      const inScaleForLabel = highlightIntegers && isInScale(n);
-      const showLabel = isCCents(n)
-        || (vp.state.zoomY >= 0.10 && (isNaturalCents(n) || inScaleForLabel))
-        || vp.state.zoomY >= 0.18;
-      if (showLabel) {
-        if (highlightIntegers) {
-          if (inScaleForLabel) {
-            ctx.fillStyle = isCCents(n) ? themeColor('staff-key-label-c') : themeColor('staff-key-label');
-          } else {
-            ctx.fillStyle = themeColor('staff-key-label-out');
-          }
-        } else {
-          ctx.fillStyle = isCCents(n) ? themeColor('staff-label-c') : themeColor('staff-label');
-        }
-        ctx.font = isCCents(n) ? 'bold 11px monospace' : '10px monospace';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(centsToNoteName(n), 4, sy);
-      }
-    }
-  }
-
-  // ── Scale guide lines (microtonal scales) ──────────────────
-  // For microtonal scales, draw ALL scale degrees as guide lines
-  // (dashed for fractional positions, solid for integer positions)
-  if (microtonalScale) {
-    for (const n of pitchSet.notes) {
-      if (n < minNote || n > maxNote) continue;
-      const { sy } = vp.worldToScreen(0, n);
-      // "Fractional" = off the 12-TET 100-cent grid (microtonal degree).
-      const centsOff = Math.round(n - Math.floor(n / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE);
-      const isFractional = centsOff !== 0;
-
-      ctx.strokeStyle = themeColor('staff-micro-line');
-      ctx.lineWidth = 1.0;
-      if (isFractional) {
-        ctx.setLineDash([4, 4]);
-      }
-      ctx.beginPath();
-      ctx.moveTo(0, sy);
-      ctx.lineTo(width, sy);
-      ctx.stroke();
-      if (isFractional) {
-        ctx.setLineDash([]);
-      }
-
-      // Guide line label: nearest lower 12-TET line + cents remainder
-      if (vp.state.zoomY >= 0.14) {
-        const baseCents = Math.floor(n / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
-        ctx.fillStyle = themeColor('staff-micro-label');
-        ctx.font = '9px monospace';
-        ctx.textBaseline = 'middle';
-        const label = centsOff > 0
-          ? `${centsToNoteName(baseCents)}+${centsOff}c`
-          : centsToNoteName(baseCents);
-        ctx.fillText(label, 4, sy);
-      }
-    }
+  // ── Horizontal pitch lines ─────────────────────────────────
+  if (grid) {
+    const visible = grid.lines.filter(l => l.cents >= bottomRight.wy - CENTS_PER_SEMITONE && l.cents <= topLeft.wy + CENTS_PER_SEMITONE);
+    if (reference && !grid.twelveEdo) renderReference(ctx, vp, width, visible, Math.max(bottomRight.wy, MIN_PITCH_CENTS), Math.min(topLeft.wy, MAX_PITCH_CENTS));
+    renderPitchLines(ctx, vp, width, grid, visible);
   }
 
   // ── Vertical beat/subdivision lines ────────────────────────
@@ -218,4 +121,102 @@ export function renderStaff(
       ctx.fillText(String(b + 1), sx + 3, height - 4);
     }
   }
+}
+
+/** The tuning's notes: lines, then labels. */
+function renderPitchLines(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  width: number,
+  grid: StaffGrid,
+  visible: readonly StaffLine[],
+): void {
+  const zoom = vp.state.zoomY;
+  const stepPx = grid.minStep * zoom;
+  const fade = Math.max(0, Math.min(1, (stepPx - FADE_TO_PX) / (FADE_FROM_PX - FADE_TO_PX)));
+  const highlighted = (l: StaffLine) => grid.hasScale && l.inScale;
+
+  for (const l of visible) {
+    const alpha = l.isRoot || highlighted(l) ? 1 : fade;
+    if (alpha <= 0) continue;
+    if (grid.hasScale) {
+      if (l.inScale) {
+        ctx.strokeStyle = themeColor(l.isRoot ? 'staff-key-c' : l.natural ? 'staff-key-natural' : 'staff-key-accidental');
+        ctx.lineWidth = l.isRoot ? 2.0 : 1.0;
+      } else {
+        ctx.strokeStyle = themeColor('staff-key-out');
+        ctx.lineWidth = 0.3;
+      }
+    } else {
+      ctx.strokeStyle = themeColor(l.isRoot ? 'staff-line-c' : l.natural ? 'staff-line-natural' : 'staff-line-accidental');
+      ctx.lineWidth = l.isRoot ? 1.5 : l.natural ? 0.8 : 0.5;
+    }
+    const { sy } = vp.worldToScreen(0, l.cents);
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.moveTo(0, sy);
+    ctx.lineTo(width, sy);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Labels on the left edge. The root's always; main lines (naturals, the
+  // scale's notes) once a twelfth of the period is 10 px tall; every line once
+  // the smallest step is 18 px. Earlier ones win where labels would collide.
+  const mainLabels = (grid.period / 12) * zoom >= 10;
+  const allLabels = stepPx >= 18;
+  const tiers = [
+    visible.filter(l => l.isRoot),
+    mainLabels ? visible.filter(l => !l.isRoot && (l.natural || highlighted(l))) : [],
+    allLabels ? visible.filter(l => !l.isRoot && !l.natural && !highlighted(l)) : [],
+  ];
+  const placed: number[] = [];
+  ctx.textBaseline = 'middle';
+  for (const tier of tiers) {
+    for (const l of tier) {
+      const { sy } = vp.worldToScreen(0, l.cents);
+      if (placed.some(y => Math.abs(y - sy) < LABEL_GAP_PX)) continue;
+      placed.push(sy);
+      if (grid.hasScale) {
+        ctx.fillStyle = themeColor(!l.inScale ? 'staff-key-label-out' : l.isRoot ? 'staff-key-label-c' : 'staff-key-label');
+      } else {
+        ctx.fillStyle = themeColor(l.isRoot ? 'staff-label-c' : 'staff-label');
+      }
+      ctx.font = l.isRoot ? 'bold 11px monospace' : '10px monospace';
+      ctx.fillText(l.label, 4, sy);
+    }
+  }
+}
+
+/** The faint 12-EDO layer under another tuning: a dashed line on each
+ *  standard note that no note of the tuning sits on, and C's name at the right
+ *  edge. */
+function renderReference(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  width: number,
+  visible: readonly StaffLine[],
+  lo: number,
+  hi: number,
+): void {
+  const clear = REFERENCE_CLEAR_PX / vp.state.zoomY;
+  ctx.save();
+  ctx.strokeStyle = themeColor('staff-ref-line');
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 4]);
+  ctx.fillStyle = themeColor('staff-ref-label');
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let c = Math.ceil(lo / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE; c <= hi; c += CENTS_PER_SEMITONE) {
+    const { sy } = vp.worldToScreen(0, c);
+    if (!visible.some(l => Math.abs(l.cents - c) < clear)) {
+      ctx.beginPath();
+      ctx.moveTo(0, sy);
+      ctx.lineTo(width, sy);
+      ctx.stroke();
+    }
+    if (isCCents(c)) ctx.fillText(centsToNoteName(c), width - 4, sy);
+  }
+  ctx.restore();
 }

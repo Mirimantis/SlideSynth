@@ -389,7 +389,7 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
 - [x] **13.6 Audition a Y guide's pitch while dragging** *(S — done in 16.6, PR #85)*
   - Sounds the snapped pitch on the current track's tone. Sequence after 13.5.
   - **Absorbed by 16.6** (2026-09-24): the key is hold A, not Space. Y guides can already be dragged, so this doesn't need to wait for 13.5.
-- [ ] **13.9 Octave highlight follows the key root** *(S — absorbed by 13.8 (b))*
+- [x] **13.9 Octave highlight follows the key root** *(S — done in 13.8 (b), PR #89)*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
 - [ ] **13.11 Recording simplification density** *(S–M)*
@@ -421,20 +421,27 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
   - **Snap:** the one snap-config builder (15.6) expands a repeating fret into its octave targets, so snapping, Gravity and rendering all agree.
   - **Non-octave tunings** (13.8): "Octaves" repeats every period of the tuning, which is the octave except in tunings like Bohlen–Pierce.
   - Octave frets are what 13.8 (f) converts to and from a scale.
+- [ ] **13.22 Hide / show all frets** *(S)*
+  - One switch that hides every fret at once and brings them back, without touching beat guides.
+  - Today the Snap drawer's guide visibility covers both kinds, and hiding also stops them pulling (why 16.3 kept it out of the View menu).
+  - **Decide when building:**
+    - Where it lives. The Tuning drawer, beside Pitch lines, if hidden frets also stop pulling (the same meaning as Pitch lines: hidden = no lines, no pull). The View menu if it's display only and hidden frets still pull.
+    - A command-catalog entry either way, so it can take a shortcut and appear in the menus.
 - [ ] **13.19 Per-fret gravity** *(M–L, own planning session)*
   - Feasibility of letting a fret carry its own snap parameters. New frets follow the universal Snap settings; a per-fret toggle enables custom settings: Gravity on/off, Force, Spring, Damping and an **effect distance** (reach).
   - Within its reach, a custom fret takes precedence over the canvas's scale lines.
   - **Session inputs:**
     - the physics: today `snap-magnetic` has one global spring and force, with proximity-weighted attraction. Per-target force and reach fit a potential-field model; per-target spring and damping don't obviously (they describe the planchette, not the well). Decide which parameters are really per-fret;
     - the precedence rule: inside a custom fret's reach, are scale targets suppressed, or just outweighed?;
-    - how it combines with octave frets (13.18) and curve frets (13.10);
+    - how it combines with octave frets (13.18) and curve pitch guides (13.10);
     - UI in the Selection panel, and whether presets (13.2) can hold per-fret feel;
     - the snap-target composition work (12.1) and the device protocol's target map (Horizon), which would carry per-target feel to hardware.
-- [ ] **13.10 Curves as frets** *(M, own planning session)*
-  - Convert any pitch curve into a fret: it keeps its shape, snaps like a fret (a target that moves over time), and makes no sound.
-  - Option for muted tracks to render dimmed but stay snappable.
+- [ ] **13.10 Curves as pitch guides** *(M, own planning session)*
+  - Turn any pitch curve into a **pitch guide**: it keeps its shape, snaps like a fret (a target that moves over time), and makes no sound.
+  - **Not a fret** (2026-09-26): a fret is one pitch, and a curve guide isn't, so it's called a pitch guide. For the same reason it can't join a scale or the staff (13.8 (f) converts octave frets only).
+  - **A mute mode, perhaps, rather than a conversion:** a muted track's curves could render dimmed and stay snappable, as pitch guides. Then "make this curve a guide" is "move it to a guide track", with no new kind of object, and unmuting brings it back as sound. The session decides whether that's a per-track choice (mute silent / mute as guide) or what every mute does.
   - A per-track hide button, distinct from mute.
-  - Related to 12.1 (a curve is another gravity source) and 13.19 (whether a curve fret can carry its own gravity).
+  - Related to 12.1 (a curve is another gravity source) and 13.19 (whether a pitch guide can carry its own gravity).
 
 ### Groups
 
@@ -491,11 +498,21 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
         - **Beyond the spec:**
           - **Tuned from** shows for every tuning except 12-EDO, not only historical ones. The migration needs it (Thai 7-TET or Pelog on D becomes that tuning tuned from D), and for any tuning but 12-EDO it decides where the tuning sits.
           - An old "C + Chromatic scale" file now shows the plain chromatic staff instead of every line highlighted: it's All notes, the same pitches.
-    - [ ] **(b) Staff, labels and snap per tuning** *(M)*
+    - [x] **(b) Staff, labels and snap per tuning** *(M, PR #89)*
       - The staff draws the tuning's degrees, named by the naming rule, with the optional 12-EDO reference layer.
       - Snapping without a scale falls back to the tuning's degrees.
       - The octave highlight follows the root (absorbs 13.9).
       - Prism "Equal" intonation uses the tuning's steps.
+      - **Done (PR #89):**
+        - **Staff** (`canvas/staff-renderer.ts`): draws `staffGridFor()`'s lines (`tuning/tuning.ts`), every note of the tuning flagged root / in scale / natural and labelled by the naming rule with the octave (Db4, E4 5/4) or a number; a numbered root line adds its nearest standard note (5 ≈D4).
+          - The root's lines are the bold markers, so 12-EDO with root C looks as before.
+          - Labels: the root always, naturals and the scale's notes once a twelfth of the period is 10 px, every note once the smallest step is 18 px (12-EDO's old thresholds), skipping any that would collide.
+          - Zoomed out, lines outside the scale fade as neighbours close from 4 to 1.5 px.
+        - **12-EDO reference layer:** a "12-EDO reference" switch in the Tuning drawer (tunings other than 12-EDO; greyed while pitch lines are hidden). `SnapSettings.referenceLines`, default on; older files take the default, so no version bump. Dashed lines on standard notes no tuning line is within 3 px of, and C's name at the right edge. The `staff-micro-*` theme tokens became `staff-ref-*`.
+        - **Snap:** already the tuning's degrees since (a); unchanged.
+        - **Pitch readout:** the draw HUD names the tuning's nearest note and the cents from it (`pitchName`).
+        - **Prism:** `chordOffsets(spec, steps)` moves each Equal voice to the tuning's nearest step, keeping voices apart. The steps are the tuning's intervals counted from the root (`chordStepsFor`), so offsets stay constant along a curve. The Intonation option reads "Equal (19-EDO)" etc. outside 12-EDO. Echo renderers and snap targets take offsets instead of the chord spec.
+        - **Decision:** for unequal tables (Werckmeister, just intonation) "the tuning's steps" is its intervals from the root: a chord on the root sits on the staff's lines; on other degrees it keeps the root's interval shapes.
     - [ ] **(c) The pitch-circle drawer** *(M)*
       - Rim ticks, scale dots, the root ring, and the 12-EDO inner ring.
       - Click to hear, double-click for root, Shift+click to toggle a degree (Custom scale).
@@ -510,6 +527,28 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
   - **Deferred:**
     - **(e) Scale generator for other equal divisions** — MOS: large and small step counts plus mode rotation; the MIT `moment-of-symmetry` library covers the maths. A second editor, so its own item.
     - **Retuning on the circle** — dragging a degree around the pitch circle to make a Custom tuning directly. The frets route (f) covers it for now.
+- [ ] **13.21 Prism chords per note in unequal tunings** *(M — first slice S)*
+  - Since 13.8 (b), Equal intonation in an unequal tuning (Werckmeister, meantone, just intonation) builds every chord from the root's intervals. So a chord on any other note is the root chord moved, and every key sounds the same.
+  - **Add a second option**, e.g. Intonation **Tuning (per note)** beside **Equal (from root)**: the chord uses the tuning's own notes above the base, as a keyboard in that temperament would. E major's third in Werckmeister is wider than C major's.
+  - **The rule** (deterministic): find the tuning's note nearest the base, count up the chord's degrees from it (in a 12-note table the semitone counts; otherwise the step counts from 13.8 (b)), and shift the whole chord by the base's offset from that note.
+  - **Expect:** well temperaments give each key its colour, as intended. Meantone, Pythagorean and 5-limit just intonation hit their wolf intervals on some chords (D minor in 5-limit has a fifth about 20¢ flat), historically honest but possibly surprising. Equal tunings give the same result either way.
+  - **The cost is movement**, not the rule: today a chord's offsets are constant, so harmony voices are parallel copies of the curve. Per note, the shape changes as the base crosses between notes.
+  - **First slice (S):** Prism Draw clicks and performing. The shape is taken at the note's start and held through the glide, so harmony voices never jump mid-note. Projection echoes keep the from-root shapes.
+  - **Then (M):** projection echoes per note: sampled and drawn in steps instead of as shifted copies. Their snap targets are already computed at each beat, so those are easy.
+  - **Later, if wanted:** live re-shaping during a glide, with hysteresis so a base sitting on a boundary doesn't flicker.
+- [ ] **13.23 Key guides and a tuning hot bar** *(L, own planning session)*
+  - Beat guides today only bookmark places. Let one carry a **key change**: place it, set its tuning, root and scale (**a key guide**), and from that beat on the staff, snapping and labels follow the new settings until the next key guide.
+  - A composer lays out the key changes, then while performing, snapping follows them automatically.
+  - **Tuning hot bar:** slots holding a tuning / root / scale each, on user-definable keys (1–0 on the keyboard; configurable notes or controls on a MIDI controller). Pressing one while performing places a key guide at the playhead and changes key from there on.
+  - **Session inputs:**
+    - **Data:** the composition's snap settings become the settings at beat 0, plus a list of changes at beats. Stored on beat guides (a payload on `GuideDefinition`) or as their own list shown as guides? A file-format version bump either way.
+    - **What a change can set:** tuning, root, scale, Tuned from. Pitch lines and the 12-EDO reference probably stay global.
+    - **Every consumer becomes "at this beat":** the staff draws in sections, snapping (the snap config builder already takes the beat), the draw HUD, the Prism's steps (13.8 (b)), the pitch circle (13.8 (c)), and gravity crossing a change mid-glide.
+    - **Curves don't move:** pitches are absolute cents, so a key change changes the grid, not what you've drawn or recorded.
+    - **The Tuning drawer:** does it edit the settings at the playhead, at the selected key guide, or at beat 0?
+    - **Performing:** a hot-bar press while looping (does the guide land once, or every pass?), undo, and what happens with a press very near an existing key guide.
+    - **Keys:** 1–0 are also wanted for chord-spec favourites (8.12), so the two need to share or split them. MIDI mapping belongs with the MIDI input work (9.x).
+    - Naming alongside 13.16 (beat guides and frets).
 - [ ] **13.15 Gravity feel preview** *(M)*
   - A small animated waveform in the Snap drawer showing what Force, Spring and Damping do: its amplitude, frequency and falloff change as you move the sliders.
   - Drive it from the real `snap-magnetic` integrator (a step response into a well), so the preview is the feel, not an illustration of it.
@@ -522,6 +561,7 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
 - [ ] **8.12 Chord-spec favorites on number keys** *(M)*
   - Retune voices mid-perform without the mouse. The live-retune plumbing already exists.
   - Bind through 15.3's command registry.
+  - The tuning hot bar (13.23) also wants 1–0: settle the split in its session.
 - [ ] **8.14 Chord-label readout on selected groups** *(S)*
   - Honest about microtonal bases, e.g. "C(+17¢) major".
 - [ ] **8.15 "Lite harmonies" audio mode** *(S)*

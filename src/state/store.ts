@@ -42,6 +42,7 @@ const SNAP_VIEW_FIELDS = {
   scaleId: 'scaleId',
   tunedFrom: 'tunedFrom',
   hidePitchLines: 'hidePitchLines',
+  referenceLines: 'referenceLines',
   magneticEnabled: 'magneticEnabled',
   magneticStrength: 'magneticStrength',
   magneticSpringK: 'magneticSpringK',
@@ -764,6 +765,12 @@ class Store {
 
   setPitchLinesVisible(visible: boolean) {
     this.state.composition.snap.hidePitchLines = !visible;
+    this.touch('snap');
+  }
+
+  /** The 12-EDO reference lines under a tuning other than 12-EDO. */
+  setReferenceLines(visible: boolean) {
+    this.state.composition.snap.referenceLines = visible;
     this.touch('snap');
   }
 

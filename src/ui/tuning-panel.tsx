@@ -11,7 +11,8 @@ import {
 /**
  * The Tuning drawer's controls (BACKLOG 13.8 (a); spec in DESIGN.md › Tuning
  * spec): Tuning, Root, Scale, Tuned from (for tunings other than 12-EDO),
- * Tune A4 and the Pitch lines switch. 13.8 (c) puts the pitch circle above
+ * Tune A4, the Pitch lines switch and (13.8 (b), for tunings other than
+ * 12-EDO) the 12-EDO reference switch. 13.8 (c) puts the pitch circle above
  * them.
  */
 
@@ -22,6 +23,7 @@ export interface TuningActions {
   setScale(scaleId: string): void;
   setTunedFrom(pitchClass: number): void;
   setPitchLinesVisible(visible: boolean): void;
+  setReferenceLines(visible: boolean): void;
   setReferenceHz(hz: number): void;
 }
 
@@ -114,20 +116,45 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
         </div>
       )}
       <ReferencePitch cents={st.composition.tuningOffsetCents} onCommit={actions.setReferenceHz} />
-      <div class="transport-row">
-        <label class="toggle-switch" title="Show the pitch lines, and snap to them. Off: no lines, and pitch floats free (frets and Prism echoes still pull)">
-          <span class="toggle-switch-track">
-            <input
-              type="checkbox"
-              id="pitch-lines-toggle"
-              checked={!st.hidePitchLines}
-              onChange={e => { actions.setPitchLinesVisible((e.currentTarget as HTMLInputElement).checked); blur(e); }}
-            />
-            <span class="toggle-switch-thumb" />
-          </span>
-          <span class="toggle-switch-label">Pitch lines</span>
-        </label>
-      </div>
+      <Switch
+        id="pitch-lines-toggle"
+        label="Pitch lines"
+        title="Show the pitch lines, and snap to them. Off: no lines, and pitch floats free (frets and Prism echoes still pull)"
+        checked={!st.hidePitchLines}
+        onChange={actions.setPitchLinesVisible}
+      />
+      {!isTwelveEdo(ref) && (
+        <Switch
+          id="reference-lines-toggle"
+          label="12-EDO reference"
+          title="Faint dashed lines on the 12 standard notes, with C named at the right edge, to see where this tuning sits against them. Display only: nothing snaps to them"
+          checked={st.referenceLines}
+          disabled={st.hidePitchLines}
+          onChange={actions.setReferenceLines}
+        />
+      )}
+    </div>
+  );
+}
+
+function Switch({ id, label, title, checked, disabled = false, onChange }: {
+  id: string; label: string; title: string; checked: boolean; disabled?: boolean; onChange(on: boolean): void;
+}) {
+  return (
+    <div class="transport-row">
+      <label class="toggle-switch" title={title}>
+        <span class="toggle-switch-track">
+          <input
+            type="checkbox"
+            id={id}
+            checked={checked}
+            disabled={disabled}
+            onChange={e => { onChange((e.currentTarget as HTMLInputElement).checked); blur(e); }}
+          />
+          <span class="toggle-switch-thumb" />
+        </span>
+        <span class="toggle-switch-label">{label}</span>
+      </label>
     </div>
   );
 }

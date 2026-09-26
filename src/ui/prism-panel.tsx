@@ -14,6 +14,7 @@ import {
   type Direction,
   type NumVoices,
 } from '../utils/harmonics';
+import { isTwelveEdo, resolveTuning } from '../tuning/tuning';
 
 /**
  * The Harmonic Prism drawer: Draw and Projection switches, the chord spec and
@@ -34,6 +35,11 @@ export function PrismPanel() {
   const prism = store.getState().harmonicPrism;
   const spec = prism.chordSpec;
   const qualities = (RELEVANT_QUALITIES[spec.stacking] ?? ['major']) as ChordQuality[];
+  // "Equal" counts in the current tuning's steps (13.8 (b)).
+  const tuningRef = store.getState().tuning;
+  const intonationLabels = isTwelveEdo(tuningRef)
+    ? INTONATION_LABELS
+    : { ...INTONATION_LABELS, '12-TET': `Equal (${resolveTuning(tuningRef).name})` };
   return (
     <>
       <Switch
@@ -83,12 +89,12 @@ export function PrismPanel() {
           <Options values={VOICE_COUNTS} />
         </select>
       </Row>
-      <Row id="prism-intonation" label="Intonation" title="Equal (12-TET): grid-aligned. Just: pure acoustic ratios (e.g. 5/4 for M3, 7/4 for harmonic 7th)">
+      <Row id="prism-intonation" label="Intonation" title="Equal: the chord in the tuning's steps, counted from the root (12-TET semitones in 12-EDO). Just: pure acoustic ratios (e.g. 5/4 for M3, 7/4 for harmonic 7th)">
         <select
           id="prism-intonation" value={spec.tuning}
           onChange={e => { store.setPrismChordSpec({ tuning: selectValue(e) as TuningSystem }); blur(e); }}
         >
-          <Options values={INTONATIONS} labels={INTONATION_LABELS} />
+          <Options values={INTONATIONS} labels={intonationLabels} />
         </select>
       </Row>
       <Row id="prism-direction" label="Direction" title="Where harmony voices sit relative to the base pitch">

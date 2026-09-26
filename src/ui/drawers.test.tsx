@@ -50,6 +50,13 @@ describe('Harmonic Prism drawer (BACKLOG 16.4)', () => {
     expect(html).not.toContain('>Tuning</label>');
   });
 
+  it('Equal names the tuning whose steps it counts in (13.8 (b))', () => {
+    store.setPrismChordSpec({ tuning: '12-TET' });
+    expect(renderToString(<PrismPanel />)).toMatch(/<option[^>]*selected[^>]*>Equal \(12-TET\)</);
+    store.setTuning({ kind: 'edo', divisions: 19, equave: 'octave' });
+    expect(renderToString(<PrismPanel />)).toMatch(/<option[^>]*selected[^>]*>Equal \(19-EDO\)</);
+  });
+
   it('has one octave row per voice', () => {
     store.setPrismChordSpec({ numVoices: 4 });
     expect(renderToString(<PrismPanel />).match(/class="prism-voice-oct"/g)).toHaveLength(4);
@@ -68,6 +75,16 @@ describe('Tuning drawer (BACKLOG 13.8)', () => {
     expect(html).not.toContain('Divisions');
     expect(html).toContain('Pitch lines');
     expect(html).toContain('Tune A4');
+    expect(html).not.toContain('12-EDO reference');
+  });
+
+  it('other tunings offer the 12-EDO reference, which needs pitch lines (13.8 (b))', () => {
+    store.setTuning({ kind: 'edo', divisions: 22, equave: 'octave' });
+    expect(panel()).toMatch(/id="reference-lines-toggle"[^>]*checked/);
+    store.setReferenceLines(false);
+    expect(panel()).not.toMatch(/id="reference-lines-toggle"[^>]*checked/);
+    store.setPitchLinesVisible(false);
+    expect(panel()).toMatch(/id="reference-lines-toggle"[^>]*disabled/);
   });
 
   it('an equal division shows N, Tuned from, and only the scales that fit', () => {

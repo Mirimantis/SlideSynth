@@ -15,7 +15,7 @@ export const CANVAS_TOKENS = [
   'staff-line-c', 'staff-line-natural', 'staff-line-accidental', 'staff-label-c', 'staff-label',
   'staff-key-c', 'staff-key-natural', 'staff-key-accidental', 'staff-key-out',
   'staff-key-label-c', 'staff-key-label', 'staff-key-label-out',
-  'staff-micro-line', 'staff-micro-label',
+  'staff-ref-line', 'staff-ref-label',
   'staff-measure', 'staff-beat', 'staff-subdiv-eighth', 'staff-subdiv-quarter', 'staff-subdiv-fine',
   'staff-measure-label', 'staff-beat-label',
   // Rulers

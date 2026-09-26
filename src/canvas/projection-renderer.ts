@@ -9,7 +9,6 @@ import type { BezierCurve } from '../types';
 import type { Viewport } from './viewport';
 import { getSegmentControlPoints, pitchPoints } from '../model/curve';
 import { evaluateCurveAtBeat } from '../audio/curve-sampler';
-import { chordOffsets, type ChordSpec } from '../utils/harmonics';
 import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
 import { prismSpectrum, themeColor } from '../theme/theme';
 
@@ -27,14 +26,13 @@ export function renderProjection(
   ctx: CanvasRenderingContext2D,
   vp: Viewport,
   sourceCurve: BezierCurve,
-  chordSpec: ChordSpec,
+  offsets: readonly number[],
   octaveRange: number,
   canvasWidth: number,
   canvasHeight: number,
 ): void {
   if (pitchPoints(sourceCurve).length < 2) return;
   const octaves = Math.max(0, Math.min(3, Math.round(octaveRange)));
-  const offsets = chordOffsets(chordSpec);
   if (offsets.length === 0) return;
 
   // Source Y extent — used for offscreen culling per echo.
@@ -155,11 +153,10 @@ export function renderPrismDrawPreview(
   vp: Viewport,
   screenX: number,
   snappedBaseY: number,
-  chordSpec: ChordSpec,
+  offsets: readonly number[],
   canvasHeight: number,
   rulerHeight: number,
 ): void {
-  const offsets = chordOffsets(chordSpec);
   if (offsets.length === 0) return;
 
   const PRIMARY_R = 8;
@@ -212,7 +209,7 @@ export function renderPrismDrawPreview(
  */
 export function computeProjectionTargetsAtX(
   sourceCurve: BezierCurve,
-  chordSpec: ChordSpec,
+  offsets: readonly number[],
   octaveRange: number,
   atBeat: number,
 ): number[] {
@@ -220,7 +217,6 @@ export function computeProjectionTargetsAtX(
   if (!hit) return [];
 
   const octaves = Math.max(0, Math.min(3, Math.round(octaveRange)));
-  const offsets = chordOffsets(chordSpec);
   const targets: number[] = [];
   for (let octave = -octaves; octave <= octaves; octave++) {
     for (const offset of offsets) {
