@@ -385,17 +385,13 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
   - Drag down from the top ruler to create an X guide; drag out of the pitch ruler (13.4) to create a Y guide. Release back over the ruler to cancel.
   - Reuse the existing guide-drag path, including self-excluding snap.
   - A click without a drag still scrubs the playhead. The Add buttons stay as the keyboard-reachable path.
+  - **Revisit (2026-09-26):** the ruler is now also the scrub strip (audible by default, 16.3), so a drag out of it is ambiguous. Frets (Y guides) get a dedicated handle instead (13.17). The X half can use the same kind of handle, if a ruler drag still conflicts when this is built.
 - [x] **13.6 Audition a Y guide's pitch while dragging** *(S — done in 16.6, PR #85)*
   - Sounds the snapped pitch on the current track's tone. Sequence after 13.5.
   - **Absorbed by 16.6** (2026-09-24): the key is hold A, not Space. Y guides can already be dragged, so this doesn't need to wait for 13.5.
 - [ ] **13.9 Octave highlight follows the key root** *(S)*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
-- [ ] **13.10 Curves as gravity** *(M, own planning session)*
-  - Convert a curve into a snappable guide.
-  - Option for muted tracks to render dimmed but stay snappable.
-  - A per-track hide button, distinct from mute.
-  - Related to 12.1: a curve is another gravity source.
 - [ ] **13.11 Recording simplification density** *(S–M)*
   - A setting to keep all recorded points, or 1/2, 1/4, 1/8, instead of today's fixed RDP fit.
   - Option to run simplification later on a kept curve (relates to 12.4 raw takes).
@@ -403,6 +399,40 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
   - The Parameters Graph below the canvas shipped in PR #58, showing the selected curve's volume lane.
   - Remaining: more lane types (pan, cutoff, per-layer mix), show/hide/solo per lane, and a lane picker.
   - Inherits the "functional curve, lane-agnostic gravity" framing from the lanes model.
+
+### Frets (pitch guides)
+
+Y guides become **frets**: a music word for "a pitch you can land on", instead of the maths word. X guides are unchanged. The data model keeps `GuideDefinition` and its `orientation`, so files don't change; this is naming and UI first.
+
+- [ ] **13.16 Rename Y guides to Frets** *(S)*
+  - Everywhere the user reads it: the Snap drawer (**+ Y** becomes **+ Fret**), the Selection panel ("Snap Guide" → "Fret"), tooltips, toasts.
+  - The help describes them as **frets (pitch guides)**, so the music term leads and the plain description follows.
+  - Consider "beat guides" for X guides in the same pass, so neither is called by an axis letter.
+- [ ] **13.17 Drag a fret out of a corner handle** *(S–M)*
+  - A small handle where the rulers meet the staff's left edge (top-left corner of the canvas). Drag from it onto the canvas to place a new fret at the pitch you drop it on; release back over the handle to cancel.
+  - Dragging out of the ruler itself would fight the playhead scrub (see 13.5), so the handle is separate.
+  - Reuse the guide-drag path: self-excluding snap, the audition while A is held (16.6), and select-on-drop.
+  - **+ Fret** in the Snap drawer stays as the non-drag path.
+- [ ] **13.18 Octave frets** *(M)*
+  - A **Single / Octaves** toggle in the fret's Selection panel. With Octaves, the fret repeats in every octave across the canvas.
+  - Every instance is the same fret: selecting any instance selects it, and dragging any instance moves them all by the same interval.
+  - Toggling back to Single keeps only the originally placed fret; the other instances disappear.
+  - **Data:** an optional field on the guide (e.g. `repeat: 'octave'`) that round-trips; the stored `position` stays the originally placed one. Dragging an instance moves that position by the drag's delta.
+  - **Snap:** the one snap-config builder (15.6) expands a repeating fret into its octave targets, so snapping, Gravity and rendering all agree.
+- [ ] **13.19 Per-fret gravity** *(M–L, own planning session)*
+  - Feasibility of letting a fret carry its own snap parameters. New frets follow the universal Snap settings; a per-fret toggle enables custom settings: Gravity on/off, Force, Spring, Damping and an **effect distance** (reach).
+  - Within its reach, a custom fret takes precedence over the canvas's scale lines.
+  - **Session inputs:**
+    - the physics: today `snap-magnetic` has one global spring and force, with proximity-weighted attraction. Per-target force and reach fit a potential-field model; per-target spring and damping don't obviously (they describe the planchette, not the well). Decide which parameters are really per-fret;
+    - the precedence rule: inside a custom fret's reach, are scale targets suppressed, or just outweighed?;
+    - how it combines with octave frets (13.18) and curve frets (13.10);
+    - UI in the Selection panel, and whether presets (13.2) can hold per-fret feel;
+    - the snap-target composition work (12.1) and the device protocol's target map (Horizon), which would carry per-target feel to hardware.
+- [ ] **13.10 Curves as frets** *(M, own planning session)*
+  - Convert any pitch curve into a fret: it keeps its shape, snaps like a fret (a target that moves over time), and makes no sound.
+  - Option for muted tracks to render dimmed but stay snappable.
+  - A per-track hide button, distinct from mute.
+  - Related to 12.1 (a curve is another gravity source) and 13.19 (whether a curve fret can carry its own gravity).
 
 ### Groups
 
@@ -483,14 +513,25 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
 ### Transport & looping
 - [ ] **3.2b Custom rhythm patterns** *(M, own planning session)*
   - Define what a "pattern" is (accent map? mixed meter?) before any code.
-- [ ] **13.7 Monophonic MIDI input with auto-glissando** *(M, own planning session)*
-  - A mono mode ends the previous note on each noteOn, so curves never overlap; consecutive notes join with a glissando.
+- [ ] **13.7 MIDI Gliss** *(M, own planning session)*
+  - A MIDI input setting where the most recent note played becomes the **Y snap target**, ignoring the staff, the scale and any frets. The planchette moves to each new note under the current Snap / Gravity settings, so the glissando between notes comes from the physics rather than a separate glide control.
+  - Monophonic: only the latest note counts. Consecutive notes draw one continuous curve.
+  - **Direction (2026-09-26):** Gravity is the glide. That answers the old "glide shape and duration" question and avoids reviving 7.1's too-narrow Glide slider: Force, Spring and Damping are the glide's shape.
+  - Uses the envelope (13.20) to decide when the curve ends: it continues through release at the last pitch, so short gaps between notes still glide, and stopping playing ends the curve after the release.
   - **Session inputs:**
-    - glide shape and duration — avoid reviving 7.1's too-narrow Glide slider;
-    - one merged curve vs. per-note curves plus joins;
-    - legato vs. detached playing;
+    - how it's switched on: a MIDI setting, a per-track mode, or tied to MIDI arm;
+    - legato vs. detached playing, and what a note-off does before the envelope ends;
     - interaction with loop wrap (8.21) and pitch bend (8.25);
-    - the session boundary.
+    - velocity (11.2) feeding the envelope's level.
+- [ ] **13.20 ADSR envelope** *(M–L, own planning session)*
+  - A basic Attack / Decay / Sustain / Release envelope, applied to every curve, not only MIDI. It shapes the volume lane at first, and is built so later parameters (8.4's lanes) can take one too.
+  - In MIDI Gliss (13.7) the curve keeps drawing inside the envelope, through the release phase at the last pitch, until the envelope ends or a new note picks it up. With Gravity on, the new note pulls it into a glissando.
+  - **Session inputs:**
+    - where it lives: per tone, per track, or per curve (and whether a curve can override);
+    - what gates it on a drawn curve: the curve's start and end, with the release sounding past the last point? That changes how long a curve sounds, and how it draws;
+    - how it combines with the volume lane (multiply?) and the dynamics bus;
+    - showing it: on the curve, or in the Parameters Graph;
+    - relation to the group volume envelope (13.13) and to 8.8's synthesis work.
 - [ ] **10.6 Live loop in/out taps, bar-quantized** *(S–M, DEFERRED 2026-07-30)*
   - Revisit only if setting loop points mid-jam proves necessary; dragging the ruler markers covers it for now.
 
@@ -518,6 +559,11 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
   - Cents make it mechanical: note-on at the nearest semitone plus a pitch-bend stream, one channel per simultaneous curve (≈ MPE).
   - Volume lane → velocity at note-on, and CC11 / channel pressure after.
   - The MIDI import tests give a round-trip harness for free. The live-velocity half is 11.2.
+  - **Gates (for Eurorack MIDI-to-CV modules and the like):** MIDI has no separate gate message. The module raises its gate on note-on and drops it on note-off, so a curve bracketed by one note-on and one note-off already gives one gate. What needs care is the glissando:
+    - **bend range:** a glide wider than the receiver's pitch-bend range forces a new note, which retriggers the gate and envelope. Send the range with RPN 0 (MPE's default is ±48 semitones), so one note can cover most glides;
+    - **legato:** where a new note is unavoidable, send its note-on before the old note-off. Most MIDI-to-CV modules treat that as legato and don't retrigger;
+    - **clock:** tempo sync (MIDI clock / start / stop) is separate from gates. Export would write it only if a sequencer needs to follow the piece.
+  - Direct CV output with an explicit gate per curve (1 V/oct pitch + gate + volume CV) is H.2's VCV Rack path, not MIDI.
 
 ### Sound
 - [ ] **8.8 FM synthesis + waveform visualizer** *(XL, own planning session)*
