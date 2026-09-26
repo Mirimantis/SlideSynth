@@ -3,7 +3,7 @@ import { createParamViewport } from './canvas/param-viewport';
 import { renderParamGraph } from './canvas/param-graph-renderer';
 import { createParamInteraction } from './canvas/param-interaction';
 import { displayedLane } from './model/lane';
-import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, KEEP_BUFFER_MS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, getReferenceAHz, centsToReferenceAHz, referenceAHzToCents, STANDARD_A4_HZ } from './constants';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, KEEP_BUFFER_MS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToNoteName, centsToFrequency, setReferenceAHz, centsToReferenceAHz, referenceAHzToCents } from './constants';
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
@@ -20,7 +20,6 @@ import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
 import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
-import { createToolbar } from './ui/toolbar';
 import { openContextMenu, type ContextMenuItem } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
@@ -62,8 +61,9 @@ import { createEditCommands } from './commands/edit-commands';
 import { ToolStrip } from './ui/tool-strip';
 import { SnapPanel, type SnapActions } from './ui/snap-panel';
 import { PrismPanel } from './ui/prism-panel';
+import { TuningPanel, type TuningActions } from './ui/tuning-panel';
+import { pitchSetFor, tuningKey } from './tuning/tuning';
 import { createPerformanceEngine } from './canvas/performance-engine';
-import { getScaleById } from './utils/scales';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
 import { createDrawerRail } from './ui/drawer';
 import { setIcon } from './utils/svg-helpers';
@@ -114,14 +114,7 @@ app.innerHTML = `
       </div>
       <div class="drawer" id="drawer-tuning" data-drawer="tuning">
         <div class="drawer-header">Tuning</div>
-        <div id="tuning-scale-slot"></div>
-        <div id="tuning-section">
-          <div class="transport-row">
-            <label title="Reference frequency for A4. 440 = standard, 432 = 'Verdi tuning', 415 = Baroque pitch, etc.">Tune A4</label>
-            <input type="number" id="input-tuning" value="440" min="380" max="500" step="0.1" title="Reference frequency for A4 in Hz (default 440)" />
-            <span class="transport-hint" id="tuning-cents-display" title="Cents offset from A=440">0¢</span>
-          </div>
-        </div>
+        <div id="tuning-panel"></div>
       </div>
     </div>
     <div id="center-stack">
@@ -577,31 +570,6 @@ playback.setSchedulerHook((fromBeat, toBeat, comp, beatToAudioTime) => {
 
 // ── Toolbar ─────────────────────────────────────────────────────
 const toolbarContainer = document.getElementById('toolbar')!;
-// Key + Scale selection now lives in the Tuning drawer (WS3), not the top bar.
-const tuningScaleSlot = document.getElementById('tuning-scale-slot')!;
-
-const toolbar = createToolbar(tuningScaleSlot, {
-  onScaleRootChange(root: number | null, hidePitchLines: boolean) {
-    store.setScaleRoot(root, hidePitchLines);
-    bgDirty = true;
-  },
-  onScaleIdChange(scaleId: string | null) {
-    store.setScaleId(scaleId);
-    bgDirty = true;
-  },
-});
-
-// Sync toolbar dropdowns to AppState — so load-composition / undo / redo restore
-// the visible Key + Scale Type selection. Tracks last-rendered values to avoid
-// thrashing the <select> on every store notify.
-watch(
-  () => `${store.getState().scaleRoot}|${store.getState().hidePitchLines}`,
-  () => {
-    const s = store.getState();
-    toolbar.updateScaleRoot(s.scaleRoot, s.hidePitchLines);
-  },
-);
-watch(() => store.getState().scaleId, id => toolbar.updateScaleId(id));
 
 // ── Icon rail + sliding drawers (WS3) ──────────────────────────
 // Inject shape-only SVG icons (color comes from CSS currentColor) and wire the
@@ -736,46 +704,31 @@ const tempoActions: TempoActions = {
 // Persisted as cents-offset relative to A=440 in the composition; the audio
 // module's `currentReferenceAHz` is the runtime source of truth that
 // noteToFrequency reads (sync via syncTuningToAudio below).
-const tuningInput = document.getElementById('input-tuning') as HTMLInputElement;
-const tuningCentsDisplay = document.getElementById('tuning-cents-display') as HTMLSpanElement;
-
-function formatTuningCentsLabel(cents: number): string {
-  if (Math.abs(cents) < 0.05) return '0¢';
-  const sign = cents > 0 ? '+' : '';
-  return `${sign}${cents.toFixed(1)}¢`;
-}
-
-/** Push the composition's tuningOffsetCents into the audio module + UI inputs.
- *  Called on app startup, composition load (Load JSON / Import MIDI), and
- *  history undo/redo via the store subscription below. */
+/** Push the composition's tuningOffsetCents into the audio module. Runs on
+ *  startup, composition load, undo / redo and edits (the watch below); the
+ *  Tuning drawer shows it from the store. */
 function syncTuningToAudio() {
-  const cents = store.getComposition().tuningOffsetCents;
-  const hz = centsToReferenceAHz(cents);
-  setReferenceAHz(hz);
-  // Reflect in the input + cents readout, but only if the user isn't currently
-  // editing the input (would steal focus / clobber half-typed values).
-  if (document.activeElement !== tuningInput) {
-    tuningInput.value = String(Number(getReferenceAHz().toFixed(2)));
-  }
-  tuningCentsDisplay.textContent = formatTuningCentsLabel(cents);
+  setReferenceAHz(centsToReferenceAHz(store.getComposition().tuningOffsetCents));
   // Pitch HUD reads frequency on render — mark dirty so any open HUD reflects
   // the new tuning on the next frame.
   bgDirty = true;
 }
-
-tuningInput.addEventListener('change', () => {
-  const hz = Math.max(380, Math.min(500, Number(tuningInput.value) || STANDARD_A4_HZ));
-  const cents = referenceAHzToCents(hz);
-  history.snapshot();
-  store.setTuningOffsetCents(cents);
-  // syncTuningToAudio runs via the subscription, but call it directly so the
-  // input value gets normalized (e.g. user types "430.123" → display "430.12").
-  syncTuningToAudio();
-  tuningInput.blur();
-});
-
-// Apply the composition's tuning now and whenever it changes (load, undo/redo, setter).
 watch(() => store.getComposition().tuningOffsetCents, () => syncTuningToAudio());
+
+/** The Tuning drawer's edits (BACKLOG 13.8): each is one undo step. */
+const tuningActions: TuningActions = {
+  setTuning(ref) { history.snapshot(); store.setTuning(ref); },
+  setRoot(degree) { history.snapshot(); store.setRoot(degree); },
+  setScale(scaleId) { history.snapshot(); store.setScaleId(scaleId); },
+  setTunedFrom(pc) { history.snapshot(); store.setTunedFrom(pc); },
+  setPitchLinesVisible(visible) { history.snapshot(); store.setPitchLinesVisible(visible); },
+  setReferenceHz(hz) {
+    const cents = referenceAHzToCents(hz);
+    if (Math.abs(cents - store.getComposition().tuningOffsetCents) < 1e-6) return;
+    history.snapshot();
+    store.setTuningOffsetCents(cents);
+  },
+};
 
 // ── Live MIDI input ─────────────────────────────────────────────
 const midiInput = createMidiInput();
@@ -1589,7 +1542,7 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
   // None Key mode is the only mode where snap can fail to engage (cursor
   // outside the captured well between sparse guides). In scale or chromatic
   // mode there's always a nearest target, so the cursor always snaps.
-  const inNoneMode = st.hidePitchLines && st.scaleRoot === null;
+  const inNoneMode = st.hidePitchLines;
   const snapEngaged = adaptive.target !== null && (!inNoneMode || adaptive.captured);
   const snappedWy = snapEngaged ? adaptive.target! : wy;
   const snapTarget = snapEngaged ? adaptive.target : null;
@@ -2855,11 +2808,10 @@ function draw() {
   // so the user can see where they are in the pitch spectrum; snap itself
   // switches to echo-only targets (see snapToGrid).
   if (bgDirty) {
-    const scaleRoot = state.scaleRoot;
-    const scale = state.scaleId ? getScaleById(state.scaleId) ?? null : null;
+
     const measureLen = measureLengthInBeats(comp);
     bgCtx.clearRect(0, 0, rect.width, rect.height);
-    renderStaff(bgCtx, viewport, rect.width, rect.height, measureLen, scaleRoot, scale, state.hidePitchLines);
+    renderStaff(bgCtx, viewport, rect.width, rect.height, measureLen, pitchSetFor(state));
     renderRuler(bgCtx, viewport, rect.width, measureLen, comp.bpm);
     bgDirty = false;
   }
@@ -3209,13 +3161,13 @@ if (import.meta.env.DEV) {
 // single subscriber that re-synced every control and rebuilt the track list and
 // both property panels on every store change, including every drag mousemove.
 
-// Background layer (staff + rulers) depends on tempo, meter and key only;
-// viewport and tuning changes mark it dirty where they happen.
+// Background layer (staff + rulers) depends on tempo, meter and the pitch grid
+// only; viewport and reference-pitch changes mark it dirty where they happen.
 watch(
   () => {
     const st = store.getState();
     const c = st.composition;
-    return `${c.bpm}|${c.beatsPerMeasure}/${c.timeSignatureDenominator}|${st.scaleRoot}|${st.scaleId}|${st.hidePitchLines}`;
+    return `${c.bpm}|${c.beatsPerMeasure}/${c.timeSignatureDenominator}|${tuningKey(st.tuning)}|${st.root}|${st.scaleId}|${st.tunedFrom}|${st.hidePitchLines}`;
   },
   () => { bgDirty = true; },
 );
@@ -3261,6 +3213,7 @@ const MENUS: readonly MenuSpec[] = [
 render(h(TopBar, { commands, menus: MENUS, canUndo, canRedo, keepable }), toolbarContainer);
 render(h(TempoPanel, { actions: tempoActions }), document.getElementById('tempo-panel')!);
 render(h(SnapPanel, { actions: snapActions }), document.getElementById('snap-panel')!);
+render(h(TuningPanel, { actions: tuningActions }), document.getElementById('tuning-panel')!);
 render(h(PrismPanel, null), document.getElementById('prism-panel')!);
 // The tool can change from several places (hotkeys, track click, Ctrl-hold in
 // interaction.ts), so the strip follows the store (BACKLOG 14.2).

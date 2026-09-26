@@ -1,7 +1,7 @@
 import type { AppState, Composition } from '../types';
 import type { SnapConfig } from '../utils/snap';
 import { getAdaptiveSubdivisions } from '../utils/snap';
-import { getScaleById } from '../utils/scales';
+import { pitchSetFor } from '../tuning/tuning';
 import { computeProjectionTargetsAtX } from '../canvas/projection-renderer';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { store } from './store';
@@ -27,7 +27,7 @@ export interface SnapQuery {
 
 /** The slice of app state a snap config is built from. */
 export type SnapSources = Pick<AppState,
-  'snapEnabled' | 'scaleRoot' | 'scaleId' | 'hidePitchLines' | 'guidesVisible' | 'harmonicPrism'
+  'snapEnabled' | 'tuning' | 'root' | 'scaleId' | 'tunedFrom' | 'hidePitchLines' | 'guidesVisible' | 'harmonicPrism'
 > & { composition: Pick<Composition, 'tracks' | 'guides'> };
 
 export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
@@ -65,9 +65,7 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
   return {
     enabled: st.snapEnabled,
     subdivisionsPerBeat: q.zoomX !== undefined ? getAdaptiveSubdivisions(q.zoomX) : SUBDIVISIONS_PER_BEAT,
-    scaleRoot: st.scaleRoot,
-    scale: st.scaleId ? getScaleById(st.scaleId) ?? null : null,
-    hidePitchLines: st.hidePitchLines,
+    pitchTargets: pitchSetFor(st)?.notes ?? null,
     projectionTargets,
     guideXTargets,
     guideYTargets,

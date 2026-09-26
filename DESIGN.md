@@ -96,12 +96,13 @@ src/
 │                    #   metronome, midi-input, dynamics-bus, voice-allocation
 ├── canvas/          # viewport, interaction (tool mouse handling, ~1,400 lines), performance-engine
 │                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), and one renderer per layer
+├── tuning/          # tuning.ts: tunings, scales, degree names, and the pitch set the staff and snap use (13.8)
 ├── ui/              # Preact (.tsx): top-bar, menu, tool-strip, settings-dialog, tempo-panel, snap-panel,
-│                    #   prism-panel, track-list, property-panel, tool-property-panel. Vanilla DOM: toolbar
-│                    #   (Key/Scale), drawer, tone builder/picker, older dialogs, HUDs
+│                    #   prism-panel, tuning-panel, track-list, property-panel, tool-property-panel.
+│                    #   Vanilla DOM: drawer, tone builder/picker, older dialogs, HUDs
 ├── theme/           # theme.ts: the canvas's reader for the colour tokens in styles/theme.css
 ├── export/          # json-export (.gliss envelope + migrations), wav-export, midi-import
-└── utils/           # bezier-math, snap, snap-magnetic, snap-presets, scales, harmonics, svg helpers
+└── utils/           # bezier-math, snap, snap-magnetic, snap-presets, harmonics, svg helpers
 
 styles/              # theme.css (every colour, as tokens), main / panels / dialogs (layout, via var())
 ```
@@ -302,7 +303,7 @@ The Key and Scale dropdowns mixed two different axes: the **tuning** (which pitc
   - 24-EDO: Maqam Rast and Bayati, as real scales.
   - Every tuning offers **All notes**, replacing the Key menu's old "Chromatic".
   - **Custom:** built on the pitch circle (Shift+click).
-- **One root.** The exception is historical temperaments: they're deliberately unequal, so the note their table is anchored on matters separately from the key. For those tunings only, a **Tuned from: C** field appears.
+- **One root.** The exception is historical temperaments: they're deliberately unequal, so the note their table is anchored on matters separately from the key. **Tuned from: C** says where a tuning's first degree sits. *(Built in 13.8 (a): it shows for every tuning except 12-EDO, because it also places non-12 equal divisions and the traditional tunings, which migration relies on.)* Changing the tuning or Tuned from keeps the root on the nearest pitch.
 - **Tune A4** stays as it is: the reference frequency, applied only in the cents → Hz conversion. The grid never moves.
 - **Pitch lines: show / hide** replaces the Key menu's "None". It's a display mode, not a tuning. Hidden, the staff draws no lines and snapping has no fallback grid (8.19's behaviour).
 
@@ -384,7 +385,7 @@ JSON inside a versioned envelope, saved with the `.gliss` extension:
 ```
 {
   "app": "glissandograph",        // type marker — a format contract, never renamed
-  "formatVersion": 1,             // cross-app contract; loaders migrate older files
+  "formatVersion": 2,             // cross-app contract; loaders migrate older files
   "kind": "composition",          // advisory self-description
   "meta":        { ... },         // optional: title, author, license, timestamps (opt-in only; never auto-stamp identity)
   "tuning":      { ... },         // optional: reference pitch + scale as explicit cents/ratios
@@ -393,7 +394,11 @@ JSON inside a versioned envelope, saved with the `.gliss` extension:
 }
 ```
 
-`formatVersion` 1 wraps internal composition v4. A migration chain upgrades older saves (v1 flat JSON → per-point volume → volume lane → unified `lanes[]` + cents canon); legacy `.json` files still open. `tuning` and `snap` sit at the top level so preset tools and galleries can read them without parsing the piece.
+`formatVersion` 2 wraps internal composition v5. A migration chain upgrades older saves:
+- v1 flat JSON → per-point volume → volume lane → unified `lanes[]` + cents canon;
+- `formatVersion` 1 / composition v4 → v5: Key + Scale become Tuning / Root / Scale (13.8), playing the same notes.
+
+Legacy `.json` files still open. The tuning settings sit in `snap.settings` beside the Gravity feel; the envelope's `tuning` section still holds only the reference pitch. `tuning` and `snap` sit at the top level so preset tools and galleries can read them without parsing the piece.
 
 **Presets: one schema, two extensions, two verbs (planned, BACKLOG 12.2).** `.glisskit` shares the schema. The extension picks the default verb: `.gliss` → **Open** (replace the workspace), `.glisskit` → **Import settings** (read only `tuning`/`snap`). A File ▸ Import settings… action works on any conforming file. On extension/`kind` mismatch, the extension wins.
 

@@ -21,8 +21,10 @@ function guide(id: string, orientation: 'x' | 'y', position: number): GuideDefin
 function sources(over: Partial<SnapSources> = {}): SnapSources {
   return {
     snapEnabled: true,
-    scaleRoot: null,
-    scaleId: null,
+    tuning: { kind: 'edo', divisions: 12, equave: 'octave' },
+    root: 0,
+    scaleId: 'all',
+    tunedFrom: 0,
     hidePitchLines: false,
     guidesVisible: true,
     harmonicPrism: {

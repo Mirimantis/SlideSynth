@@ -4,6 +4,7 @@ import { createComposition } from '../model/composition';
 import { createTrack } from '../model/track';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
+import { ALL_NOTES, getScale, isTwelveEdo, nearestDegree, resolveTuning, rootCents, type TuningRef } from '../tuning/tuning';
 import { batch, signal, type Signal } from './reactive';
 import { TRANSPORT_STOPPED } from './transport';
 import { NO_POINTS, addPoints, onlyPoint, togglePoint, withoutCurves, type PointRef, type PointSelection } from '../model/point-selection';
@@ -36,8 +37,10 @@ import { NO_POINTS, addPoints, onlyPoint, togglePoint, withoutCurves, type Point
 /** AppState fields that are views of `composition.snap`, not stored copies. */
 const SNAP_VIEW_FIELDS = {
   snapEnabled: 'enabled',
-  scaleRoot: 'scaleRoot',
+  tuning: 'tuning',
+  root: 'root',
   scaleId: 'scaleId',
+  tunedFrom: 'tunedFrom',
   hidePitchLines: 'hidePitchLines',
   magneticEnabled: 'magneticEnabled',
   magneticStrength: 'magneticStrength',
@@ -718,20 +721,49 @@ class Store {
     this.touch('snap');
   }
 
-  /** Sets the Key dropdown's three-mode state (8.19): a numeric root, Chromatic
-   *  (root=null, hidePitchLines=false), or None (root=null, hidePitchLines=true).
-   *  hidePitchLines is meaningful only when root is null; selecting a scale tone
-   *  forces it to false so the staff lines come back. */
-  setScaleRoot(root: number | null, hidePitchLines: boolean = false) {
+  /** Change the tuning (13.8), keeping what still fits: the root moves to the
+   *  new tuning's degree nearest the old root's pitch, and the scale stays if
+   *  it fits the new tuning's size. A 12-EDO tuning is always tuned from C. */
+  setTuning(ref: TuningRef) {
     const snap = this.state.composition.snap;
-    snap.scaleRoot = root;
-    snap.hidePitchLines = root === null ? hidePitchLines : false;
-    if (root === null) snap.scaleId = null;
+    const after = resolveTuning(ref);
+    const home = rootCents(snap);
+    if (isTwelveEdo(ref)) snap.tunedFrom = 0;
+    snap.root = nearestDegree(after, snap.tunedFrom, home);
+    const scale = getScale(snap.scaleId);
+    if (!scale || scale.size !== after.degrees.length) snap.scaleId = ALL_NOTES;
+    snap.tuning = ref;
     this.touch('snap');
   }
 
-  setScaleId(scaleId: string | null) {
+  /** Which degree of the tuning is home. */
+  setRoot(degree: number) {
+    const snap = this.state.composition.snap;
+    const n = resolveTuning(snap.tuning).degrees.length;
+    snap.root = ((Math.round(degree) % n) + n) % n;
+    this.touch('snap');
+  }
+
+  /** A scale id, or 'all'. */
+  setScaleId(scaleId: string) {
     this.state.composition.snap.scaleId = scaleId;
+    this.touch('snap');
+  }
+
+  /** Which of the 12 standard notes the tuning's degree 0 sits on. The root
+   *  stays on (the degree nearest) the same pitch: re-anchoring a Werckmeister
+   *  table on D while playing in D keeps you in D. */
+  setTunedFrom(pitchClass: number) {
+    const snap = this.state.composition.snap;
+    if (isTwelveEdo(snap.tuning)) return;
+    const home = rootCents(snap);
+    snap.tunedFrom = ((Math.round(pitchClass) % 12) + 12) % 12;
+    snap.root = nearestDegree(resolveTuning(snap.tuning), snap.tunedFrom, home);
+    this.touch('snap');
+  }
+
+  setPitchLinesVisible(visible: boolean) {
+    this.state.composition.snap.hidePitchLines = !visible;
     this.touch('snap');
   }
 

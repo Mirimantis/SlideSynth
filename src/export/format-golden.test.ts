@@ -63,7 +63,9 @@ describe('golden audible output across format migrations', () => {
     expect(comp.loopEndBeats).toBe(7);
     expect(comp.tuningOffsetCents).toBe(25);
     expect(comp.snap.enabled).toBe(true);
-    expect(comp.snap.scaleRoot).toBe(2);
+    // Key D + Dorian, migrated to the tuning model (13.8): 12-EDO, root D.
+    expect(comp.snap.tuning).toEqual({ kind: 'edo', divisions: 12, equave: 'octave' });
+    expect(comp.snap.root).toBe(2);
     expect(comp.snap.scaleId).toBe('dorian');
     expect(comp.snap.magneticStrength).toBe(0.7);
     expect(comp.snap.magneticSpringK).toBe(12);

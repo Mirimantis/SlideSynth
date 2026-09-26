@@ -471,11 +471,26 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - `.scl` import and export.
   - Research, with sources: [.claude/plans/13.8-tuning-taxonomy-research.md](.claude/plans/13.8-tuning-taxonomy-research.md).
   - **Build in this order:**
-    - [ ] **(a) Tuning model + migration** *(M)*
+    - [x] **(a) Tuning model + migration** *(M)*
       - Tuning, Root (a degree index), Scale, Pitch lines, and "Tuned from" for historical temperaments.
       - The built-in tunings: 12-EDO, equal divisions (N, octave or 3:1), a curated just-intonation list, the historical tables, Slendro and Pelog.
       - The composition version goes up, with the migration table in the spec and a golden-format shim.
       - The Tuning drawer's controls switch to the three new dropdowns. The circle comes in (c).
+      - **Done (this PR):**
+        - **`src/tuning/tuning.ts`:**
+          - the tuning catalog (equal divisions, the just, historical and traditional tables) and the scales, now counted in degrees;
+          - degree names: letters for 12-note tunings and 19/31-EDO, ratios for just intonation, numbers otherwise;
+          - `pitchSetFor()`, which turns Tuning / Root / Scale / Tuned from / Pitch lines into the notes the staff draws and snapping aims at.
+        - **Snap** (`utils/snap.ts`) aims at that list (`pitchTargets`, null with pitch lines hidden) instead of the old root + scale + chromatic fallback. The staff reads it too, still drawing on the 12-EDO lines until (b).
+        - **Store:** `SnapSettings` holds `tuning`, `root` (a degree index), `scaleId` ('all' or a scale), `tunedFrom` and `hidePitchLines`. `setTuning` and `setTunedFrom` keep the root on the nearest pitch; a scale that doesn't fit the new tuning falls back to All notes. Each drawer edit is one undo step (the old Key menu wasn't undoable).
+        - **Files:**
+          - composition v5, `.gliss` formatVersion 2 (older apps refuse the file instead of misreading it);
+          - `migrateSnapSettings` maps every old Key + Scale setting to the same notes. A test checks every old scale on several roots;
+          - the golden audio snapshots are unchanged.
+        - **Drawer:** a Preact `TuningPanel` (Tuning with Divisions and "of the octave / of 3:1", Root, Scale, Tuned from, Tune A4, Pitch lines) replaces `ui/toolbar.ts`. `utils/scales.ts` is gone.
+        - **Beyond the spec:**
+          - **Tuned from** shows for every tuning except 12-EDO, not only historical ones. The migration needs it (Thai 7-TET or Pelog on D becomes that tuning tuned from D), and for any tuning but 12-EDO it decides where the tuning sits.
+          - An old "C + Chromatic scale" file now shows the plain chromatic staff instead of every line highlighted: it's All notes, the same pitches.
     - [ ] **(b) Staff, labels and snap per tuning** *(M)*
       - The staff draws the tuning's degrees, named by the naming rule, with the optional 12-EDO reference layer.
       - Snapping without a scale falls back to the tuning's degrees.

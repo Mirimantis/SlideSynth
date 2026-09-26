@@ -131,6 +131,18 @@ describe('.gliss envelope', () => {
     expect((againCurve.lanes as Array<{ type: string }>).some(l => l.type === 'wobble')).toBe(true);
   });
 
+  it('opens a formatVersion 1 file, migrating its Key + Scale (13.8)', () => {
+    const env = JSON.parse(serializeComposition(loadFixture()));
+    env.formatVersion = 1;
+    env.composition.version = 4;
+    env.snap.settings = { enabled: true, scaleRoot: 7, scaleId: 'thai-7tet', hidePitchLines: false,
+      magneticEnabled: true, magneticStrength: 0.7, magneticSpringK: 12, magneticDamping: 3.5 };
+    const comp = deserializeComposition(JSON.stringify(env));
+    expect(comp.snap).toMatchObject({ tuning: { kind: 'edo', divisions: 7 }, tunedFrom: 7, root: 0, scaleId: 'all' });
+    expect(comp.snap).not.toHaveProperty('scaleRoot');
+    expect(JSON.parse(serializeComposition(comp)).formatVersion).toBe(2);
+  });
+
   it('rejects a newer formatVersion with a clear error', () => {
     const comp = loadFixture();
     const env = JSON.parse(serializeComposition(comp));

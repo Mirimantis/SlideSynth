@@ -226,7 +226,7 @@
     <a href="#preview">Live Audio Preview</a>
     <a href="#midi-input">Live MIDI Input</a>
     <a href="#snapping">Snap & Grid</a>
-    <a href="#scales">Key & Scale</a>
+    <a href="#scales">Tuning, Root & Scale</a>
     <a href="#prism">Harmonic Prism</a>
     <a href="#viewport">Zoom & Pan</a>
     <a href="#clipboard">Copy, Paste & Duplicate</a>
@@ -257,7 +257,7 @@
     holds the drawer icons; each opens a <strong>drawer</strong> that slides out over the
     canvas edge — <strong>Tempo</strong> (BPM, time signature, metronome),
     <strong>Snap</strong> (presets, Gravity, guides), <strong>Harmonic Prism</strong>, and
-    <strong>Tuning</strong> (key, scale, reference pitch). One drawer is open at a time;
+    <strong>Tuning</strong> (tuning, root, scale, reference pitch). One drawer is open at a time;
     <kbd>Escape</kbd> or a click on the canvas closes it. Below a divider sits the
     <strong>tool strip</strong>, always visible: <strong>Draw</strong>, <strong>Select</strong>,
     <strong>Delete</strong>, <strong>Slice</strong> and <strong>Perform</strong>. The active
@@ -725,7 +725,7 @@
   </details>
   <p>
     All snap-section settings (Snap toggle, Gravity on/off, its three
-    sliders, plus the Key &amp; Scale picks) are saved with the composition file
+    sliders, plus the Tuning, Root and Scale picks) are saved with the composition file
     and restored on load, so a project's bespoke snap configuration round-trips
     cleanly.
   </p>
@@ -737,7 +737,7 @@
         The <strong>Preset</strong> dropdown at the top of the Snap section
         loads a named <em>Gravity feel</em> in one click. A preset carries only
         the three physics values — Force, Spring and Damping — so it
-        never changes your Key/Scale pick, and never changes what Gravity
+        never changes your Tuning, Root or Scale, and never changes what Gravity
         snaps <em>to</em>, only how it gets there:
       </p>
       <ul>
@@ -803,26 +803,74 @@
   </details>
 
   <!-- Key & Scale -->
-  <h2 id="scales">Key & Scale</h2>
+  <h2 id="scales">Tuning, Root &amp; Scale</h2>
   <p>
-    Use the <strong>Key</strong> and <strong>Scale</strong> dropdowns in the
-    <strong>Tuning</strong> drawer to set a musical key. When a key is active, the staff highlights in-scale notes
-    and snap quantises to scale degrees.
+    Three choices in the <strong>Tuning</strong> drawer set the pitch grid: the staff's
+    lines, and the notes snapping pulls to.
   </p>
+  <ul>
+    <li><strong>Tuning</strong> — which pitches exist. <strong>12-EDO</strong> (the standard
+      twelve equal semitones) is the default.</li>
+    <li><strong>Root</strong> — which note is home.</li>
+    <li><strong>Scale</strong> — which notes the piece uses, counted from the root;
+      <strong>All notes</strong> uses every note of the tuning.</li>
+  </ul>
   <details>
-    <summary>Scale details</summary>
+    <summary>Tunings</summary>
     <div class="detail-body">
       <ul>
-        <li>30 scales across 5 groups: Western modes, pentatonic/blues, other Western, world scales, and microtonal.</li>
-        <li>Microtonal scales (e.g. Maqam Rast, Gamelan Slendro, 24-TET) use fractional semitone intervals. <strong>24-TET</strong> divides the octave into 24 equal quarter-tones — useful for exploring just-intonation neighbourhoods and Middle-Eastern tonalities without committing to a specific maqam.</li>
-        <li>In-scale accidentals (sharps/flats that are part of the current scale) are visually prominent on the staff.</li>
-        <li><strong>Chromatic</strong> (default) — no key. All 12 semitones render as
-          background staff lines and Y-snap pulls to the nearest semitone.</li>
-        <li><strong>None</strong> — clean canvas. Hides every default semitone line and
-          turns off the chromatic Y-snap, leaving the cursor free in pitch. Other snap
-          targets still work: user-placed pitch guides, Harmonic Prism projection echoes,
-          and curve/point snapping all keep pulling. Useful when you've set up custom
-          pitch guides and want only those to be visible and active.</li>
+        <li><strong>Equal divisions…</strong> — type how many equal steps to divide the
+          octave into (5–72): 19 and 31 are rich meantone tunings, 24 gives quarter tones,
+          22 and 53 are favourites of microtonal composers. Choose <strong>of 3:1</strong>
+          instead to divide the twelfth: 13 steps of 3:1 is the Bohlen–Pierce scale.</li>
+        <li><strong>Just intonation</strong> — pure whole-number ratios: 5-limit and 7-limit
+          12-note sets, and the harmonic series from the 8th to the 16th harmonic.</li>
+        <li><strong>Historical</strong> — ¼-comma meantone, Pythagorean, Werckmeister III,
+          Kirnberger III and Vallotti. These are deliberately unequal, so each key has its
+          own colour: D major in Werckmeister isn't C major moved up a tone.</li>
+        <li><strong>Traditional</strong> — Slendro and Pelog, approximations of Javanese
+          gamelan tunings (real ensembles vary).</li>
+        <li><strong>Tuned from</strong> appears for every tuning except 12-EDO: which standard
+          note the tuning's first degree sits on (C by default). Moving it keeps your root on
+          the same pitch.</li>
+        <li>Changing the tuning keeps the root on the nearest pitch the new tuning has, and
+          keeps the scale if it fits (the Western scales fit every 12-note tuning, the maqamat
+          fit 24-EDO).</li>
+      </ul>
+    </div>
+  </details>
+  <details>
+    <summary>Roots and scales</summary>
+    <div class="detail-body">
+      <ul>
+        <li>Roots are named with letters where the tuning has them (12-note tunings, 19- and
+          31-EDO), with the ratio alongside in just intonation; other tunings number their
+          notes from 1.</li>
+        <li>Scales: Western modes, pentatonic/blues, other Western and world scales for any
+          12-note tuning; Maqam Rast and Bayati for 24-EDO. A scale that doesn't fit the
+          tuning plays as All notes.</li>
+        <li>With a scale on the standard lines, the staff highlights its notes (sharps and
+          flats in the scale stand out) and dims the rest. Notes between the standard lines
+          (quarter tones, historical and just tunings) draw as extra lines, dashed where they
+          fall between semitones.</li>
+      </ul>
+    </div>
+  </details>
+  <details>
+    <summary>Pitch lines and Tune A4</summary>
+    <div class="detail-body">
+      <ul>
+        <li><strong>Pitch lines</strong> (on by default) — turn off for a clean canvas: no
+          pitch lines, and nothing pulls the cursor in pitch except pitch guides and Harmonic
+          Prism projection echoes. Useful when you've set up your own pitch guides and want
+          only those.</li>
+        <li><strong>Tune A4</strong> — the reference frequency (see
+          <a href="#playback">Playback &amp; Transport</a>). It moves every frequency together
+          and never the grid.</li>
+        <li>Files saved before tunings existed open with the same notes: a key and scale
+          become 12-EDO with that root and scale, the old 24-TET, Thai 7-TET, maqam and
+          gamelan "scales" become their tunings, Chromatic is 12-EDO with All notes, and None
+          turns pitch lines off.</li>
       </ul>
     </div>
   </details>

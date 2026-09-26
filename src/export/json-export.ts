@@ -1,15 +1,18 @@
-import type { Composition, Lane, LanePoint, ToneDefinition } from '../types';
+import type { Composition, Lane, LanePoint, SnapSettings, ToneDefinition } from '../types';
 import { createDefaultSnapSettings } from '../model/composition';
 import { LANE_SPECS } from '../model/lane';
+import { ALL_NOTES, TWELVE_EDO, getScale, type TuningRef } from '../tuning/tuning';
 
-export const COMPOSITION_VERSION = 4;
+export const COMPOSITION_VERSION = 5;
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
 // ── .gliss envelope ─────────────────────────────────────────────
-// On-disk shape (formatVersion 1 ⇔ internal composition v4):
+// On-disk shape (formatVersion 2 ⇔ internal composition v5; formatVersion 1
+// files carry v4, whose Key + Scale settings migrate on load — see
+// migrateSnapSettings):
 //   { app, formatVersion, kind, meta?, tuning?, snap?, composition }
 // `tuning` and `snap` are lifted out of the flat Composition so preset packs
 // (.glisskit, future) can carry them without a composition, and so a gallery
@@ -17,7 +20,7 @@ function clamp01(v: number): number {
 // — the envelope is purely a serialization concern.
 
 export const GLISS_APP_ID = 'glissandograph';
-export const GLISS_FORMAT_VERSION = 1;
+export const GLISS_FORMAT_VERSION = 2;
 
 interface GlissEnvelope {
   app: typeof GLISS_APP_ID;
@@ -72,7 +75,7 @@ function compositionFromEnvelope(env: GlissEnvelope): Composition {
   const comp: Composition = {
     ...(env.composition as Composition),
     name: env.meta?.name ?? 'Untitled',
-    snap: env.snap?.settings ?? createDefaultSnapSettings(),
+    snap: migrateSnapSettings(env.snap?.settings),
     guides: env.snap?.guides ?? [],
     tuningOffsetCents: env.tuning?.referenceOffsetCents ?? 0,
   };
@@ -137,12 +140,7 @@ function migrateLegacyComposition(data: Composition): Composition {
   // v1 → v2: per-composition snap settings + guides. v1 files had no `snap` block;
   // seed from the documented defaults so legacy saves open with the historical
   // global defaults rather than whatever the user had set in their session.
-  if (!data.snap || typeof data.snap !== 'object') {
-    data.snap = createDefaultSnapSettings();
-  } else if (typeof (data.snap as Partial<typeof data.snap>).hidePitchLines !== 'boolean') {
-    // 8.19: v2 files saved before hidePitchLines existed open as Chromatic.
-    data.snap.hidePitchLines = false;
-  }
+  data.snap = migrateSnapSettings(data.snap);
   if (!Array.isArray(data.guides)) {
     data.guides = [];
   }
@@ -170,6 +168,68 @@ function migrateLegacyComposition(data: Composition): Composition {
   data.version = COMPOSITION_VERSION;
 
   return data;
+}
+
+/** The Key + Scale settings files saved before 13.8 (composition v4 and
+ *  older): a 12-EDO root 0–11 (null for Chromatic / None) and a scale id that
+ *  could also name a tuning. */
+interface LegacyKeySettings {
+  scaleRoot?: number | null;
+  scaleId?: string | null;
+  hidePitchLines?: boolean;
+}
+
+/** Old scale ids that were really tunings (13.8), and the tuning each became.
+ *  Where the tuning's degrees include every 12-EDO note (24-EDO), the old root
+ *  stays a root; otherwise the tuning is tuned from the old root. */
+const LEGACY_TUNINGS: Record<string, { tuning: TuningRef; scaleId: string; rootInDegrees: number | null }> = {
+  '24tet': { tuning: { kind: 'edo', divisions: 24, equave: 'octave' }, scaleId: ALL_NOTES, rootInDegrees: 2 },
+  'maqam-rast': { tuning: { kind: 'edo', divisions: 24, equave: 'octave' }, scaleId: 'maqam-rast', rootInDegrees: 2 },
+  'maqam-bayati': { tuning: { kind: 'edo', divisions: 24, equave: 'octave' }, scaleId: 'maqam-bayati', rootInDegrees: 2 },
+  'thai-7tet': { tuning: { kind: 'edo', divisions: 7, equave: 'octave' }, scaleId: ALL_NOTES, rootInDegrees: null },
+  'slendro': { tuning: { kind: 'table', id: 'slendro' }, scaleId: ALL_NOTES, rootInDegrees: null },
+  'pelog': { tuning: { kind: 'table', id: 'pelog' }, scaleId: ALL_NOTES, rootInDegrees: null },
+};
+
+/**
+ * Snap settings from any file version, in the current shape. Pre-13.8 Key +
+ * Scale settings map to the tuning / root / scale that plays the same notes:
+ * - Key None → 12-EDO, pitch lines hidden; Key Chromatic → 12-EDO, All notes;
+ * - Key 0–11 + a 12-note scale → 12-EDO, that root, that scale (the old
+ *   "Chromatic" scale is All notes);
+ * - the old microtonal "scales" become their tunings (LEGACY_TUNINGS).
+ * Missing settings (v1 files) take the defaults.
+ */
+export function migrateSnapSettings(raw: unknown): SnapSettings {
+  const defaults = createDefaultSnapSettings();
+  if (!raw || typeof raw !== 'object') return defaults;
+  const snap = { ...defaults, ...(raw as Partial<SnapSettings>) };
+  if ((raw as Partial<SnapSettings>).tuning) return snap;
+
+  const legacy = raw as LegacyKeySettings;
+  delete (snap as LegacyKeySettings).scaleRoot;
+  snap.tuning = { ...TWELVE_EDO };
+  snap.root = 0;
+  snap.scaleId = ALL_NOTES;
+  snap.tunedFrom = 0;
+  snap.hidePitchLines = false;
+  const oldRoot = typeof legacy.scaleRoot === 'number' ? ((legacy.scaleRoot % 12) + 12) % 12 : null;
+  if (oldRoot === null) {
+    snap.hidePitchLines = legacy.hidePitchLines === true;
+    return snap;
+  }
+  const asTuning = legacy.scaleId ? LEGACY_TUNINGS[legacy.scaleId] : undefined;
+  if (asTuning) {
+    snap.tuning = { ...asTuning.tuning };
+    snap.scaleId = asTuning.scaleId;
+    if (asTuning.rootInDegrees === null) snap.tunedFrom = oldRoot;
+    else snap.root = oldRoot * asTuning.rootInDegrees;
+    return snap;
+  }
+  snap.root = oldRoot;
+  const scale = legacy.scaleId ? getScale(legacy.scaleId) : undefined;
+  snap.scaleId = scale && scale.size === 12 ? scale.id : ALL_NOTES;
+  return snap;
 }
 
 /** Convert v3 curves (points + parameters, MIDI-note Y) to the v4 lanes model
