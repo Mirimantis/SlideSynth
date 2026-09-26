@@ -1,6 +1,7 @@
 import '@preact/signals'; // components re-render when the store fields they read change
 import { store } from '../state/store';
 import { primaryShortcut } from '../commands/catalog';
+import { DYNAMICS_SOURCES, type DynamicsSource } from '../types';
 
 /**
  * Tool Properties (BACKLOG 15.4): per-tool settings for the active tool. A
@@ -9,6 +10,7 @@ import { primaryShortcut } from '../commands/catalog';
  */
 export function ToolPropertyPanel() {
   const st = store.getState();
+  if (st.performMode) return <PerformSettings source={st.dynamicsSource} />;
   if (st.activeTool !== 'draw') return <p class="placeholder-text">No settings for this tool</p>;
 
   const mode = st.drawPreviewMode;
@@ -50,5 +52,28 @@ export function ToolPropertyPanel() {
         </div>
       </div>
     </>
+  );
+}
+
+/** Perform's settings (BACKLOG 16.3, moved from the old Transport drawer):
+ *  what sets the volume of what you play. The Perform session (16.8) gives it
+ *  a clearer name. */
+function PerformSettings({ source }: { source: DynamicsSource }) {
+  return (
+    <div class="prop-section">
+      <div class="prop-label">Dynamics</div>
+      <select
+        id="perform-dynamics-source"
+        title="What sets the volume of what you perform"
+        value={source}
+        onChange={e => {
+          const value = (e.currentTarget as HTMLSelectElement).value as DynamicsSource;
+          if (DYNAMICS_SOURCES.includes(value)) store.setDynamicsSource(value);
+        }}
+      >
+        <option value="fixed">Fixed</option>
+        <option value="key-swell">Key swell (hold F)</option>
+      </select>
+    </div>
   );
 }

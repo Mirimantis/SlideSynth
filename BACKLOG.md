@@ -137,7 +137,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - Also in this PR, a user request: each drawer is sized to its own controls instead of full height and a shared 240px width. Height is capped at the canvas (then it scrolls); width runs from 200px up to the canvas width.
       - The Prism label column widened so "Voice 1 (root)" no longer runs into its input.
       - The Prism toggles' tooltips come from the command catalog.
-  - **Still to migrate:** Prism panel, drawers' contents, toolbar, tone builder/picker and dialogs. Most of these are reshaped by Phase 16, so they move with it (16.2–16.5).
+  - **Still to migrate:** Prism panel, the Snap and Tuning drawers' contents, the tool panel, tone builder/picker and the older dialogs. Most of these are reshaped by Phase 16, so they move with it (16.4–16.5). *(16.3 moved the top bar, menus, Settings and the Tempo drawer.)*
 - [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2, PR #76)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.
   - Add an `fgDirty` flag mirroring `bgDirty`, and cache each curve's tessellation as a `Path2D` keyed by curve identity. Idle CPU should then drop to near zero.
@@ -246,7 +246,7 @@ Implementation comes first: block out every control so it works, then hold the d
       - **Prism chord voice 0 was ignored when performing.** Perform and the Space-hold preview put the primary voice at the cursor, assuming chord voice 0 has offset 0. That's false for a symmetric chord, which centres on the cursor, and for a root octave offset (8.13). So a symmetric triad sounded and recorded its middle voice twice and never its lowest. Draw was right all along. The primary planchette still tracks the cursor (magnetic, HUD); what it sounds, records and draws on the rail adds voice 0's offset (`primaryChordOffset`).
       - **Harmony planchettes froze on the rail** when the pointer left the canvas; only the primary was cleared.
       - **The Draw tool's hover overlays** (the chord preview dots, the preview line, the Slice marker) froze where Perform was entered.
-- [ ] **16.3 Top bar, menus, Settings, Tempo drawer** *(M–L)*
+- [x] **16.3 Top bar, menus, Settings, Tempo drawer** *(M–L, PR #82)*
   - **Top bar:**
     - the transport, with the Record split button and its menu, and Keep;
     - Snap and Loop side by side;
@@ -256,6 +256,31 @@ Implementation comes first: block out every control so it works, then hold the d
   - **Settings dialog:** MIDI device, audible scrub.
   - **Tempo drawer:** BPM, time signature, metronome and its volume.
   - The Transport drawer goes away.
+  - **Done (PR #82):**
+    - **Top bar** (`ui/top-bar.tsx`): a Preact component made of small parts that each read only what they show. Left to right:
+      - name and length;
+      - File, Edit and View menus;
+      - Undo and Redo arrows;
+      - Perform;
+      - Stop, Play/Pause (now one button), Record ▾, Keep;
+      - Snap and Loop;
+      - the Settings gear.
+    - Every button runs its catalog command. The Keep button reads a polled `keepable` signal.
+    - **Menus** (`ui/menu.tsx`) are lists of command ids.
+      - Each item shows its label and shortcut, greys out when `enabled()` is false, and shows a check mark from the registry's new `checked()`.
+      - Pointing across the bar switches between open menus.
+      - Escape closes the menu and goes no further.
+    - **Record ▾** holds Record one pass, Drop last pass, New track per pass and Count-in.
+    - **New commands:** `transport.layerMode`, `transport.countIn`, `view.pitchHud`, `view.scrollDuringPlayback`, `app.settings`. They have no keys; the settings among them are checkable.
+    - **Count-in** is a preference, on by default. With it off, R from a stop records straight away; the transport's `toggle-record` event carries it.
+    - **Settings** (`ui/settings-dialog.tsx`): MIDI input device and Audible scrub (on by default). The scrub half of 16.6 is done here.
+    - **Tempo drawer** (`ui/tempo-panel.tsx`): BPM (clamped, one undo step), time signature and the metronome. It replaces the Transport drawer, whose other contents moved as specified.
+    - **Dynamics** moved to Tool Properties, shown while in Perform (the 16.5 placement, pulled forward because its drawer went away).
+    - *Also:*
+      - Copy, Cut, Paste, Duplicate, Continue and Delete now say when they can act, so the Edit menu greys them out.
+      - Loop (L) is refused while a recording runs, matching its button.
+      - Loop-marker dragging reads Loop from the store, not from the old drawer checkbox.
+      - Below ~1150 px wide, the Perform button joins the top-bar row instead of centring over the canvas, where it would cover the menus.
 - [ ] **16.4 Tool strip, Snap / Prism renames** *(M)*
   - **Tool strip:**
     - It replaces the Tools drawer.
@@ -274,7 +299,7 @@ Implementation comes first: block out every control so it works, then hold the d
 - [ ] **16.6 Space and audition** *(S)*
   - Space becomes Play/Pause only.
   - Holding A auditions: the Draw preview, and a Y guide's pitch while dragging it (absorbs 13.6).
-  - Scrubbing is audible by default; *Settings › Audible scrub* turns it off (the toggle can sit in View until 16.3 lands).
+  - ~~Scrubbing is audible by default; *Settings › Audible scrub* turns it off.~~ Done in 16.3.
 - [ ] **16.7 Theme tokens** *(M)*
   - Move every colour onto one set of named tokens. Today there are ~130 literal colours across `styles/*.css` and ~60 in the canvas renderers and `constants.ts`. The canvas should read the same tokens as the CSS, not a parallel list.
   - No visual change; it's the groundwork that lets 16.9 restyle the app without touching layout or logic.

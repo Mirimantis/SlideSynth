@@ -38,6 +38,10 @@ export const COMMANDS = [
     description: 'arm or disarm recording onto the selected track' },
   { id: 'transport.recordPass', label: 'Record one pass', section: 'Transport', keys: ['Shift+R'], once: true,
     description: 'record exactly one full loop pass (or Shift+click Record)' },
+  { id: 'transport.layerMode', label: 'New track per pass', section: 'Transport',
+    description: 'each loop pass you perform lands on its own track' },
+  { id: 'transport.countIn', label: 'Count-in', section: 'Transport',
+    description: 'count in before recording from a stop' },
   { id: 'transport.loop', label: 'Loop', section: 'Transport', keys: ['L'], description: 'toggle looping between the loop markers' },
   { id: 'transport.escape', label: 'Cancel', section: 'Transport', keys: ['Escape'],
     description: 'stop a count-in or recording; otherwise leave Perform, or finish drawing, close the transform box and clear Prism projection' },
@@ -88,8 +92,12 @@ export const COMMANDS = [
     description: 'scroll to the first control point (beat 0 on an empty canvas)' },
   { id: 'view.end', label: 'Go to end', section: 'View', keys: ['PageDown'], description: 'scroll to the last control point' },
   { id: 'view.playhead', label: 'Go to playhead', section: 'View', keys: ['Home'] },
+  { id: 'view.pitchHud', label: 'Pitch HUD', section: 'View', description: 'the pitch under the cursor, in notes, cents and Hz' },
+  { id: 'view.scrollDuringPlayback', label: 'Scroll canvas during playback', section: 'View',
+    description: 'in Compose, slide the canvas past a fixed rail instead of moving the playhead' },
   { id: 'view.perfHud', label: 'Perf HUD', section: 'View', keys: ['!'], description: 'frame times, voice counts and audio latency' },
   { id: 'help.open', label: 'User Manual', section: 'View', keys: ['?'] },
+  { id: 'app.settings', label: 'Settings', section: 'View', description: 'MIDI input and other preferences' },
 
   // ── File ──
   { id: 'file.save', label: 'Save Composition', section: 'File' },

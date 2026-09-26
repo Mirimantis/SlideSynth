@@ -85,6 +85,8 @@ const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollDuringPlayback';
 try { localStorage.removeItem('slidesynth.scrollCanvas'); } catch { /* ignore */ }
 const LAYER_MODE_STORAGE_KEY = 'slidesynth.layerMode';
 const PITCH_HUD_STORAGE_KEY = 'slidesynth.pitchHud';
+const COUNT_IN_STORAGE_KEY = 'slidesynth.countIn';
+const AUDIBLE_SCRUB_STORAGE_KEY = 'slidesynth.audibleScrub';
 const PERF_HUD_STORAGE_KEY = 'slidesynth.perfHud';
 const METRONOME_ENABLED_STORAGE_KEY = 'slidesynth.metronomeEnabled';
 const METRONOME_VOLUME_STORAGE_KEY = 'slidesynth.metronomeVolume';
@@ -257,6 +259,8 @@ function createInitialState(): RawState {
     scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, false),
     layerModeEnabled: loadBoolPref(LAYER_MODE_STORAGE_KEY, false),
     pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
+    countInEnabled: loadBoolPref(COUNT_IN_STORAGE_KEY, true),
+    audibleScrub: loadBoolPref(AUDIBLE_SCRUB_STORAGE_KEY, true),
     perfHudVisible: loadBoolPref(PERF_HUD_STORAGE_KEY, false),
     metronomeEnabled: loadBoolPref(METRONOME_ENABLED_STORAGE_KEY, false),
     metronomeVolume: loadNumberPref(METRONOME_VOLUME_STORAGE_KEY, 0.6),
@@ -629,6 +633,20 @@ class Store {
     this.state.pitchHudVisible = visible;
     saveBoolPref(PITCH_HUD_STORAGE_KEY, visible);
     this.touch('pitchHudVisible');
+  }
+
+  setCountIn(enabled: boolean) {
+    if (this.state.countInEnabled === enabled) return;
+    this.state.countInEnabled = enabled;
+    saveBoolPref(COUNT_IN_STORAGE_KEY, enabled);
+    this.touch('countInEnabled');
+  }
+
+  setAudibleScrub(enabled: boolean) {
+    if (this.state.audibleScrub === enabled) return;
+    this.state.audibleScrub = enabled;
+    saveBoolPref(AUDIBLE_SCRUB_STORAGE_KEY, enabled);
+    this.touch('audibleScrub');
   }
 
   setPerfHudVisible(visible: boolean) {

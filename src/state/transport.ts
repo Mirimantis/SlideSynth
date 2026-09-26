@@ -38,8 +38,9 @@ export type TransportEvent =
   | { type: 'stop' }
   /** Escape: stops a count-in or a recording; otherwise does nothing. */
   | { type: 'escape' }
-  /** R — open-ended record. */
-  | { type: 'toggle-record'; audioNow: number }
+  /** R — open-ended record. From a stop it counts in first when `countIn`
+   *  is on (BACKLOG 16.3), otherwise it starts recording straight away. */
+  | { type: 'toggle-record'; audioNow: number; countIn: boolean }
   /** Shift+R — record exactly the next full loop pass (BACKLOG 10.5). */
   | { type: 'toggle-pass-record' }
   /** Perform was entered while rolling: the clock becomes open-ended. Leaving
@@ -91,7 +92,9 @@ export function transition(s: TransportState, e: TransportEvent): TransportState
           if (s.capture === 'armed' || s.capture === 'pass-recording') return TRANSPORT_STOPPED;
           return { ...s, capture: 'armed' };
         default:
-          return { mode: 'countdown', clock: 'play', capture: 'armed', countdownStartedAt: e.audioNow };
+          return e.countIn
+            ? { mode: 'countdown', clock: 'play', capture: 'armed', countdownStartedAt: e.audioNow }
+            : rolling('play', 'armed');
       }
 
     case 'toggle-pass-record':

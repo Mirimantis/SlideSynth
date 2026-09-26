@@ -294,6 +294,11 @@ export interface AppState {
    *  fresh track. localStorage-backed; off by default. */
   layerModeEnabled: boolean;
   pitchHudVisible: boolean;                   // Pitch HUD user preference (localStorage-backed)
+  /** Record from a stop counts in first (BACKLOG 16.3). localStorage-backed; on by default. */
+  countInEnabled: boolean;
+  /** Dragging the ruler plays what's under the playhead (BACKLOG 16.3).
+   *  localStorage-backed; on by default. */
+  audibleScrub: boolean;
   perfHudVisible: boolean;                    // Perf HUD user preference (localStorage-backed)
   metronomeEnabled: boolean;                  // Metronome user preference (localStorage-backed)
   metronomeVolume: number;                    // 0..1 — metronome master gain (localStorage-backed)

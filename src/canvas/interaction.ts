@@ -436,9 +436,7 @@ export function createInteraction(
     if (sy < RULER_HEIGHT && !e.altKey) {
       const comp = state.composition;
       // Hit-test loop markers only when Loop is currently enabled.
-      const loopOn = document.getElementById('loop-toggle') instanceof HTMLInputElement
-        && (document.getElementById('loop-toggle') as HTMLInputElement).checked;
-      if (loopOn) {
+      if (state.loopEnabled) {
         const which = hitTestLoopMarkers(vp, sx, comp.loopStartBeats, comp.loopEndBeats);
         if (which) {
           istate.draggingLoopMarker = which;

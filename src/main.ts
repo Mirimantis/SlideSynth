@@ -26,10 +26,11 @@ import { openContextMenu, type ContextMenuItem } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
 import { createMidiInput } from './audio/midi-input';
-import { createDynamicsBus, isDynamicsSource } from './audio/dynamics-bus';
+import { createDynamicsBus } from './audio/dynamics-bus';
 import { createMagneticState, updateMagnetic, resetMagnetic } from './utils/snap-magnetic';
 import { renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, LOOP_WRAP_FLASH_MS, PULSE_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { h, render } from 'preact';
+import { signal } from '@preact/signals-core';
 import { PropertyPanel } from './ui/property-panel';
 import { ToolPropertyPanel } from './ui/tool-property-panel';
 import { TrackList, type TrackListActions } from './ui/track-list';
@@ -38,6 +39,10 @@ import { openTonePicker } from './ui/tone-picker';
 import { openPresetSaveDialog } from './ui/preset-save-dialog';
 import { openMidiArmDialog } from './ui/midi-arm-dialog';
 import { createPerfHud } from './ui/perf-hud';
+import { TopBar } from './ui/top-bar';
+import type { MenuSpec } from './ui/menu';
+import { SettingsDialog, type MidiDeviceInfo } from './ui/settings-dialog';
+import { TempoPanel, type TempoActions } from './ui/tempo-panel';
 import { liveVoiceMode } from './audio/live-voice';
 import { getActiveSynthCount, getActiveOscillatorCount } from './audio/tone-synth';
 import { BUILTIN_SNAP_PRESETS, loadUserSnapPresets, saveUserSnapPresets, presetMatches, snapshotPreset, type SnapPreset } from './utils/snap-presets';
@@ -52,7 +57,7 @@ import { computeMultiCurveBBox, pitchPoints } from './model/curve';
 import { createGroupId } from './model/curve-groups';
 import { chordOffsets } from './utils/harmonics';
 import { showToast } from './ui/toast';
-import { commandSpec, commandTitle, primaryShortcut, type CommandId } from './commands/catalog';
+import { commandSpec, primaryShortcut, type CommandId } from './commands/catalog';
 import { createCommandRegistry } from './commands/registry';
 import { createEditCommands } from './commands/edit-commands';
 import { TOOL_COMMANDS } from './ui/tool-panel';
@@ -61,23 +66,17 @@ import { getScaleById } from './utils/scales';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
 import { createDrawerRail } from './ui/drawer';
 import { setIcon } from './utils/svg-helpers';
-import iconTransport from './assets/icons/transport.svg?raw';
+import iconTempo from './assets/icons/tempo.svg?raw';
 import iconTools from './assets/icons/tools.svg?raw';
 import iconSnap from './assets/icons/snap.svg?raw';
 import iconPrism from './assets/icons/prism.svg?raw';
 import iconTuning from './assets/icons/tuning.svg?raw';
-import iconPlay from './assets/icons/play.svg?raw';
-import iconPause from './assets/icons/pause.svg?raw';
-import iconStop from './assets/icons/stop.svg?raw';
-import iconRecord from './assets/icons/record.svg?raw';
-import iconKeep from './assets/icons/keep.svg?raw';
-import iconLoop from './assets/icons/loop.svg?raw';
 import { canOpenLayer, createLayerTrack, newestLayerTrack, LAYER_TRACK_LIMIT } from './model/layer';
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
 import { effect, watch } from './state/reactive';
 import type { AppState, Composition, ToolMode, BezierCurve, TransportState, PlanchetteState } from './types';
-import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, isOpenEnded, passRecordState, performPhase, forcesScrollView } from './state/transport';
+import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, isOpenEnded, performPhase, forcesScrollView } from './state/transport';
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -86,121 +85,19 @@ viewport.topInset = RULER_HEIGHT;
 // ── DOM layout ──────────────────────────────────────────────────
 const app = document.getElementById('app')!;
 app.innerHTML = `
-  <div id="toolbar">
-    <div class="toolbar-row" id="toolbar-left"></div>
-    <div class="toolbar-zone center">
-      <button id="perform-toggle" class="perform-toggle" title="${commandTitle('perform.toggle')}" aria-pressed="false">Perform</button>
-    </div>
-    <div class="toolbar-zone right">
-      <div class="transport-buttons transport">
-        <button id="btn-play" title="${commandSpec('transport.play').label} (${primaryShortcut('transport.playPause')})"></button>
-        <button id="btn-pause" title="${commandTitle('transport.pause')}" disabled></button>
-        <button id="btn-stop" title="${commandTitle('transport.stop')}"></button>
-        <button id="btn-record" class="record-btn" title="${commandTitle('transport.record')}" hidden></button>
-        <button id="btn-keep" class="keep-btn" title="${commandTitle('perform.keep')}" disabled></button>
-      </div>
-      <div class="toolbar-toggles">
-        <button id="snap-toggle" class="icon-toggle" title="${commandTitle('snap.toggle')}" aria-label="Snap" aria-pressed="true"></button>
-        <button id="loop-toggle-btn" class="icon-toggle" title="${commandTitle('transport.loop')}" aria-label="Loop" aria-pressed="false"></button>
-      </div>
-    </div>
-  </div>
+  <div id="toolbar"></div>
   <div id="main-area">
     <div id="rail">
-      <button class="rail-icon" data-drawer="transport" title="Transport" aria-label="Transport"></button>
+      <button class="rail-icon" data-drawer="tempo" title="Tempo" aria-label="Tempo"></button>
       <button class="rail-icon" data-drawer="tools" title="Tools" aria-label="Tools"></button>
       <button class="rail-icon" data-drawer="snap" title="Snap" aria-label="Snap"></button>
       <button class="rail-icon" data-drawer="prism" title="Harmonic Prism" aria-label="Harmonic Prism"></button>
       <button class="rail-icon" data-drawer="tuning" title="Tuning" aria-label="Tuning"></button>
     </div>
     <div id="drawer-host">
-      <div class="drawer" id="drawer-transport" data-drawer="transport">
-        <div class="drawer-header">Transport</div>
-        <div id="transport-section">
-          <div class="transport-row">
-            <label class="toggle-switch" title="${commandTitle('transport.loop')}">
-              <span class="toggle-switch-track">
-                <input type="checkbox" id="loop-toggle" />
-                <span class="toggle-switch-thumb"></span>
-              </span>
-              <span class="toggle-switch-label">Loop</span>
-            </label>
-            <label class="toggle-switch" title="Layer mode — each loop pass becomes its own track">
-              <span class="toggle-switch-track">
-                <input type="checkbox" id="layer-toggle" />
-                <span class="toggle-switch-thumb"></span>
-              </span>
-              <span class="toggle-switch-label">Layer</span>
-            </label>
-          </div>
-          <div class="transport-row">
-            <label class="toggle-switch" title="In compose mode, scroll the canvas past a fixed rail during playback instead of moving the playhead. Perform always scrolls.">
-              <span class="toggle-switch-track">
-                <input type="checkbox" id="scroll-canvas-toggle" />
-                <span class="toggle-switch-thumb"></span>
-              </span>
-              <span class="toggle-switch-label">Scroll during playback</span>
-            </label>
-          </div>
-          <div class="transport-row">
-            <label id="pitch-hud-label" class="toggle-switch" title="Show the pitch readout when the cursor is over the canvas">
-              <span class="toggle-switch-track">
-                <input type="checkbox" id="pitch-hud-toggle" />
-                <span class="toggle-switch-thumb"></span>
-              </span>
-              <span class="toggle-switch-label">Pitch HUD</span>
-            </label>
-          </div>
-          <div class="transport-row">
-            <label id="perf-hud-label" class="toggle-switch" title="Show frame ms, synth/oscillator/voice counts, audio latency and the live-voice path (${primaryShortcut('view.perfHud')})">
-              <span class="toggle-switch-track">
-                <input type="checkbox" id="perf-hud-toggle" />
-                <span class="toggle-switch-thumb"></span>
-              </span>
-              <span class="toggle-switch-label">Perf HUD</span>
-            </label>
-          </div>
-          <div class="transport-row">
-            <label>BPM</label>
-            <input type="number" id="input-bpm" value="120" min="20" max="300" step="1" />
-          </div>
-          <div class="transport-row">
-            <label>Time</label>
-            <select id="input-time-sig" title="Time signature">
-              <option value="2/4">2/4</option>
-              <option value="3/4">3/4</option>
-              <option value="4/4" selected>4/4</option>
-              <option value="5/4">5/4</option>
-              <option value="7/4">7/4</option>
-              <option value="6/8">6/8</option>
-              <option value="9/8">9/8</option>
-              <option value="12/8">12/8</option>
-            </select>
-          </div>
-          <div class="transport-row">
-            <label class="toggle-switch" title="Metronome clicks during playback">
-              <span class="toggle-switch-track">
-                <input type="checkbox" id="metronome-toggle" />
-                <span class="toggle-switch-thumb"></span>
-              </span>
-              <span class="toggle-switch-label">Metronome</span>
-            </label>
-            <input type="range" id="metronome-volume" class="metronome-volume" min="0" max="100" value="60" title="Metronome volume" />
-          </div>
-          <div class="transport-row">
-            <label>Dynamics</label>
-            <select id="input-dynamics-source" title="What drives performed volume">
-              <option value="fixed">Fixed</option>
-              <option value="key-swell">Key swell (hold F)</option>
-            </select>
-          </div>
-          <div class="transport-row">
-            <label>MIDI Input</label>
-            <select id="input-midi-device" title="Live MIDI input device">
-              <option value="">None</option>
-            </select>
-          </div>
-        </div>
+      <div class="drawer" id="drawer-tempo" data-drawer="tempo">
+        <div class="drawer-header">Tempo</div>
+        <div id="tempo-panel"></div>
       </div>
       <div class="drawer" id="drawer-tools" data-drawer="tools">
         <div class="drawer-header">Tools</div>
@@ -531,15 +428,8 @@ function setPreviewActive(on: boolean): void {
 // lane. Seeded from the persisted workspace preference; `fixed` reproduces the
 // pre-bus constant exactly.
 const dynamics = createDynamicsBus(store.getState().dynamicsSource);
-const dynamicsSourceSelect = document.getElementById('input-dynamics-source') as HTMLSelectElement;
-dynamicsSourceSelect.value = dynamics.getSource();
-dynamicsSourceSelect.addEventListener('change', () => {
-  const value = dynamicsSourceSelect.value;
-  if (!isDynamicsSource(value)) return;
-  dynamics.setSource(value);
-  store.setDynamicsSource(value);
-  dynamicsSourceSelect.blur();
-});
+// Chosen in Perform's tool settings (BACKLOG 16.3); the bus follows the store.
+watch(() => store.getState().dynamicsSource, source => dynamics.setSource(source));
 // A keyup that lands while the window is unfocused never reaches us, which
 // would leave the swell latched on. Releasing on blur is the cheap fix.
 window.addEventListener('blur', () => dynamics.setSwellHeld(false));
@@ -617,7 +507,7 @@ const interaction = createInteraction(fgCanvas, viewport, {
       // Audible ruler-scrub: play the whole composition at the playhead so the user
       // can hear what's under the cursor as they drag. Skip while Record is armed
       // (the armed session already owns audio).
-      if (!isRecordArmed(store.getState().transport) && !preview.isScrubPreviewActive()) {
+      if (store.getState().audibleScrub && !isRecordArmed(store.getState().transport) && !preview.isScrubPreviewActive()) {
         preview.startScrubPreview(store.getComposition());
         preview.updateScrubPosition(beats, store.getComposition());
         rulerScrubPreviewActive = true;
@@ -732,7 +622,7 @@ watch(() => store.getState().scaleId, id => toolbar.updateScaleId(id));
   const railEl = document.getElementById('rail')!;
   const drawerHost = document.getElementById('drawer-host')!;
   const railIcons: Record<string, string> = {
-    transport: iconTransport,
+    tempo: iconTempo,
     tools: iconTools,
     snap: iconSnap,
     prism: iconPrism,
@@ -745,25 +635,6 @@ watch(() => store.getState().scaleId, id => toolbar.updateScaleId(id));
   });
   createDrawerRail(railEl, drawerHost);
 }
-// Transport-button icons (top bar).
-setIcon(document.getElementById('btn-play')!, iconPlay);
-setIcon(document.getElementById('btn-pause')!, iconPause);
-setIcon(document.getElementById('btn-stop')!, iconStop);
-setIcon(document.getElementById('btn-record')!, iconRecord);
-setIcon(document.getElementById('btn-keep')!, iconKeep);
-// Top-bar icon toggles. Snap reuses the Snap drawer's icon so the two read as
-// the same feature — the button is the on/off, the drawer is the detail.
-setIcon(document.getElementById('snap-toggle')!, iconSnap);
-setIcon(document.getElementById('loop-toggle-btn')!, iconLoop);
-
-/** Drive an `.icon-toggle` button's on/off state. `aria-pressed` is both the
- *  accessible state and the CSS hook, so there's one source of truth. Writes
- *  only on change — these are called from the per-frame sync. */
-function setIconTogglePressed(btn: HTMLButtonElement, on: boolean): void {
-  const next = on ? 'true' : 'false';
-  if (btn.getAttribute('aria-pressed') !== next) btn.setAttribute('aria-pressed', next);
-}
-
 // ── Tool panel (Tools drawer) ──────────────────────────────────
 /** Entering Select with curves already selected (e.g. a track clicked while in
  *  Draw) shows their transform box straight away. */
@@ -785,66 +656,11 @@ const prismPanel = createPrismPanel(prismPanelContainer);
 // The panel shows only the Prism settings, so it re-renders only when they change.
 watch(() => JSON.stringify(store.getState().harmonicPrism), () => prismPanel.refresh());
 
-// ── Transport controls (in track panel) ────────────────────────
-const btnPlay = document.getElementById('btn-play') as HTMLButtonElement;
-const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
-const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
-const btnRecord = document.getElementById('btn-record') as HTMLButtonElement;
-const btnKeep = document.getElementById('btn-keep') as HTMLButtonElement;
-const bpmInput = document.getElementById('input-bpm') as HTMLInputElement;
-const loopToggle = document.getElementById('loop-toggle') as HTMLInputElement;
-const loopToggleBtn = document.getElementById('loop-toggle-btn') as HTMLButtonElement;
-setIconTogglePressed(loopToggleBtn, loopToggle.checked);
-const layerToggle = document.getElementById('layer-toggle') as HTMLInputElement;
-layerToggle.checked = store.getState().layerModeEnabled;
-layerToggle.addEventListener('change', () => {
-  store.setLayerMode(layerToggle.checked);
-  layerToggle.blur();
-});
-// Compose mode's "scroll the canvas during playback" view option (BACKLOG
-// 16.2: the view half of the old Lock Rail switch). A temporary home in the
-// Transport drawer until the View menu (16.3).
-const scrollCanvasToggle = document.getElementById('scroll-canvas-toggle') as HTMLInputElement;
-scrollCanvasToggle.checked = store.getState().scrollCanvasEnabled;
-scrollCanvasToggle.addEventListener('change', () => {
-  store.setScrollCanvas(scrollCanvasToggle.checked);
-  if (!playback.isPlaying()) {
-    const r = canvasContainer.getBoundingClientRect();
-    if (effectiveScrollCanvas()) {
-      // The rail appears on the playhead, as when entering Perform.
-      scrollViewportToBeat(viewport, store.getState().playback.positionBeats, r.width, r.height);
-    } else {
-      viewport.clampOffset(r.width, r.height, minPanOffsetX(r.width));
-    }
-    updateZoom();
-    bgDirty = true;
-  }
-  scrollCanvasToggle.blur();
-});
-// Perform (BACKLOG 16.2). An interim home where Lock Rail was; how you enter
-// Perform is the Perform session's to decide (16.8).
-const performToggle = document.getElementById('perform-toggle') as HTMLButtonElement;
-performToggle.addEventListener('click', () => {
-  commands.run('perform.toggle');
-  performToggle.blur();
-});
-const pitchHudToggle = document.getElementById('pitch-hud-toggle') as HTMLInputElement;
-watch(() => store.getState().pitchHudVisible, v => { pitchHudToggle.checked = v; });
-pitchHudToggle.addEventListener('change', () => {
-  store.setPitchHudVisible(pitchHudToggle.checked);
-  pitchHudToggle.blur();
-});
-const perfHudToggle = document.getElementById('perf-hud-toggle') as HTMLInputElement;
-perfHudToggle.addEventListener('change', () => {
-  store.setPerfHudVisible(perfHudToggle.checked);
-  perfHudToggle.blur();
-});
+// ── HUDs ────────────────────────────────────────────────────────
 const perfHud = createPerfHud(document.getElementById('perf-hud') as HTMLDivElement);
-// Follows the store, so the `!` hotkey and the checkbox stay in step.
-watch(() => store.getState().perfHudVisible, v => {
-  perfHudToggle.checked = v;
-  perfHud.setVisible(v);
-});
+watch(() => store.getState().perfHudVisible, v => perfHud.setVisible(v));
+// Perform colours the whole app (a first cue; 16.8 designs the real one).
+watch(() => store.getState().performMode, on => document.body.classList.toggle('perform-mode', on));
 
 // Rolling frame-time buffer (~2 s at 60 fps). Push every render frame; sort a
 // copy when the HUD refreshes. Push is O(1); sort is O(n log n) over 125
@@ -901,84 +717,39 @@ function isComposePerformActive(): boolean {
   return isPerformInputActive(store.getState());
 }
 
-function updatePlayState(playing: boolean) {
-  btnPlay.disabled = playing;
-  btnPause.disabled = !playing;
+/** Compose mode's "scroll the canvas during playback" (BACKLOG 16.2), from
+ *  the View menu. Stopped, the rail appears on the playhead, as when entering
+ *  Perform. */
+function toggleScrollDuringPlayback(): void {
+  store.setScrollCanvas(!store.getState().scrollCanvasEnabled);
+  if (playback.isPlaying()) return;
+  const r = canvasContainer.getBoundingClientRect();
+  if (effectiveScrollCanvas()) {
+    scrollViewportToBeat(viewport, store.getState().playback.positionBeats, r.width, r.height);
+  } else {
+    viewport.clampOffset(r.width, r.height, minPanOffsetX(r.width));
+  }
+  updateZoom();
+  bgDirty = true;
 }
 
-function updateRecordButtonVisuals() {
-  const st = store.getState();
-  const t = st.transport;
+/** Phrases the rolling buffer can keep, for the Keep button (BACKLOG 10.2).
+ *  Engine state that never notifies the store — sealing a phrase and aging one
+ *  out — so it's polled each frame; the signal only wakes the button when the
+ *  count actually changes. */
+const keepable = signal(0);
 
-  btnRecord.removeAttribute('hidden');
-  // Queued (10.5) is its own state: waiting for the loop point, not yet capturing.
-  btnRecord.classList.toggle('queued', passRecordState(t) === 'queued');
-  btnRecord.classList.toggle('armed', t.mode === 'countdown');
-  btnRecord.classList.toggle('recording', isCapturing(t));
-  btnRecord.disabled = st.selectedTrackId === null;
-
-  performToggle.classList.toggle('active', st.performMode);
-  document.body.classList.toggle('perform-mode', st.performMode);
-  performToggle.setAttribute('aria-pressed', String(st.performMode));
-  // A recording keeps you in Perform until it stops (see setPerformMode).
-  performToggle.disabled = st.performMode && forcesScrollView(t);
-
-  scrollCanvasToggle.checked = st.scrollCanvasEnabled;
-  layerToggle.checked = st.layerModeEnabled;
-
-  // Lock loop toggle while recording — both controls that expose it.
-  const loopLocked = isCapturing(t);
-  loopToggle.disabled = loopLocked;
-  loopToggleBtn.disabled = loopLocked;
-}
-
-/** Keep button doubles as the "keepable material pending" indicator (BACKLOG
- *  10.2): it lights whenever the rolling buffer holds a committable phrase,
- *  and stays lit after the session stops until the phrase ages out.
- *
- *  Polled per frame rather than from the store subscription, because the two
- *  events that change keepability — sealing a phrase on release, and
- *  time-based eviction — are pure engine state and never notify the store.
- *  Cached so the common case writes no DOM. */
-let lastKeepDomKey = '';
-function updateKeepButtonDom() {
-  const keepable = composeEngine.getKeepablePhraseCount();
-  const noTrack = store.getState().selectedTrackId === null;
-  const key = `${keepable}:${noTrack}`;
-  if (key === lastKeepDomKey) return;
-  lastKeepDomKey = key;
-  btnKeep.disabled = keepable === 0 || noTrack;
-  btnKeep.classList.toggle('keepable', keepable > 0);
-  btnKeep.title = keepable > 0
-    ? `${commandTitle('perform.keep')} (${keepable} keepable)`
-    : commandTitle('perform.keep');
-}
-
-/** Format a length in beats + BPM as "M:SS" for the toolbar title display. */
-function formatLengthMMSS(lengthBeats: number, bpm: number): string {
-  const seconds = bpm > 0 ? lengthBeats * 60 / bpm : 0;
-  const min = Math.floor(seconds / 60);
-  const sec = Math.floor(seconds % 60);
-  return `${min}:${String(sec).padStart(2, '0')}`;
-}
-
-function updateBpm(bpm: number) {
-  bpmInput.value = String(bpm);
-}
-
-btnPlay.addEventListener('click', () => commands.run('transport.play'));
-btnPause.addEventListener('click', () => commands.run('transport.pause'));
-btnStop.addEventListener('click', () => commands.run('transport.stop'));
-// Shift+click mirrors Shift+R — one obvious place for both record styles.
-btnRecord.addEventListener('click', (e) => commands.run(e.shiftKey ? 'transport.recordPass' : 'transport.record'));
-btnKeep.addEventListener('click', () => commands.run('perform.keep'));
-
-bpmInput.addEventListener('change', () => {
-  const bpm = Math.max(20, Math.min(300, Number(bpmInput.value)));
-  bpmInput.value = String(bpm);
-  history.snapshot();
-  store.setBpm(bpm);
-});
+/** Tempo drawer edits (BACKLOG 16.3): each is one undo step. */
+const tempoActions: TempoActions = {
+  setBpm(bpm) {
+    history.snapshot();
+    store.setBpm(bpm);
+  },
+  setTimeSignature(beats, denominator) {
+    history.snapshot();
+    store.setTimeSignature(beats, denominator);
+  },
+};
 
 // ── Tune A4 (BACKLOG 8.27) ──────────────────────────────────────
 // Pitch-shifts the entire staff by changing the reference frequency for A4.
@@ -1026,26 +797,13 @@ tuningInput.addEventListener('change', () => {
 // Apply the composition's tuning now and whenever it changes (load, undo/redo, setter).
 watch(() => store.getComposition().tuningOffsetCents, () => syncTuningToAudio());
 
-// ── Time signature dropdown ────────────────────────────────────
-const timeSigSelect = document.getElementById('input-time-sig') as HTMLSelectElement;
-{
-  const comp = store.getComposition();
-  timeSigSelect.value = `${comp.beatsPerMeasure}/${comp.timeSignatureDenominator}`;
-}
-timeSigSelect.addEventListener('change', () => {
-  const [numStr, denStr] = timeSigSelect.value.split('/');
-  const num = Number(numStr);
-  const den = Number(denStr);
-  if (!Number.isFinite(num) || !Number.isFinite(den)) return;
-  history.snapshot();
-  store.setTimeSignature(num, den);
-  bgDirty = true;
-  timeSigSelect.blur();
-});
-
 // ── Live MIDI input ─────────────────────────────────────────────
 const midiInput = createMidiInput();
-const midiDeviceSelect = document.getElementById('input-midi-device') as HTMLSelectElement;
+/** The Settings dialog (BACKLOG 16.3): open or closed. */
+const settingsOpen = signal(false);
+/** MIDI inputs for the Settings dialog, refreshed when devices come and go. */
+const midiDevices = signal<readonly MidiDeviceInfo[]>([]);
+const midiActiveId = signal<string | null>(null);
 
 // One-shot guard for the "you have MIDI but no track is armed" toast. Reset
 // when the user changes device or disarms a track, so the hint can fire again
@@ -1053,11 +811,8 @@ const midiDeviceSelect = document.getElementById('input-midi-device') as HTMLSel
 let midiArmHintShown = false;
 
 function refreshMidiDeviceList() {
-  const active = midiInput.getActiveDeviceId();
-  const devices = midiInput.getDevices();
-  midiDeviceSelect.innerHTML = '<option value="">None</option>'
-    + devices.map(d => `<option value="${d.id}">${d.name || d.manufacturer || d.id}</option>`).join('');
-  midiDeviceSelect.value = active ?? '';
+  midiDevices.value = midiInput.getDevices().map(d => ({ id: d.id, name: d.name || d.manufacturer || d.id }));
+  midiActiveId.value = midiInput.getActiveDeviceId();
 }
 
 midiInput.onDevicesChanged(refreshMidiDeviceList);
@@ -1156,29 +911,29 @@ midiInput.onNoteOff((note) => {
   finalizeMidiVoice(note);
 });
 
-midiDeviceSelect.addEventListener('change', async () => {
-  const id = midiDeviceSelect.value || null;
+/** Settings › MIDI input device. */
+async function selectMidiDevice(id: string | null) {
   if (id && !midiInput.hasAccess()) {
     const ok = await midiInput.requestAccess();
+    refreshMidiDeviceList();
     if (!ok) {
-      alert('MIDI access denied or unsupported by this browser.');
-      midiDeviceSelect.value = '';
+      showToast('MIDI access denied or unsupported by this browser', 3000);
       return;
     }
-    refreshMidiDeviceList();
-    midiDeviceSelect.value = id;
   }
   midiInput.setActiveDevice(id);
-  midiDeviceSelect.blur();
+  midiActiveId.value = midiInput.getActiveDeviceId();
 
   // Just enabled a device with no armed track — prompt the user before they
   // hit the silent-no-curves trap. The toast in noteOn is the safety net for
-  // the case where they cancel here and play anyway.
+  // the case where they cancel here and play anyway. Settings closes first so
+  // the arm dialog isn't stacked on it.
   if (id && store.getState().midiArmedTrackId === null) {
     midiArmHintShown = false;
+    settingsOpen.value = false;
     await promptForMidiArm();
   }
-});
+}
 
 async function promptForMidiArm() {
   const st = store.getState();
@@ -1210,25 +965,14 @@ async function promptForMidiArm() {
 // fires again.
 watch(() => store.getState().midiArmedTrackId !== null, armed => { midiArmHintShown = armed; });
 
-// Populate the list lazily on first focus — requesting MIDI access earlier
-// would trigger a permission prompt before the user showed intent.
-midiDeviceSelect.addEventListener('focus', async () => {
+// Populate the list lazily when the user first reaches for it — requesting
+// MIDI access earlier would trigger a permission prompt before they showed
+// intent.
+async function requestMidiList() {
   if (midiInput.hasAccess() || !midiInput.isSupported()) return;
   const ok = await midiInput.requestAccess();
   if (ok) refreshMidiDeviceList();
-});
-
-if (!midiInput.isSupported()) {
-  midiDeviceSelect.disabled = true;
-  midiDeviceSelect.title = 'MIDI Input Not Supported By Browser.';
 }
-
-// ── Snap toggle (top bar icon button) ──────────────────────────
-const snapToggleBtn = document.getElementById('snap-toggle') as HTMLButtonElement;
-snapToggleBtn.addEventListener('click', () => {
-  commands.run('snap.toggle');
-  snapToggleBtn.blur();
-});
 
 // ── Magnetic Snap toggle + Force / Spring / Damping sliders (Transport) ─
 // The Force slider is `magneticStrength` internally — the field is persisted in
@@ -1250,7 +994,6 @@ function formatDamping(d: number): string {
  *  controls themselves (re-setting a dragged slider's own value is harmless). */
 function syncSnapSectionDom(): void {
   const st = store.getState();
-  setIconTogglePressed(snapToggleBtn, st.snapEnabled);
   magneticToggle.checked = st.magneticEnabled;
   magneticStrengthSlider.value = String(st.magneticStrength);
   magneticStrengthValue.textContent = st.magneticStrength.toFixed(2);
@@ -1478,47 +1221,19 @@ function addGuideAtViewportCenter(orientation: 'x' | 'y'): void {
 addGuideXBtn.addEventListener('click', () => { addGuideAtViewportCenter('x'); addGuideXBtn.blur(); });
 addGuideYBtn.addEventListener('click', () => { addGuideAtViewportCenter('y'); addGuideYBtn.blur(); });
 
-// ── Metronome controls ─────────────────────────────────────────
-const metronomeToggle = document.getElementById('metronome-toggle') as HTMLInputElement;
-const metronomeVolumeSlider = document.getElementById('metronome-volume') as HTMLInputElement;
-watch(() => store.getState().metronomeEnabled, on => {
-  metronomeToggle.checked = on;
-  metronome.setEnabled(on);
-});
-watch(() => store.getState().metronomeVolume, v => {
-  metronomeVolumeSlider.value = String(Math.round(v * 100));
-  metronome.setVolume(v);
-});
-metronomeToggle.addEventListener('change', () => {
-  store.setMetronomeEnabled(metronomeToggle.checked);
-  metronomeToggle.blur();
-});
-metronomeVolumeSlider.addEventListener('input', () => {
-  store.setMetronomeVolume(Number(metronomeVolumeSlider.value) / 100);
-});
+// ── Metronome + Loop ───────────────────────────────────────────
+// The Tempo drawer and the top bar change the store; the engines follow it.
+watch(() => store.getState().metronomeEnabled, on => metronome.setEnabled(on));
+watch(() => store.getState().metronomeVolume, v => metronome.setVolume(v));
 
-/** Loop on/off. Three controls reach it — the top-bar icon button, the
- *  Transport drawer checkbox, and the L hotkey — plus Record-next-Pass forcing
- *  it on. State owns the flag; the engine, both controls and the play range
- *  follow it (the watch below and the play-range watch at the end of the file). */
+/** Loop on/off: the top-bar button and L (both the `transport.loop`
+ *  command), plus Record-next-Pass forcing it on. State owns the flag; the
+ *  engine and the play range follow it (the watch below and the play-range
+ *  watch at the end of the file). */
 function applyLoopEnabled(enabled: boolean): void {
   store.setLoopEnabled(enabled);
 }
-watch(() => store.getState().loopEnabled, enabled => {
-  playback.setLoop(enabled);
-  loopToggle.checked = enabled;
-  setIconTogglePressed(loopToggleBtn, enabled);
-});
-
-loopToggle.addEventListener('change', () => {
-  applyLoopEnabled(loopToggle.checked);
-  loopToggle.blur();
-});
-
-loopToggleBtn.addEventListener('click', () => {
-  commands.run('transport.loop');
-  loopToggleBtn.blur();
-});
+watch(() => store.getState().loopEnabled, enabled => playback.setLoop(enabled));
 
 // ── Zoom controls (on canvas) ──────────────────────────────────
 const zoomX = document.getElementById('zoom-x') as HTMLInputElement;
@@ -1592,78 +1307,6 @@ function updateZoom() {
   zoomY.value = String(viewport.state.zoomY);
 }
 
-// ── Composition name field (prepended to toolbar) ──────────────
-const toolbarRow = toolbarContainer.querySelector('.toolbar-row')!;
-const nameGroup = document.createElement('div');
-nameGroup.className = 'toolbar-group';
-const nameInput = document.createElement('input');
-nameInput.type = 'text';
-nameInput.id = 'comp-name';
-nameInput.className = 'comp-name-input';
-nameInput.value = store.getComposition().name || 'Untitled';
-nameInput.title = 'Composition name';
-nameInput.spellcheck = false;
-nameInput.addEventListener('change', () => {
-  store.mutate(c => { c.name = nameInput.value || 'Untitled'; });
-});
-nameInput.addEventListener('keydown', (e) => {
-  // Enter commits and blurs (the change event then fires from the blur).
-  // Escape reverts to the stored name and blurs.
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    nameInput.blur();
-  } else if (e.key === 'Escape') {
-    e.preventDefault();
-    nameInput.value = store.getComposition().name || 'Untitled';
-    nameInput.blur();
-  }
-});
-nameGroup.appendChild(nameInput);
-const lengthDisplay = document.createElement('span');
-lengthDisplay.id = 'comp-length';
-lengthDisplay.className = 'comp-length-display';
-lengthDisplay.title = 'Composition length (derived from last point)';
-lengthDisplay.textContent = '0:00';
-nameGroup.appendChild(lengthDisplay);
-toolbarRow.insertBefore(nameGroup, toolbarRow.firstChild);
-
-// ── File dropdown menu ────────────────────────────────────────
-const fileGroup = document.createElement('div');
-fileGroup.className = 'toolbar-group file-menu-wrapper';
-
-const fileBtn = document.createElement('button');
-fileBtn.className = 'tb-btn';
-fileBtn.textContent = 'File \u25BE';
-fileBtn.title = 'File operations';
-fileGroup.appendChild(fileBtn);
-
-const fileDropdown = document.createElement('div');
-fileDropdown.className = 'file-menu-dropdown';
-fileDropdown.hidden = true;
-fileGroup.appendChild(fileDropdown);
-
-const fileOverlay = document.createElement('div');
-fileOverlay.className = 'file-menu-overlay';
-fileOverlay.hidden = true;
-document.body.appendChild(fileOverlay);
-
-function closeFileMenu() {
-  fileDropdown.hidden = true;
-  fileOverlay.hidden = true;
-}
-
-fileBtn.addEventListener('click', () => {
-  const open = fileDropdown.hidden;
-  fileDropdown.hidden = !open;
-  fileOverlay.hidden = !open;
-});
-
-fileOverlay.addEventListener('click', closeFileMenu);
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !fileDropdown.hidden) closeFileMenu();
-});
-
 // After any form control commits a value (range release, checkbox toggle,
 // select pick), drop focus so canvas hotkeys work without an extra click-off.
 // `change` is the right event here: range inputs fire it on mouseup (after
@@ -1683,48 +1326,12 @@ document.addEventListener('change', (e) => {
   t.blur();
 });
 
-function addFileMenuItem(id: CommandId) {
-  const item = document.createElement('button');
-  item.className = 'file-menu-item';
-  const keys = primaryShortcut(id);
-  item.textContent = keys ? `${commandSpec(id).label} (${keys})` : commandSpec(id).label;
-  item.addEventListener('click', () => {
-    closeFileMenu();
-    commands.run(id);
-  });
-  fileDropdown.appendChild(item);
-}
-for (const id of ['file.save', 'file.open', 'file.importMidi', 'file.exportWav', 'help.open'] as const) {
-  addFileMenuItem(id);
-}
-
-toolbarRow.insertBefore(fileGroup, nameGroup.nextSibling);
-
-// ── Save / Load / Export buttons (added to toolbar) ─────────────
-
-function addToolbarButton(label: string, title: string, onClick: () => void): HTMLButtonElement {
-  const group = document.createElement('div');
-  group.className = 'toolbar-group';
-  const btn = document.createElement('button');
-  btn.className = 'tb-btn';
-  btn.textContent = label;
-  btn.title = title;
-  btn.addEventListener('click', onClick);
-  group.appendChild(btn);
-  toolbarRow.appendChild(group);
-  return btn;
-}
-
-// ── Undo / Redo buttons ────────────────────────────────────────
-const undoBtn = addToolbarButton(commandSpec('edit.undo').label, commandTitle('edit.undo'), () => commands.run('edit.undo'));
-const redoBtn = addToolbarButton(commandSpec('edit.redo').label, commandTitle('edit.redo'), () => commands.run('edit.redo'));
-
-undoBtn.disabled = true;
-redoBtn.disabled = true;
-
+// ── Undo / Redo availability, for the top bar ──────────────────
+const canUndo = signal(false);
+const canRedo = signal(false);
 history.subscribe(() => {
-  undoBtn.disabled = !history.canUndo();
-  redoBtn.disabled = !history.canRedo();
+  canUndo.value = history.canUndo();
+  canRedo.value = history.canRedo();
 });
 
 // ── Commands (BACKLOG 15.3) ─────────────────────────────────────
@@ -1870,7 +1477,6 @@ function replaceComposition(comp: Composition) {
   transport({ type: 'stop' });
   history.snapshot();
   store.loadComposition(comp);
-  nameInput.value = comp.name || 'Untitled';
 }
 
 const notWhilePerforming = () => !isComposePerformActive();
@@ -1917,7 +1523,20 @@ const commands = createCommandRegistry({
   },
   'transport.record': { run: toggleRecord },
   'transport.recordPass': { run: toggleRecordNextPass },
-  'transport.loop': { run: () => applyLoopEnabled(!store.getState().loopEnabled) },
+  // The loop defines what's being recorded, so it holds still meanwhile.
+  'transport.loop': {
+    run: () => applyLoopEnabled(!store.getState().loopEnabled),
+    enabled: () => !isCapturing(store.getState().transport),
+    checked: () => store.getState().loopEnabled,
+  },
+  'transport.layerMode': {
+    run: () => store.setLayerMode(!store.getState().layerModeEnabled),
+    checked: () => store.getState().layerModeEnabled,
+  },
+  'transport.countIn': {
+    run: () => store.setCountIn(!store.getState().countInEnabled),
+    checked: () => store.getState().countInEnabled,
+  },
   'transport.escape': { run: escapeCommand },
 
   // ── Perform ──
@@ -1944,7 +1563,7 @@ const commands = createCommandRegistry({
     run: () => interaction.finishDrawing(),
     enabled: () => notWhilePerforming() && store.getState().activeTool === 'draw' && interaction.hasDrawTarget(),
   },
-  'snap.toggle': { run: () => store.setSnap(!store.getState().snapEnabled) },
+  'snap.toggle': { run: () => store.setSnap(!store.getState().snapEnabled), checked: () => store.getState().snapEnabled },
 
   // ── Harmonic Prism ──
   'prism.drawMode': { run: () => store.setPrismDrawMode(!store.getState().harmonicPrism.drawMode) },
@@ -1964,8 +1583,19 @@ const commands = createCommandRegistry({
   'view.playhead': {
     run: () => scrollToBeat(playback.isPlaying() ? playback.getPositionBeats() : store.getState().playback.positionBeats),
   },
-  // The perfHudVisible watch mirrors this into the Transport-panel checkbox.
-  'view.perfHud': { run: () => store.setPerfHudVisible(!store.getState().perfHudVisible) },
+  'view.pitchHud': {
+    run: () => store.setPitchHudVisible(!store.getState().pitchHudVisible),
+    checked: () => store.getState().pitchHudVisible,
+  },
+  'view.perfHud': {
+    run: () => store.setPerfHudVisible(!store.getState().perfHudVisible),
+    checked: () => store.getState().perfHudVisible,
+  },
+  'view.scrollDuringPlayback': {
+    run: toggleScrollDuringPlayback,
+    checked: () => store.getState().scrollCanvasEnabled,
+  },
+  'app.settings': { run: () => { settingsOpen.value = true; } },
   'help.open': { run: () => { window.open('/help.html', '_blank'); } },
 
   // ── File ──
@@ -3126,7 +2756,7 @@ function toggleRecord(): void {
   if (store.getState().selectedTrackId === null) return;
   // Recording is a performance: it enters Perform (BACKLOG 16.2).
   if (!setPerformMode(true)) return;
-  transport({ type: 'toggle-record', audioNow: getAudioContext().currentTime });
+  transport({ type: 'toggle-record', audioNow: getAudioContext().currentTime, countIn: store.getState().countInEnabled });
 }
 
 /** Shift+R / Shift+click Record: record exactly the next full loop pass
@@ -3380,6 +3010,7 @@ function runFrame() {
   tickFrame();
 
   const state = store.getState();
+  keepable.value = composeEngine.getKeepablePhraseCount();
   updatePerfHudDom(state);
   const animating = isAnimating(state);
   // One more frame after an animation ends clears its last faded step.
@@ -3387,7 +3018,6 @@ function runFrame() {
     fgDirty = false;
     // Compose UI affordances that follow the same state the canvas draws.
     toolPanel.setDisabled(composeEngine.isLmbDown());
-    updateKeepButtonDom();
     updatePitchHudDom(state);
     updateCountdownOverlayDom(state);
     updateAfkWarningDom(state);
@@ -3799,7 +3429,6 @@ function syncCompositionDerived() {
   );
   viewport.canvasExtent = extent;
   viewport.compLengthBeats = length;
-  lengthDisplay.textContent = formatLengthMMSS(length, comp.bpm);
 }
 
 if (import.meta.env.DEV) {
@@ -3849,11 +3478,6 @@ watch(() => store.getComposition(), comp => {
   if (playback.isPlaying()) playback.setComposition(comp);
 });
 
-watch(() => store.getComposition().bpm, updateBpm);
-watch(
-  () => `${store.getComposition().beatsPerMeasure}/${store.getComposition().timeSignatureDenominator}`,
-  ts => { timeSigSelect.value = ts; },
-);
 
 // The tool can change from several places (hotkeys, track click, Ctrl-hold in
 // interaction.ts), so the panel follows the store (BACKLOG 14.2).
@@ -3865,10 +3489,46 @@ const toolPropContentEl = document.getElementById('tool-prop-content')!;
 effect(() => syncCompositionDerived());
 render(h(PropertyPanel, null), propContentEl);
 render(h(ToolPropertyPanel, null), toolPropContentEl);
-effect(() => updateRecordButtonVisuals());
 
-// Play/Pause buttons follow the transport.
-watch(() => isRolling(store.getState().transport), updatePlayState);
+// The top bar, Tempo drawer and Settings dialog (BACKLOG 16.3). Menus are
+// lists of catalog commands; the registry says what each does, whether it
+// can run now, and whether a setting is on.
+const MENUS: readonly MenuSpec[] = [
+  { label: 'File', entries: ['file.save', 'file.open', '-', 'file.importMidi', 'file.exportWav'] },
+  {
+    label: 'Edit',
+    entries: [
+      'edit.undo', 'edit.redo', '-',
+      'edit.cut', 'edit.copy', 'edit.paste', 'edit.duplicate', 'edit.continue', 'edit.delete', '-',
+      'edit.join', 'edit.group', 'edit.ungroup', '-',
+      'edit.smooth', 'edit.sharpen',
+    ],
+  },
+  {
+    label: 'View',
+    entries: [
+      'view.pitchHud', 'view.perfHud', 'view.scrollDuringPlayback', '-',
+      'view.start', 'view.end', 'view.playhead', '-',
+      'help.open',
+    ],
+  },
+];
+render(h(TopBar, { commands, menus: MENUS, canUndo, canRedo, keepable }), toolbarContainer);
+render(h(TempoPanel, { actions: tempoActions }), document.getElementById('tempo-panel')!);
+{
+  const settingsHost = document.createElement('div');
+  document.body.appendChild(settingsHost);
+  render(h(SettingsDialog, {
+    open: settingsOpen,
+    midi: {
+      supported: midiInput.isSupported(),
+      devices: midiDevices,
+      activeId: midiActiveId,
+      requestList: requestMidiList,
+      select: id => { void selectMidiDevice(id); },
+    },
+  }), settingsHost);
+}
 
 // Keep the engine's play range in step with the transport, Loop and the loop
 // markers, so toggling Loop, dragging a marker, or arming mid-play takes

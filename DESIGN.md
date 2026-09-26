@@ -96,8 +96,9 @@ src/
 │                    #   metronome, midi-input, dynamics-bus, voice-allocation
 ├── canvas/          # viewport, interaction (tool mouse handling, ~1,400 lines), performance-engine
 │                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), and one renderer per layer
-├── ui/              # Preact: track-list, property-panel, tool-property-panel (.tsx). Vanilla DOM: toolbar,
-│                    #   tool-panel, drawer, prism-panel, tone builder/picker, dialogs, HUDs
+├── ui/              # Preact (.tsx): top-bar, menu, settings-dialog, tempo-panel, track-list, property-panel,
+│                    #   tool-property-panel. Vanilla DOM: toolbar (Key/Scale), tool-panel, drawer, prism-panel,
+│                    #   tone builder/picker, older dialogs, HUDs
 ├── export/          # json-export (.gliss envelope + migrations), wav-export, midi-import
 └── utils/           # bezier-math, snap, snap-magnetic, snap-presets, scales, harmonics, svg helpers
 ```

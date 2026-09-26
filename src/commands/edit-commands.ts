@@ -4,7 +4,7 @@ import type { CommandId } from './catalog';
 import type { CommandHandler } from './registry';
 import { store } from '../state/store';
 import { history } from '../state/history';
-import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves } from '../state/clipboard';
+import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves, hasClipboard } from '../state/clipboard';
 import { rebuildTransformBox, type InteractionState } from '../canvas/interaction';
 import { joinCurves, sharpenCurveHandles, smoothCurveHandles, pitchPoints, deleteSelectedPoints } from '../model/curve';
 import { pointCount } from '../model/point-selection';
@@ -58,6 +58,12 @@ export function createEditCommands(ctx: EditContext): Record<EditCommandId, Comm
   }
 
   const hasSelection = () => store.getState().selectedCurveIds.size > 0;
+  /** Delete has something to act on: a guide, points, or curves. */
+  const canDelete = () => {
+    const s = store.getState();
+    return (s.selectedGuideId !== null && !s.guidesLocked) || pointCount(s.selectedPoints) > 0
+      || s.selectedPointIndex !== null || s.selectedCurveIds.size > 0;
+  };
 
   return {
     'edit.undo': {
@@ -68,15 +74,18 @@ export function createEditCommands(ctx: EditContext): Record<EditCommandId, Comm
       run() { clearInteractionForUndo(); history.redo(); },
       enabled: () => history.canRedo(),
     },
-    'edit.copy': { run: () => { copySelectedCurves(); } },
+    // Each says when it can act, so the Edit menu (16.3) greys out the rest.
+    'edit.copy': { run: () => { copySelectedCurves(); }, enabled: hasSelection },
     'edit.cut': {
       run() { if (cutSelectedCurves()) interaction.transformBox = null; },
+      enabled: hasSelection,
     },
-    'edit.paste': { run: () => boxNewCurves(pasteCurves(ctx.pasteBeat())) },
-    'edit.duplicate': { run: () => boxNewCurves(duplicateCurves()) },
-    'edit.continue': { run: () => boxNewCurves(continueCurves()) },
+    'edit.paste': { run: () => boxNewCurves(pasteCurves(ctx.pasteBeat())), enabled: hasClipboard },
+    'edit.duplicate': { run: () => boxNewCurves(duplicateCurves()), enabled: hasSelection },
+    'edit.continue': { run: () => boxNewCurves(continueCurves()), enabled: hasSelection },
 
     'edit.delete': {
+      enabled: canDelete,
       // One key, most specific selection first: a guide, then selected
       // points, then the selected curves.
       run() {
