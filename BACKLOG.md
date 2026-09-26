@@ -389,7 +389,7 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
 - [x] **13.6 Audition a Y guide's pitch while dragging** *(S — done in 16.6, PR #85)*
   - Sounds the snapped pitch on the current track's tone. Sequence after 13.5.
   - **Absorbed by 16.6** (2026-09-24): the key is hold A, not Space. Y guides can already be dragged, so this doesn't need to wait for 13.5.
-- [x] **13.9 Octave highlight follows the key root** *(S — done in 13.8 (b))*
+- [x] **13.9 Octave highlight follows the key root** *(S — done in 13.8 (b), PR #89)*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
 - [ ] **13.11 Recording simplification density** *(S–M)*
@@ -498,12 +498,12 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
         - **Beyond the spec:**
           - **Tuned from** shows for every tuning except 12-EDO, not only historical ones. The migration needs it (Thai 7-TET or Pelog on D becomes that tuning tuned from D), and for any tuning but 12-EDO it decides where the tuning sits.
           - An old "C + Chromatic scale" file now shows the plain chromatic staff instead of every line highlighted: it's All notes, the same pitches.
-    - [x] **(b) Staff, labels and snap per tuning** *(M)*
+    - [x] **(b) Staff, labels and snap per tuning** *(M, PR #89)*
       - The staff draws the tuning's degrees, named by the naming rule, with the optional 12-EDO reference layer.
       - Snapping without a scale falls back to the tuning's degrees.
       - The octave highlight follows the root (absorbs 13.9).
       - Prism "Equal" intonation uses the tuning's steps.
-      - **Done (this PR):**
+      - **Done (PR #89):**
         - **Staff** (`canvas/staff-renderer.ts`): draws `staffGridFor()`'s lines (`tuning/tuning.ts`), every note of the tuning flagged root / in scale / natural and labelled by the naming rule with the octave (Db4, E4 5/4) or a number; a numbered root line adds its nearest standard note (5 ≈D4).
           - The root's lines are the bold markers, so 12-EDO with root C looks as before.
           - Labels: the root always, naturals and the scale's notes once a twelfth of the period is 10 px, every note once the smallest step is 18 px (12-EDO's old thresholds), skipping any that would collide.
