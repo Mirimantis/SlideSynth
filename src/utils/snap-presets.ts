@@ -1,22 +1,23 @@
 import type { SnapSettings } from '../types';
 
 /**
- * Snap presets — named bundles of *magnet feel* that the user can load with one
+ * Snap presets — named bundles of *Gravity feel* that the user can load with one
  * click. A preset carries only the three physics fields (force / spring /
- * damping); it never stores whether Snap or Magnetic is on, and never touches
+ * damping); it never stores whether Snap or Gravity is on, and never touches
  * `scaleRoot` / `scaleId` / `hidePitchLines` — the Key dropdown is an orthogonal
  * user choice that a "snap feel" preset shouldn't clobber. (BACKLOG 13.2)
  *
  * Note `magneticStrength` is the "Force" slider in the UI (BACKLOG 13.1); the
  * field name stays because it's persisted in the composition file.
  *
- * Loading a preset force-enables Snap + Magnetic at the call site — magnetic
- * physics is gated on both, so a feel-only preset would otherwise be inaudible.
+ * Loading a preset force-enables Snap + Gravity at the call site — Gravity
+ * is gated on both, so a feel-only preset would otherwise be inaudible.
  * That's an apply-time side effect, deliberately not a stored field.
  */
-export type SnapPresetSettings = Partial<
-  Pick<SnapSettings, 'magneticStrength' | 'magneticSpringK' | 'magneticDamping'>
->;
+/** The three physics values a preset holds: Gravity's Force, Spring, Damping. */
+export type SnapFeel = Pick<SnapSettings, 'magneticStrength' | 'magneticSpringK' | 'magneticDamping'>;
+
+export type SnapPresetSettings = Partial<SnapFeel>;
 
 export interface SnapPreset {
   id: string;            // stable id (built-ins use 'builtin-*'; user presets use 'user-*<timestamp>')
@@ -26,7 +27,7 @@ export interface SnapPreset {
 
 /**
  * Built-in starter set. Frozen so accidental mutation doesn't bleed across loads.
- * Names describe how the magnet behaves — settle time, grip, wobble — and never
+ * Names describe how Gravity behaves — settle time, grip, wobble — and never
  * reference a key or scale.
  */
 export const BUILTIN_SNAP_PRESETS: readonly SnapPreset[] = Object.freeze([
@@ -130,8 +131,8 @@ export function saveUserSnapPresets(presets: SnapPreset[]): void {
 /** Given the current snap settings, return true iff every overridden field in
  *  `preset.settings` matches the live value. Used to detect "(modified)" state.
  *  Only the feel fields participate, so a preset can read as selected while
- *  Magnetic is off — the name describes the stored feel, not the toggle state. */
-export function presetMatches(preset: SnapPreset, live: SnapSettings): boolean {
+ *  Gravity is off — the name describes the stored feel, not the toggle state. */
+export function presetMatches(preset: SnapPreset, live: SnapFeel): boolean {
   const s = preset.settings;
   if (s.magneticStrength !== undefined && Math.abs(s.magneticStrength - live.magneticStrength) > 1e-6) return false;
   if (s.magneticSpringK !== undefined && Math.abs(s.magneticSpringK - live.magneticSpringK) > 1e-6) return false;
@@ -140,7 +141,7 @@ export function presetMatches(preset: SnapPreset, live: SnapSettings): boolean {
 }
 
 /** Snapshot the current live feel into a new user preset. */
-export function snapshotPreset(name: string, live: SnapSettings): SnapPreset {
+export function snapshotPreset(name: string, live: SnapFeel): SnapPreset {
   return {
     id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name,

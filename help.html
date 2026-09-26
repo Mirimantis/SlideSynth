@@ -257,12 +257,17 @@
   </p>
   <p>
     The workspace has an <strong>icon rail</strong> down the left, the <strong>canvas</strong>
-    in the centre, and a <strong>properties panel</strong> on the right. Each rail icon opens
-    a <strong>drawer</strong> that slides out over the canvas edge — <strong>Tempo</strong>
-    (BPM, time signature, metronome), <strong>Tools</strong>
-    (tool-mode buttons), <strong>Snap</strong> (snap presets, magnetic settings, guides),
-    <strong>Harmonic Prism</strong>, and <strong>Tuning</strong> (key, scale, reference pitch).
-    One drawer is open at a time; <kbd>Escape</kbd> or a click on the canvas closes it. The
+    in the centre, and a <strong>properties panel</strong> on the right. The top of the rail
+    holds the drawer icons; each opens a <strong>drawer</strong> that slides out over the
+    canvas edge — <strong>Tempo</strong> (BPM, time signature, metronome),
+    <strong>Snap</strong> (presets, Gravity, guides), <strong>Harmonic Prism</strong>, and
+    <strong>Tuning</strong> (key, scale, reference pitch). One drawer is open at a time;
+    <kbd>Escape</kbd> or a click on the canvas closes it. Below a divider sits the
+    <strong>tool strip</strong>, always visible: <strong>Draw</strong>, <strong>Select</strong>,
+    <strong>Delete</strong>, <strong>Slice</strong> and <strong>Perform</strong>. The active
+    tool is filled in; hover a button for its name and key. While the Harmonic Prism's
+    <strong>Draw</strong> mode is on, Draw and Perform carry a small rainbow
+    <strong>chord badge</strong> showing how many voices will sound. The
     right-hand panel stacks <strong>Tool Properties</strong> (variable settings for the active
     tool), <strong>Object Properties</strong> (context for the selected track or point), and
     <strong>Tracks</strong>.
@@ -271,8 +276,8 @@
     A toolbar across the top carries the <strong>composition name</strong> (editable) alongside
     the <strong>composition length</strong> (auto-derived from the rightmost point, shown as
     <code>M:SS</code>), the <strong>File</strong>, <strong>Edit</strong> and <strong>View</strong>
-    menus and the <strong>Undo</strong>/<strong>Redo</strong> arrows on the left; the
-    <strong>Perform</strong> button in the centre; and on the right the transport (Stop,
+    menus and the <strong>Undo</strong>/<strong>Redo</strong> arrows on the left; and on the
+    right the transport (Stop,
     Play/Pause, Record with its ▾ options menu, Keep), the <strong>Snap</strong> and
     <strong>Loop</strong> switches, which fill with the accent colour when on, and the
     <strong>Settings</strong> gear. Every menu item shows its keyboard shortcut, greys out when
@@ -295,8 +300,9 @@
     Glissandograph has two modes. <strong>Compose</strong> is the editor: the left mouse
     button runs the tool you've picked (Draw, Select, Delete, Slice). <strong>Perform</strong>
     turns the canvas into an instrument: the left button <em>plays</em>. Press
-    <kbd>P</kbd> or the <strong>Perform</strong> button at the top to switch; the button
-    lights up and the canvas takes a violet frame, so you can always tell which mode you're in.
+    <kbd>P</kbd> or the <strong>Perform</strong> button at the bottom of the tool strip to
+    switch; the button lights up violet and so does the canvas's frame, so you can always tell
+    which mode you're in. Picking a tool goes back to Compose.
   </p>
   <p>
     In Perform the music slides right-to-left past a stationary <strong>rail</strong> at the
@@ -308,7 +314,7 @@
   <h3>Playing</h3>
   <ul>
     <li>Press <kbd>P</kbd> (or the <strong>Perform</strong> button). The rail snaps onto the playhead.</li>
-    <li><strong>Mouse Y</strong> moves the planchette along the rail, driving pitch (snapped to scale/semitone if snap is on, with magnetic pull if Magnetic is on).</li>
+    <li><strong>Mouse Y</strong> moves the planchette along the rail, driving pitch (snapped to scale/semitone if snap is on, with Gravity's pull if Gravity is on).</li>
     <li><strong>Hold the left button</strong> to sound the selected track's tone at the planchette's pitch — release to stop.</li>
     <li><strong>With the transport stopped</strong>, holding the left button just auditions the pitch: nothing is recorded and the clock doesn't start. Handy for finding your note before you play.</li>
     <li>Press <kbd>Space</kbd> or Play and the canvas scrolls past the rail at the composition's BPM. In Perform, Play <strong>runs until you stop it</strong> — it doesn't end with the existing content, so there's always room to keep playing. With <strong>Loop</strong> on it cycles the loop range instead.</li>
@@ -317,7 +323,7 @@
     <li>Pressing <kbd>P</kbd> while Compose playback is running switches to Perform without stopping; the clock becomes open-ended from there.</li>
     <li><strong>Leaving Perform</strong>: press <kbd>P</kbd> again, <kbd>Escape</kbd>, or pick a tool (button or <kbd>D</kbd> / <kbd>V</kbd> / <kbd>X</kbd> / <kbd>C</kbd>). Playback keeps running if it was. While a recording runs you stay in Perform until it stops.</li>
     <li><strong>Scrubbing</strong> the ruler in Perform slides the content under the rail as you drag: click a beat in the ruler to bring it to the rail, then drag to move forward or back. The rail is always where Play will start.</li>
-    <li>Magnetic snap is fully live in Perform, including while stopped — gravity settles even when you're just hovering.</li>
+    <li>Gravity is fully live in Perform, including while stopped — the pitch settles even when you're just hovering.</li>
     <li>Un-armed Perform playback auto-stops after <strong>10 minutes</strong> of inactivity (the warning popup appears 30 seconds before). Moving the mouse over the canvas counts as activity.</li>
   </ul>
 
@@ -689,16 +695,16 @@
     <summary>Snap details</summary>
     <div class="detail-body">
       <ul>
-        <li>When snap is on, points snap to the time grid and the nearest semitone (or nearest scale note if a scale is active). Transitions between snap lines are instantaneous unless Magnetic mode (below) is also on.</li>
+        <li>When snap is on, points snap to the time grid and the nearest semitone (or nearest scale note if a scale is active). Transitions between snap lines are instantaneous unless Gravity (below) is also on.</li>
         <li><strong>Adaptive snap</strong> — the time-axis snap granularity adjusts with zoom: 1/16-beat at high zoom, eighth-note at medium zoom, and whole beats when zoomed out. The ruler ticks match the current snap resolution.</li>
         <li>Bezier handles are never snapped, allowing smooth curve shaping regardless of snap setting.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to one axis.</li>
-        <li><strong>Magnetic</strong> — a spring-mass physics alternative for pitch
+        <li><strong>Gravity</strong> — a spring-mass physics alternative for pitch
             snapping during performance. The planchette has inertia, is pulled toward
             the cursor by an elastic force, and is attracted to the nearest snap line
             with proximity-based strength. Only active during Compose Performance
             (LMB held). Requires Snap on to have any effect. <strong>On by default</strong> —
-            the magnetic pull is the instrument's feel, not an add-on. Three tuning sliders:
+            Gravity's pull is the instrument's feel, not an add-on. Three tuning sliders:
             <ul>
               <li><strong>Force</strong> (0–1, default 0.85) — snap attractor
                   strength. At 0 the planchette is a smooth cursor-follower with no
@@ -720,7 +726,7 @@
     </div>
   </details>
   <p>
-    All snap-section settings (Snap toggle, Magnetic on/off, the three magnetic
+    All snap-section settings (Snap toggle, Gravity on/off, its three
     sliders, plus the Key &amp; Scale picks) are saved with the composition file
     and restored on load, so a project's bespoke snap configuration round-trips
     cleanly.
@@ -731,9 +737,9 @@
     <div class="detail-body">
       <p>
         The <strong>Preset</strong> dropdown at the top of the Snap section
-        loads a named <em>magnet feel</em> in one click. A preset carries only
+        loads a named <em>Gravity feel</em> in one click. A preset carries only
         the three physics values — Force, Spring and Damping — so it
-        never changes your Key/Scale pick, and never changes what the magnet
+        never changes your Key/Scale pick, and never changes what Gravity
         snaps <em>to</em>, only how it gets there:
       </p>
       <ul>
@@ -744,8 +750,8 @@
         <li><strong>Vibrato</strong> — force 0.9, spring 35, damping 1.5. A strong attractor with low damping, so held notes undulate around the target instead of settling.</li>
       </ul>
       <p>
-        Loading a preset turns <strong>Snap</strong> and <strong>Magnetic</strong>
-        on if either is off (magnetic physics needs both), and a toast says which
+        Loading a preset turns <strong>Snap</strong> and <strong>Gravity</strong>
+        on if either is off (Gravity needs both), and a toast says which
         it switched on — so a preset click always changes how the instrument
         feels rather than doing nothing.
       </p>
@@ -786,7 +792,7 @@
             layout from accidental edits while you're authoring curves.</li>
         <li>During Compose Performance / Record, the planchette pitch snaps to
             Y-guides as additional targets (in addition to the regular grid /
-            scale / magnetic system). X-guides only affect placement-style
+            scale / Gravity system). X-guides only affect placement-style
             snapping (Draw / Select), not perform-time progression.</li>
         <li>Guides are saved with the composition. Their visibility and lock
             state, however, are per-browser preferences (so you can hide or
@@ -846,7 +852,9 @@
     <div class="detail-body">
       <ol>
         <li>Pick the Draw tool. Toggle <strong>Draw</strong> on in the
-          Harmonic Prism drawer (or press <kbd>H</kbd>).</li>
+          Harmonic Prism drawer (or press <kbd>H</kbd>). The Draw and Perform
+          buttons in the tool strip show a chord badge with the voice count
+          while it's on.</li>
         <li>Hover the canvas. The cursor shows a primary planchette
           (rainbow-filled disc) plus N&minus;1 harmony planchettes (solid
           rainbow stops) at the chord-spec Y offsets.</li>
@@ -945,7 +953,7 @@
         <li><strong>Stacking</strong> — the interval used to stack voices. Tertian (3rds) for conventional harmony, Quartal (4ths) for modal/jazz, Quintal (5ths) for open sound, Secondal (2nds) for clusters.</li>
         <li><strong>Quality</strong> — major / minor / dominant / diminished / augmented / sus2 / sus4. Fully applies to tertian; limited options for other stackings.</li>
         <li><strong>Voices</strong> — 2 (dyad) through 5 (pentad). More voices extend the chord: triad → 7th → 9th.</li>
-        <li><strong>Tuning</strong> — 12-TET (grid-aligned) or Just Intonation (pure acoustic ratios).</li>
+        <li><strong>Intonation</strong> — Equal (12-TET, grid-aligned) or Just (pure acoustic ratios).</li>
         <li><strong>Direction</strong> — voices sit above the base, below, or around it.</li>
         <li><strong>Octaves ±</strong> — how many octaves above and below the source to echo (0–3).</li>
       </ul>

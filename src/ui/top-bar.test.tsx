@@ -66,12 +66,12 @@ describe('top bar (BACKLOG 16.3)', () => {
     />,
   );
 
-  it('shows the name, menus, and neither tempo nor a Jam button', () => {
+  it('shows the name and menus, and neither tempo nor Perform (the strip has it)', () => {
     const html = bar();
     expect(html).toContain('value="Sketch"');
-    for (const label of ['File', 'Edit', 'View', 'Perform']) expect(html).toContain(`>${label}</button>`);
+    for (const label of ['File', 'Edit', 'View']) expect(html).toContain(`>${label}</button>`);
     expect(html).not.toContain('BPM');
-    expect(html).not.toMatch(/Jam/);
+    expect(html).not.toMatch(/Perform|Jam/);
   });
 
   it('Play and Pause share one button that follows the transport', () => {

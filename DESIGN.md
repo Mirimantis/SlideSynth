@@ -96,9 +96,9 @@ src/
 │                    #   metronome, midi-input, dynamics-bus, voice-allocation
 ├── canvas/          # viewport, interaction (tool mouse handling, ~1,400 lines), performance-engine
 │                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), and one renderer per layer
-├── ui/              # Preact (.tsx): top-bar, menu, settings-dialog, tempo-panel, track-list, property-panel,
-│                    #   tool-property-panel. Vanilla DOM: toolbar (Key/Scale), tool-panel, drawer, prism-panel,
-│                    #   tone builder/picker, older dialogs, HUDs
+├── ui/              # Preact (.tsx): top-bar, menu, tool-strip, settings-dialog, tempo-panel, snap-panel,
+│                    #   prism-panel, track-list, property-panel, tool-property-panel. Vanilla DOM: toolbar
+│                    #   (Key/Scale), drawer, tone builder/picker, older dialogs, HUDs
 ├── export/          # json-export (.gliss envelope + migrations), wav-export, midi-import
 └── utils/           # bezier-math, snap, snap-magnetic, snap-presets, scales, harmonics, svg helpers
 ```
@@ -232,8 +232,8 @@ Scrubbing the ruler is audible by default, replacing the Space-hold scrub previe
 - **View menu:** Pitch HUD, Perf HUD (!), Scroll canvas during playback, Go to start / end / playhead, User Manual (?).
 - **Settings dialog:** MIDI input device, audible scrub. Later: pen and gamepad mapping (11.3 / 11.4).
 - **Left rail:**
-  - The tools (Draw, Select, Delete, Slice) and the Perform entry, always visible as a strip.
-  - A divider, then the drawer icons.
+  - The drawer icons at the top.
+  - A divider, then the tools (Draw, Select, Delete, Slice) and the Perform entry, always visible as a strip. *(16.4: the drawers sit above the tools.)*
   - **Drawers stay the pattern for settings with several controls that work together.** The Tools drawer is gone, and the Transport drawer is split up.
 - **Drawers:**
   - **Tempo** *(new, from the Transport drawer)*: BPM, time signature, and the metronome's on/off switch and volume.

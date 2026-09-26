@@ -19,7 +19,7 @@ export interface DrawerRail {
  * element (containing `.drawer[data-drawer]` panels).
  */
 export function createDrawerRail(railEl: HTMLElement, hostEl: HTMLElement): DrawerRail {
-  const icons = Array.from(railEl.querySelectorAll<HTMLElement>('.rail-icon'));
+  const icons = Array.from(railEl.querySelectorAll<HTMLElement>('.rail-icon[data-drawer]'));
   const drawers = Array.from(hostEl.querySelectorAll<HTMLElement>('.drawer'));
   let openId: string | null = null;
 

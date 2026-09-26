@@ -1,13 +1,13 @@
 import '@preact/signals'; // components re-render when the store fields they read change
 import type { ReadonlySignal } from '@preact/signals';
 import { useState } from 'preact/hooks';
-import type { ComponentChildren } from 'preact';
 import { store } from '../state/store';
 import { commandSpec, commandTitle, primaryShortcut, type CommandId } from '../commands/catalog';
 import type { CommandRegistry } from '../commands/registry';
-import { forcesScrollView, isCapturing, isRolling, passRecordState } from '../state/transport';
+import { isCapturing, isRolling, passRecordState } from '../state/transport';
 import { getCompositionLength } from '../model/composition';
 import { Icon } from './icon';
+import { CommandButton } from './command-button';
 import { MenuBar, MenuButton, type MenuEntry, type MenuSpec } from './menu';
 import iconPlay from '../assets/icons/play.svg?raw';
 import iconPause from '../assets/icons/pause.svg?raw';
@@ -22,9 +22,9 @@ import iconSettings from '../assets/icons/settings.svg?raw';
 
 /**
  * The top bar (BACKLOG 16.3), left to right: the composition's name and
- * length, the File / Edit / View menus and Undo / Redo; the Perform button
- * (centred over the canvas); the transport, the Snap and Loop switches, and
- * Settings. Tempo and the metronome live in the Tempo drawer instead — they're
+ * length, the File / Edit / View menus and Undo / Redo; the transport, the
+ * Snap and Loop switches, and Settings. (Perform moved to the tool strip in
+ * 16.4.) Tempo and the metronome live in the Tempo drawer instead — they're
  * set once per project.
  *
  * Every button runs a command, so it does exactly what its key does. Small
@@ -59,9 +59,6 @@ export function TopBar({ commands, menus, canUndo, canRedo, keepable }: TopBarPr
           <HistoryButton id="edit.redo" svg={iconRedo} commands={commands} can={canRedo} />
         </div>
       </div>
-      <div class="toolbar-zone center">
-        <PerformButton commands={commands} />
-      </div>
       <div class="toolbar-zone right">
         <Transport commands={commands} keepable={keepable} />
         <div class="toolbar-toggles">
@@ -73,34 +70,6 @@ export function TopBar({ commands, menus, canUndo, canRedo, keepable }: TopBarPr
         </CommandButton>
       </div>
     </>
-  );
-}
-
-/** A button that runs a command and hands focus back to the page, so the next
- *  Space or letter key reaches the keyboard map, not the button. */
-function CommandButton({ id, commands, class: cls, title, disabled, pressed, children }: {
-  id: CommandId;
-  commands: CommandRegistry;
-  class?: string;
-  title?: string;
-  disabled?: boolean;
-  pressed?: boolean;
-  children: ComponentChildren;
-}) {
-  return (
-    <button
-      class={cls}
-      title={title ?? commandTitle(id)}
-      aria-label={commandSpec(id).label}
-      aria-pressed={pressed}
-      disabled={disabled}
-      onClick={e => {
-        (e.currentTarget as HTMLElement).blur();
-        commands.run(id);
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -161,22 +130,6 @@ function HistoryButton({ id, svg, commands, can }: {
   return (
     <CommandButton id={id} commands={commands} class="icon-toggle history-btn" disabled={!can.value}>
       <Icon svg={svg} />
-    </CommandButton>
-  );
-}
-
-function PerformButton({ commands }: { commands: CommandRegistry }) {
-  const st = store.getState();
-  return (
-    <CommandButton
-      id="perform.toggle"
-      commands={commands}
-      class={`perform-toggle${st.performMode ? ' active' : ''}`}
-      pressed={st.performMode}
-      // A recording keeps you in Perform until it stops.
-      disabled={st.performMode && forcesScrollView(st.transport)}
-    >
-      Perform
     </CommandButton>
   );
 }
