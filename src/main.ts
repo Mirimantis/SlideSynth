@@ -20,8 +20,6 @@ import { createInputRouter, type GestureHandlers } from './canvas/input-router';
 import { createPreviewManager } from './audio/preview';
 import { renderRuler } from './canvas/ruler-renderer';
 import { createToolbar } from './ui/toolbar';
-import { createToolPanel } from './ui/tool-panel';
-import { createPrismPanel } from './ui/prism-panel';
 import { openContextMenu, type ContextMenuItem } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
@@ -45,7 +43,6 @@ import { SettingsDialog, type MidiDeviceInfo } from './ui/settings-dialog';
 import { TempoPanel, type TempoActions } from './ui/tempo-panel';
 import { liveVoiceMode } from './audio/live-voice';
 import { getActiveSynthCount, getActiveOscillatorCount } from './audio/tone-synth';
-import { BUILTIN_SNAP_PRESETS, loadUserSnapPresets, saveUserSnapPresets, presetMatches, snapshotPreset, type SnapPreset } from './utils/snap-presets';
 import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile } from './export/json-export';
 import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
@@ -60,14 +57,15 @@ import { showToast } from './ui/toast';
 import { commandSpec, primaryShortcut, type CommandId } from './commands/catalog';
 import { createCommandRegistry } from './commands/registry';
 import { createEditCommands } from './commands/edit-commands';
-import { TOOL_COMMANDS } from './ui/tool-panel';
+import { ToolStrip } from './ui/tool-strip';
+import { SnapPanel, type SnapActions } from './ui/snap-panel';
+import { PrismPanel } from './ui/prism-panel';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { getScaleById } from './utils/scales';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
 import { createDrawerRail } from './ui/drawer';
 import { setIcon } from './utils/svg-helpers';
 import iconTempo from './assets/icons/tempo.svg?raw';
-import iconTools from './assets/icons/tools.svg?raw';
 import iconSnap from './assets/icons/snap.svg?raw';
 import iconPrism from './assets/icons/prism.svg?raw';
 import iconTuning from './assets/icons/tuning.svg?raw';
@@ -89,72 +87,20 @@ app.innerHTML = `
   <div id="main-area">
     <div id="rail">
       <button class="rail-icon" data-drawer="tempo" title="Tempo" aria-label="Tempo"></button>
-      <button class="rail-icon" data-drawer="tools" title="Tools" aria-label="Tools"></button>
       <button class="rail-icon" data-drawer="snap" title="Snap" aria-label="Snap"></button>
       <button class="rail-icon" data-drawer="prism" title="Harmonic Prism" aria-label="Harmonic Prism"></button>
       <button class="rail-icon" data-drawer="tuning" title="Tuning" aria-label="Tuning"></button>
+      <div class="rail-divider" role="separator"></div>
+      <div id="tool-strip-host"></div>
     </div>
     <div id="drawer-host">
       <div class="drawer" id="drawer-tempo" data-drawer="tempo">
         <div class="drawer-header">Tempo</div>
         <div id="tempo-panel"></div>
       </div>
-      <div class="drawer" id="drawer-tools" data-drawer="tools">
-        <div class="drawer-header">Tools</div>
-        <div id="tool-panel"></div>
-      </div>
       <div class="drawer" id="drawer-snap" data-drawer="snap">
         <div class="drawer-header">Snap</div>
-        <div id="snap-section">
-          <div class="transport-row snap-preset-row">
-            <label for="snap-preset-select">Preset</label>
-            <select id="snap-preset-select" title="Snap preset — load a saved combo of snap + magnetic settings"></select>
-            <button id="snap-preset-save" class="snap-preset-btn" title="Save current snap settings as a new preset">Save</button>
-            <button id="snap-preset-delete" class="snap-preset-btn" title="Delete the active user preset" disabled>Del</button>
-          </div>
-          <div class="transport-row">
-            <label class="toggle-switch" title="Magnetic Snap: pitch follows physics model with snap-line attractors">
-              <span class="toggle-switch-track">
-                <input type="checkbox" id="magnetic-toggle" checked />
-                <span class="toggle-switch-thumb"></span>
-              </span>
-              <span class="toggle-switch-label">Magnetic</span>
-            </label>
-          </div>
-          <div class="transport-row">
-            <label for="input-magnetic-strength">Force</label>
-            <input type="range" id="input-magnetic-strength" class="magnetic-strength-slider" min="0" max="1" value="0.85" step="0.05" title="Force: how hard snap lines pull the pitch (0 = smooth cursor follow, 1 = strong snap pull)" />
-            <span class="magnetic-strength-value">0.85</span>
-          </div>
-          <div class="transport-row">
-            <label for="input-magnetic-spring">Spring</label>
-            <input type="range" id="input-magnetic-spring" class="magnetic-spring-slider" min="1" max="50" value="50" step="1" title="Cursor-to-pitch spring stiffness (1 = loose, 50 = tight tracking)" />
-            <span class="magnetic-spring-value">50</span>
-          </div>
-          <div class="transport-row">
-            <label for="input-magnetic-damping">Damping</label>
-            <input type="range" id="input-magnetic-damping" class="magnetic-damping-slider" min="0.25" max="15" value="6" step="0.25" title="Velocity damping (low = long vibrato wobbles, high = quick settle)" />
-            <span class="magnetic-damping-value">6</span>
-          </div>
-          <div class="transport-row guides-row">
-            <label class="toggle-switch" title="Show snap guides — when off, guides are hidden and don't snap">
-              <span class="toggle-switch-track">
-                <input type="checkbox" id="guides-visible-toggle" checked />
-                <span class="toggle-switch-thumb"></span>
-              </span>
-              <span class="toggle-switch-label">Guides</span>
-            </label>
-            <label class="toggle-switch" title="Lock guides — when locked, guides can't be selected, dragged, or deleted from the canvas (snap pull still works)">
-              <span class="toggle-switch-track">
-                <input type="checkbox" id="guides-locked-toggle" />
-                <span class="toggle-switch-thumb"></span>
-              </span>
-              <span class="toggle-switch-label">Lock</span>
-            </label>
-            <button id="add-guide-x-btn" class="snap-preset-btn" title="Add a vertical (beat) guide at the centre of the viewport">+ X</button>
-            <button id="add-guide-y-btn" class="snap-preset-btn" title="Add a horizontal (pitch) guide at the centre of the viewport">+ Y</button>
-          </div>
-        </div>
+        <div id="snap-panel"></div>
       </div>
       <div class="drawer" id="drawer-prism" data-drawer="prism">
         <div class="drawer-header" title="Harmonic Prism — ${primaryShortcut('prism.drawMode')}: Draw mode; ${primaryShortcut('prism.projection')}: projection from the selected curve">Harmonic Prism</div>
@@ -623,19 +569,18 @@ watch(() => store.getState().scaleId, id => toolbar.updateScaleId(id));
   const drawerHost = document.getElementById('drawer-host')!;
   const railIcons: Record<string, string> = {
     tempo: iconTempo,
-    tools: iconTools,
     snap: iconSnap,
     prism: iconPrism,
     tuning: iconTuning,
   };
-  railEl.querySelectorAll<HTMLElement>('.rail-icon').forEach(btn => {
+  railEl.querySelectorAll<HTMLElement>('.rail-icon[data-drawer]').forEach(btn => {
     const id = btn.dataset.drawer;
     const svg = id ? railIcons[id] : undefined;
     if (svg) setIcon(btn, svg);
   });
   createDrawerRail(railEl, drawerHost);
 }
-// ── Tool panel (Tools drawer) ──────────────────────────────────
+// ── Tool strip (BACKLOG 16.4) ─────────────────────────────────
 /** Entering Select with curves already selected (e.g. a track clicked while in
  *  Draw) shows their transform box straight away. */
 function buildTransformBoxFromSelection(): void {
@@ -645,16 +590,9 @@ function buildTransformBoxFromSelection(): void {
   if (track) rebuildTransformBox(interaction, track);
 }
 
-const toolPanelContainer = document.getElementById('tool-panel')!;
-const toolPanel = createToolPanel(toolPanelContainer, {
-  onToolChange: tool => commands.run(TOOL_COMMANDS[tool]),
-});
-
-// ── Harmonic Prism panel (chord-spec picker) ───────────────────
-const prismPanelContainer = document.getElementById('prism-panel')!;
-const prismPanel = createPrismPanel(prismPanelContainer);
-// The panel shows only the Prism settings, so it re-renders only when they change.
-watch(() => JSON.stringify(store.getState().harmonicPrism), () => prismPanel.refresh());
+/** The left button is sounding, so the tool strip can't change tools. Engine
+ *  state, polled per frame. */
+const toolsLocked = signal(false);
 
 // ── HUDs ────────────────────────────────────────────────────────
 const perfHud = createPerfHud(document.getElementById('perf-hud') as HTMLDivElement);
@@ -974,226 +912,7 @@ async function requestMidiList() {
   if (ok) refreshMidiDeviceList();
 }
 
-// ── Magnetic Snap toggle + Force / Spring / Damping sliders (Transport) ─
-// The Force slider is `magneticStrength` internally — the field is persisted in
-// the composition file, so the rename (BACKLOG 13.1) is display-only.
-const magneticToggle = document.getElementById('magnetic-toggle') as HTMLInputElement;
-const magneticStrengthSlider = document.getElementById('input-magnetic-strength') as HTMLInputElement;
-const magneticStrengthValue = document.querySelector('.magnetic-strength-value') as HTMLSpanElement;
-const magneticSpringSlider = document.getElementById('input-magnetic-spring') as HTMLInputElement;
-const magneticSpringValue = document.querySelector('.magnetic-spring-value') as HTMLSpanElement;
-const magneticDampingSlider = document.getElementById('input-magnetic-damping') as HTMLInputElement;
-const magneticDampingValue = document.querySelector('.magnetic-damping-value') as HTMLSpanElement;
-
-function formatDamping(d: number): string {
-  return Number.isInteger(d) ? String(d) : d.toFixed(1);
-}
-
-/** Push the current snap values into the DOM controls. Runs from the snap
- *  watch below — on load, undo/redo, file open, presets, hotkeys and the
- *  controls themselves (re-setting a dragged slider's own value is harmless). */
-function syncSnapSectionDom(): void {
-  const st = store.getState();
-  magneticToggle.checked = st.magneticEnabled;
-  magneticStrengthSlider.value = String(st.magneticStrength);
-  magneticStrengthValue.textContent = st.magneticStrength.toFixed(2);
-  magneticSpringSlider.value = String(st.magneticSpringK);
-  magneticSpringValue.textContent = String(Math.round(st.magneticSpringK));
-  magneticDampingSlider.value = String(st.magneticDamping);
-  magneticDampingValue.textContent = formatDamping(st.magneticDamping);
-}
-
-magneticToggle.addEventListener('change', () => {
-  store.setMagneticEnabled(magneticToggle.checked);
-  magneticToggle.blur();
-});
-magneticStrengthSlider.addEventListener('input', () => {
-  store.setMagneticStrength(Number(magneticStrengthSlider.value));
-});
-magneticSpringSlider.addEventListener('input', () => {
-  store.setMagneticSpringK(Number(magneticSpringSlider.value));
-});
-magneticDampingSlider.addEventListener('input', () => {
-  store.setMagneticDamping(Number(magneticDampingSlider.value));
-});
-
-// ── Snap presets (BACKLOG 8.6) ─────────────────────────────────
-const snapPresetSelect = document.getElementById('snap-preset-select') as HTMLSelectElement;
-const snapPresetSaveBtn = document.getElementById('snap-preset-save') as HTMLButtonElement;
-const snapPresetDeleteBtn = document.getElementById('snap-preset-delete') as HTMLButtonElement;
-
-const CUSTOM_PRESET_VALUE = '__custom__';
-let userSnapPresets: SnapPreset[] = loadUserSnapPresets();
-/** The preset the user explicitly picked (via dropdown change or Save). Cleared
- *  when settings drift away from it. Lets the dropdown stick on the user's
- *  intended preset even when a built-in also matches. */
-let activeSnapPresetId: string | null = null;
-
-function getAllPresets(): SnapPreset[] {
-  return [...BUILTIN_SNAP_PRESETS, ...userSnapPresets];
-}
-
-/** Repopulate the dropdown, then sync its selected value to the active preset
- *  (if it still matches), else the first matching preset, else "Custom". Also
- *  drives the Delete button enabled state. */
-function syncSnapPresetUi(): void {
-  const liveSnap = store.getComposition().snap;
-
-  // Repopulate (cheap; only ~4 builtins + a handful of user presets).
-  snapPresetSelect.innerHTML = '';
-  const customOpt = document.createElement('option');
-  customOpt.value = CUSTOM_PRESET_VALUE;
-  customOpt.textContent = 'Custom';
-  customOpt.disabled = true;
-  customOpt.hidden = true;   // only shown when actually selected (no preset matches)
-  snapPresetSelect.appendChild(customOpt);
-
-  const builtinGroup = document.createElement('optgroup');
-  builtinGroup.label = 'Built-in';
-  for (const p of BUILTIN_SNAP_PRESETS) {
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.name;
-    builtinGroup.appendChild(opt);
-  }
-  snapPresetSelect.appendChild(builtinGroup);
-
-  if (userSnapPresets.length > 0) {
-    const userGroup = document.createElement('optgroup');
-    userGroup.label = 'User';
-    for (const p of userSnapPresets) {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.name;
-      userGroup.appendChild(opt);
-    }
-    snapPresetSelect.appendChild(userGroup);
-  }
-
-  // Resolve which preset to show as selected:
-  //   1. If the active preset still matches → keep it.
-  //   2. Else clear active and fall back to first matching preset.
-  //   3. Else show "Custom".
-  let active: SnapPreset | null = activeSnapPresetId
-    ? getAllPresets().find(p => p.id === activeSnapPresetId) ?? null
-    : null;
-  if (active && !presetMatches(active, liveSnap)) {
-    active = null;
-    activeSnapPresetId = null;
-  }
-  const match = active ?? getAllPresets().find(p => presetMatches(p, liveSnap)) ?? null;
-  if (match) {
-    snapPresetSelect.value = match.id;
-    customOpt.hidden = true;
-  } else {
-    customOpt.hidden = false;
-    snapPresetSelect.value = CUSTOM_PRESET_VALUE;
-  }
-
-  // Delete is only valid for an active USER preset.
-  snapPresetDeleteBtn.disabled = !match || !userSnapPresets.some(u => u.id === match.id);
-}
-
-// The whole snap drawer follows composition.snap.
-watch(
-  () => {
-    const st = store.getState();
-    return `${st.snapEnabled}|${st.magneticEnabled}|${st.magneticStrength}|${st.magneticSpringK}|${st.magneticDamping}`;
-  },
-  () => {
-    syncSnapSectionDom();
-    syncSnapPresetUi();
-  },
-);
-
-snapPresetSelect.addEventListener('change', () => {
-  const id = snapPresetSelect.value;
-  if (id === CUSTOM_PRESET_VALUE) return;
-  const preset = getAllPresets().find(p => p.id === id);
-  if (!preset) return;
-  // Presets are feel-only (BACKLOG 13.2), but magnetic physics is gated on
-  // `snapEnabled && magneticEnabled` — so a load with either toggle off would be
-  // silently inaudible. Turn both on and say so, per the 10.5 auto-Loop precedent.
-  const st = store.getState();
-  const turnedOn: string[] = [];
-  if (!st.snapEnabled) { store.setSnap(true); turnedOn.push('Snap'); }
-  if (!st.magneticEnabled) { store.setMagneticEnabled(true); turnedOn.push('Magnetic'); }
-  if (turnedOn.length > 0) showToast(`${preset.name}: ${turnedOn.join(' + ')} On`);
-
-  // Apply each defined field via the corresponding setter (write-through to comp.snap).
-  // Note: no history.snapshot() — preset loading mirrors the magnetic-slider precedent.
-  const s = preset.settings;
-  if (s.magneticStrength !== undefined) store.setMagneticStrength(s.magneticStrength);
-  if (s.magneticSpringK !== undefined) store.setMagneticSpringK(s.magneticSpringK);
-  if (s.magneticDamping !== undefined) store.setMagneticDamping(s.magneticDamping);
-  // The setters above already re-synced the drawer; sync again now that the
-  // picked preset is active, so it wins over any other preset that also matches.
-  activeSnapPresetId = preset.id;
-  syncSnapPresetUi();
-  snapPresetSelect.blur();
-});
-
-snapPresetSaveBtn.addEventListener('click', async () => {
-  const existingNames = getAllPresets().map(p => p.name);
-  const name = await openPresetSaveDialog({
-    title: 'Save Snap Preset',
-    existingNames,
-  });
-  if (!name) return;
-  const preset = snapshotPreset(name, store.getComposition().snap);
-  userSnapPresets = [...userSnapPresets, preset];
-  saveUserSnapPresets(userSnapPresets);
-  activeSnapPresetId = preset.id;   // make the new preset the active one
-  syncSnapPresetUi();
-  showToast(`Saved snap preset "${name}".`);
-});
-
-snapPresetDeleteBtn.addEventListener('click', () => {
-  const id = snapPresetSelect.value;
-  const target = userSnapPresets.find(p => p.id === id);
-  if (!target) return;
-  if (!confirm(`Delete user preset "${target.name}"?`)) return;
-  userSnapPresets = userSnapPresets.filter(p => p.id !== id);
-  saveUserSnapPresets(userSnapPresets);
-  if (activeSnapPresetId === id) activeSnapPresetId = null;
-  syncSnapPresetUi();
-});
-
-// ── Snap guides (BACKLOG 8.7) ──────────────────────────────────
-const guidesVisibleToggle = document.getElementById('guides-visible-toggle') as HTMLInputElement;
-const guidesLockedToggle = document.getElementById('guides-locked-toggle') as HTMLInputElement;
-const addGuideXBtn = document.getElementById('add-guide-x-btn') as HTMLButtonElement;
-const addGuideYBtn = document.getElementById('add-guide-y-btn') as HTMLButtonElement;
-watch(() => store.getState().guidesVisible, v => { guidesVisibleToggle.checked = v; });
-
-/** Disable the + X / + Y buttons when guides are locked so the user can't add a
- *  new guide and leave it stuck-selected (the lock prevents deselect-on-canvas). */
-function syncGuideAddButtonsEnabled(): void {
-  const locked = store.getState().guidesLocked;
-  addGuideXBtn.disabled = locked;
-  addGuideYBtn.disabled = locked;
-  const tip = locked
-    ? 'Unlock guides to add a new one'
-    : null;
-  addGuideXBtn.title = tip ?? 'Add a vertical (beat) guide at the centre of the viewport';
-  addGuideYBtn.title = tip ?? 'Add a horizontal (pitch) guide at the centre of the viewport';
-}
-watch(() => store.getState().guidesLocked, locked => {
-  guidesLockedToggle.checked = locked;
-  syncGuideAddButtonsEnabled();
-});
-
-guidesVisibleToggle.addEventListener('change', () => {
-  store.setGuidesVisible(guidesVisibleToggle.checked);
-  bgDirty = true;
-  guidesVisibleToggle.blur();
-});
-guidesLockedToggle.addEventListener('change', () => {
-  store.setGuidesLocked(guidesLockedToggle.checked);
-  bgDirty = true;
-  guidesLockedToggle.blur();
-});
-
+// ── Snap drawer (BACKLOG 16.4) ─────────────────────────────────
 /** Add a guide at the centre of the current viewport on the requested axis,
  *  then auto-select it so the user can immediately drag or rename it. */
 function addGuideAtViewportCenter(orientation: 'x' | 'y'): void {
@@ -1212,14 +931,17 @@ function addGuideAtViewportCenter(orientation: 'x' | 'y'): void {
   store.addGuide(guide);
   store.setSelectedGuide(guide.id);
   // Force the viewport to re-show the guides if they were hidden.
-  if (!store.getState().guidesVisible) {
-    store.setGuidesVisible(true);
-    guidesVisibleToggle.checked = true;
-  }
+  if (!store.getState().guidesVisible) store.setGuidesVisible(true);
   bgDirty = true;
 }
-addGuideXBtn.addEventListener('click', () => { addGuideAtViewportCenter('x'); addGuideXBtn.blur(); });
-addGuideYBtn.addEventListener('click', () => { addGuideAtViewportCenter('y'); addGuideYBtn.blur(); });
+
+const snapActions: SnapActions = {
+  askPresetName: existingNames => openPresetSaveDialog({ title: 'Save Snap Preset', existingNames }),
+  confirmDeletePreset: name => confirm(`Delete user preset "${name}"?`),
+  addGuide: addGuideAtViewportCenter,
+  redrawGuides: () => { bgDirty = true; },
+  notify: showToast,
+};
 
 // ── Metronome + Loop ───────────────────────────────────────────
 // The Tempo drawer and the top bar change the store; the engines follow it.
@@ -3017,7 +2739,7 @@ function runFrame() {
   if (fgDirty || bgDirty || animating || wasAnimating) {
     fgDirty = false;
     // Compose UI affordances that follow the same state the canvas draws.
-    toolPanel.setDisabled(composeEngine.isLmbDown());
+    toolsLocked.value = composeEngine.isLmbDown();
     updatePitchHudDom(state);
     updateCountdownOverlayDom(state);
     updateAfkWarningDom(state);
@@ -3083,7 +2805,7 @@ function tickFrame() {
  *    • the user selected a different single curve while in Draw — honor the
  *      new selection so the preview line and the next click both target it
  *    • the active tool isn't Draw anymore (hotkey switch bypasses the
- *      toolPanel.onToolChange clear) */
+ *      Draw-tool clear) */
 function reconcileDrawingCurve() {
   if (!interaction.drawingCurve) return;
   const state = store.getState();
@@ -3479,10 +3201,6 @@ watch(() => store.getComposition(), comp => {
 });
 
 
-// The tool can change from several places (hotkeys, track click, Ctrl-hold in
-// interaction.ts), so the panel follows the store (BACKLOG 14.2).
-watch(() => (store.getState().performMode ? null : store.getState().activeTool), tool => toolPanel.updateTool(tool));
-
 // These read exactly what they show and skip DOM work when it hasn't changed.
 const propContentEl = document.getElementById('prop-content')!;
 const toolPropContentEl = document.getElementById('tool-prop-content')!;
@@ -3515,6 +3233,11 @@ const MENUS: readonly MenuSpec[] = [
 ];
 render(h(TopBar, { commands, menus: MENUS, canUndo, canRedo, keepable }), toolbarContainer);
 render(h(TempoPanel, { actions: tempoActions }), document.getElementById('tempo-panel')!);
+render(h(SnapPanel, { actions: snapActions }), document.getElementById('snap-panel')!);
+render(h(PrismPanel, null), document.getElementById('prism-panel')!);
+// The tool can change from several places (hotkeys, track click, Ctrl-hold in
+// interaction.ts), so the strip follows the store (BACKLOG 14.2).
+render(h(ToolStrip, { commands, locked: toolsLocked }), document.getElementById('tool-strip-host')!);
 {
   const settingsHost = document.createElement('div');
   document.body.appendChild(settingsHost);

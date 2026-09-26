@@ -137,7 +137,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - Also in this PR, a user request: each drawer is sized to its own controls instead of full height and a shared 240px width. Height is capped at the canvas (then it scrolls); width runs from 200px up to the canvas width.
       - The Prism label column widened so "Voice 1 (root)" no longer runs into its input.
       - The Prism toggles' tooltips come from the command catalog.
-  - **Still to migrate:** Prism panel, the Snap and Tuning drawers' contents, the tool panel, tone builder/picker and the older dialogs. Most of these are reshaped by Phase 16, so they move with it (16.4–16.5). *(16.3 moved the top bar, menus, Settings and the Tempo drawer.)*
+  - **Still to migrate:** the Tuning drawer's contents (Key/Scale toolbar, Tune A4), tone builder/picker and the older dialogs. The Tuning drawer moves with its redesign (13.8). *(16.3 moved the top bar, menus, Settings and the Tempo drawer; 16.4 the tool strip, Snap drawer and Prism panel.)*
 - [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2, PR #76)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.
   - Add an `fgDirty` flag mirroring `bgDirty`, and cache each curve's tessellation as a `Path2D` keyed by curve identity. Idle CPU should then drop to near zero.
@@ -281,7 +281,7 @@ Implementation comes first: block out every control so it works, then hold the d
       - Loop (L) is refused while a recording runs, matching its button.
       - Loop-marker dragging reads Loop from the store, not from the old drawer checkbox.
       - Below ~1150 px wide, the Perform button joins the top-bar row instead of centring over the canvas, where it would cover the menus.
-- [ ] **16.4 Tool strip, Snap / Prism renames** *(M)*
+- [x] **16.4 Tool strip, Snap / Prism renames** *(M, PR #83)*
   - **Tool strip:**
     - It replaces the Tools drawer.
     - It can take over the Perform entry (a top-bar button since 16.2), unless 16.8 decides otherwise.
@@ -289,6 +289,16 @@ Implementation comes first: block out every control so it works, then hold the d
   - **Snap drawer:** Magnetic becomes Gravity.
   - **Prism drawer:** "Tuning" becomes Intonation.
   - The Tuning drawer is untouched until 13.8.
+  - **Done (PR #83):**
+    - **Tool strip** (`ui/tool-strip.tsx`) in the left rail, *below* the drawer icons and a divider (the user's call; the spec had it above):
+      - Draw, Select, Delete and Slice as icons, plus the Perform entry, which moves here from the top bar. Each runs its catalog command.
+      - The lit tool follows the store. In Perform, Perform is lit (violet) and no tool is. A recording keeps Perform lit but unclickable.
+      - Every button greys out while the left button is sounding (a per-frame `toolsLocked` signal).
+      - While Prism Draw is on, Draw and Perform carry a rainbow **chord badge** with the voice count; its tooltip names the chord.
+      - The Tools drawer, its icon and the old `tool-panel.ts` are gone. The top bar's centre zone (and its narrow-window fallback) went with the Perform pill.
+    - **Snap drawer** (`ui/snap-panel.tsx`, now Preact): Magnetic is **Gravity** in the switch, tooltips, the preset toast and the help. The store and file fields keep their `magnetic*` names. Preset matching takes just the three feel values (`SnapFeel`).
+    - **Prism drawer** (`ui/prism-panel.tsx`, now Preact): the chord's "Tuning" is **Intonation**, with options Equal (12-TET) and Just.
+    - `CommandButton` moved to its own module so the top bar and the strip share it.
 - [ ] **16.5 Right panel, track rows, groups** *(M)*
   - **Right panel:** the sections become Tool and Selection. The dynamics choice moves to Perform's Tool section.
   - **Track rows:** Mute, Solo and MIDI arm become icons; Edit tone and Delete move to a ⋯ menu.

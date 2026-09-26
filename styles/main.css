@@ -89,29 +89,8 @@ body {
   gap: 12px;
 }
 
-.toolbar-zone.center {
-  position: absolute;
-  /* Centre over the CANVAS centre (where the rail locks), not the viewport
-     centre. The canvas sits between the rail (left) and the right panel, so its
-     centre is offset from the toolbar centre by half their width difference:
-     (rail - panel) / 2 = (48 - 200) / 2 = -76px. */
-  left: 50%;
-  transform: translateX(calc(-50% + (var(--rail-width) - var(--panel-width)) / 2));
-  white-space: nowrap;
-}
-
 .toolbar-zone.right {
   margin-left: auto;
-}
-
-/* Too narrow to centre the Perform button over the canvas without it landing
-   on the menus: it joins the row instead. */
-@media (max-width: 1150px) {
-  .toolbar-zone.center {
-    position: static;
-    transform: none;
-    margin-left: 16px;
-  }
 }
 
 .toolbar-row {
@@ -180,41 +159,6 @@ body {
 .icon-toggle:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-/* ── Perform toggle (BACKLOG 16.2) ────────────────────────────────
-   An interim home where Lock Rail was, until the Perform session (16.8). */
-.perform-toggle {
-  height: 30px;
-  padding: 0 16px;
-  border-radius: 15px;
-  border: 1px solid var(--perform);
-  background: transparent;
-  color: var(--perform);
-  font: inherit;
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.perform-toggle:hover {
-  background: rgba(206, 147, 216, 0.15);
-}
-
-.perform-toggle.active {
-  background: var(--perform);
-  color: var(--bg);
-}
-
-.perform-toggle:disabled {
-  cursor: default;
-  opacity: 0.7;
-}
-
-.perform-toggle:focus-visible {
-  outline: 2px solid var(--perform);
-  outline-offset: 2px;
 }
 
 /* In Perform the canvas takes the Perform colour at its edge. An overlay,
@@ -524,27 +468,6 @@ body.perform-mode #canvas-container::after {
   min-width: 32px;
 }
 
-.tool-btn {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid #335;
-  border-radius: 4px;
-  padding: 4px 10px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: all 0.15s;
-}
-
-.tool-btn:hover {
-  background: #1a4a80;
-}
-
-.tool-btn.active {
-  background: var(--accent);
-  color: #000;
-  font-weight: 600;
-}
-
 /* ── Main area (3-column) ────────────────────────────────────── */
 
 #main-area {
@@ -623,16 +546,6 @@ body.perform-mode #canvas-container::after {
   background: rgba(79, 195, 247, 0.06);
 }
 
-#tool-panel {
-  padding: 8px;
-}
-
-.tool-panel-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
 /* ── Icon rail + sliding drawers (WS3) ─────────────────────────── */
 
 #rail {
@@ -670,6 +583,101 @@ body.perform-mode #canvas-container::after {
 .rail-icon.active {
   background: rgba(79, 195, 247, 0.16);
   color: var(--icon-color-active);
+}
+
+/* ── Tool strip (BACKLOG 16.4) ────────────────────────────────────
+   Below the drawer icons. A lit tool is filled, louder than an open drawer's
+   tint: the tool is what the next click does. */
+.rail-divider {
+  width: 28px;
+  height: 1px;
+  margin: 4px 0;
+  background: #335;
+}
+
+.tool-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.strip-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--icon-color);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-size: 20px; /* drives the 1.25em SVG sizing */
+}
+
+.strip-btn:hover {
+  background: rgba(79, 195, 247, 0.1);
+  color: var(--icon-color-hover);
+}
+
+.strip-btn.active {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.strip-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.strip-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Perform takes its own colour; 16.8 designs the real entry. */
+.strip-btn.perform-entry {
+  color: var(--perform);
+}
+
+.strip-btn.perform-entry:hover {
+  background: rgba(206, 147, 216, 0.15);
+}
+
+.strip-btn.perform-entry.active {
+  background: var(--perform);
+  color: var(--bg);
+}
+
+/* A recording keeps you in Perform: lit, but not clickable. */
+.strip-btn.perform-entry.active:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.strip-btn.perform-entry:focus-visible {
+  outline-color: var(--perform);
+}
+
+/* Prism Draw is on: the voice count, in the Prism's spectrum. */
+.chord-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 2px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #ef5350, #ffca28, #66bb6a, #42a5f5, #ab47bc);
+  color: #000;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+  pointer-events: auto;
 }
 
 /* Drawer overlay host: spans the area right of the rail, lets clicks through
@@ -737,10 +745,6 @@ body.perform-mode #canvas-container::after {
 #tuning-scale-slot .toolbar-group.scale {
   flex-wrap: wrap;
   max-width: 100%;
-}
-
-.tool-panel-grid .tool-btn {
-  width: 100%;
 }
 
 #track-list {
@@ -979,19 +983,6 @@ body.perform-mode #canvas-container::after {
   text-align: right;
 }
 
-/* Tool buttons disabled (Scroll-Canvas Playback hijacks LMB for Perform) */
-.tool-btn:disabled,
-.tool-btn[disabled] {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-.tool-btn.active:disabled,
-.tool-btn.active[disabled] {
-  background: var(--surface);
-  color: var(--text);
-  font-weight: normal;
-}
-
 #countdown-overlay {
   position: absolute;
   inset: 0;
@@ -1055,17 +1046,13 @@ body.perform-mode #canvas-container::after {
 }
 
 /* ── Magnetic sliders (Transport rows) ───────────────────────── */
-.magnetic-strength-slider,
-.magnetic-spring-slider,
-.magnetic-damping-slider {
+.gravity-slider {
   flex: 1;
   min-width: 60px;
   accent-color: var(--accent);
 }
 
-.magnetic-strength-value,
-.magnetic-spring-value,
-.magnetic-damping-value {
+.gravity-value {
   font-family: ui-monospace, 'SF Mono', Consolas, monospace;
   font-size: 0.75rem;
   color: var(--text-dim);

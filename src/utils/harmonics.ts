@@ -245,9 +245,9 @@ export const QUALITY_LABELS: Record<ChordQuality, string> = {
   perfect: 'Perfect',
 };
 
-export const TUNING_LABELS: Record<TuningSystem, string> = {
+export const INTONATION_LABELS: Record<TuningSystem, string> = {
   '12-TET': 'Equal (12-TET)',
-  'just-intonation': 'Just Intonation',
+  'just-intonation': 'Just',
 };
 
 export const DIRECTION_LABELS: Record<Direction, string> = {

@@ -9,7 +9,7 @@
  * recolor them dynamically.
  *
  * Import an icon with Vite's built-in `?raw` suffix to get its markup as a string:
- *   import drawIcon from '../assets/icons/tools.svg?raw';
+ *   import drawIcon from '../assets/icons/draw.svg?raw';
  *   setIcon(button, drawIcon);
  *
  * Committed icons are pre-cleaned by `npm run icons`; setIcon also runs the same
