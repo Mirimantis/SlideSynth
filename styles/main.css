@@ -737,6 +737,22 @@ body.perform-mode #canvas-container::after {
   min-width: 0;
 }
 
+/* An imported .scl file's description line (13.8 (d)): text only, one line. */
+.tuning-description {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin: -2px 0 6px 80px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tuning-files {
+  gap: 6px;
+  margin-top: 4px;
+}
+
 /* The pitch circle (13.8 (c)): one period of the tuning, C at the top. */
 .pitch-circle {
   display: flex;

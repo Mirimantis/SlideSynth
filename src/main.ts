@@ -44,7 +44,8 @@ import { SettingsDialog, type MidiDeviceInfo } from './ui/settings-dialog';
 import { TempoPanel, type TempoActions } from './ui/tempo-panel';
 import { liveVoiceMode } from './audio/live-voice';
 import { getActiveSynthCount, getActiveOscillatorCount } from './audio/tone-synth';
-import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile } from './export/json-export';
+import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile, openTextFile, FileTooLargeError } from './export/json-export';
+import { MAX_SCL_BYTES, SclError, parseScl, toScl } from './tuning/scl';
 import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
@@ -739,6 +740,28 @@ const tuningActions: TuningActions = {
   setTunedFrom(pc) { history.snapshot(); store.setTunedFrom(pc); },
   setPitchLinesVisible(visible) { history.snapshot(); store.setPitchLinesVisible(visible); },
   setReferenceLines(visible) { history.snapshot(); store.setReferenceLines(visible); },
+  async importScl() {
+    let file: { name: string; text: string };
+    try {
+      file = await openTextFile('.scl', MAX_SCL_BYTES);
+    } catch (e) {
+      if (e instanceof FileTooLargeError) showToast('That file is too large to be a .scl tuning.', 4000);
+      return;
+    }
+    try {
+      const ref = parseScl(file.text, file.name);
+      history.snapshot();
+      store.importTuning(ref);
+      showToast(`Imported ${ref.name}: ${ref.degrees.length} notes.`);
+    } catch (e) {
+      if (!(e instanceof SclError)) throw e;
+      showToast(`Couldn't read ${file.name}: ${e.message}.`, 5000);
+    }
+  },
+  exportScl() {
+    const { text, fileName } = toScl(store.getState());
+    downloadFile(text, fileName, 'text/plain');
+  },
   setReferenceHz(hz) {
     const cents = referenceAHzToCents(hz);
     if (Math.abs(cents - store.getComposition().tuningOffsetCents) < 1e-6) return;

@@ -534,10 +534,23 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
           - `scaleSteps()` in `tuning.ts` now resolves any scale for snapping, the staff and the store.
         - **Decision:** double-click sets the root the way the Root menu does, so a scale moves with it (C major → D major), Custom scales included. The alternative, keeping the dots where they are and changing only which one is home (C major → D Dorian), is noted under Deferred.
         - Import / Export .scl buttons come with (d).
-    - [ ] **(d) `.scl` import and export** *(S–M)*
+    - [x] **(d) `.scl` import and export** *(S–M)*
       - Import into an Imported tuning, with the description line treated as untrusted text.
       - Export the notes you hear, from the root.
       - A performance check with a large file (e.g. 43 or 192 notes).
+      - **Done (this PR):**
+        - **`tuning/scl.ts`:**
+          - `parseScl` follows the Scala format: comments, the description line, the count, and cents or ratio pitches with trailing text ignored. It sorts, drops repeats, folds notes outside the period into it, and throws `SclError` with a message for the user.
+          - `toScl` writes the notes you hear from the root, with the period last; ratios where the tuning has them for both notes (reduced, exact), cents otherwise.
+        - **Tuning model:** `TuningRef` gains `{kind: 'imported', name, description, degrees, period, ratios, periodRatio}`. The composition holds the whole tuning. `importedTuningProblem()` checks it on import and again on every load, since files are untrusted; a bad one plays as 12-EDO.
+        - **Limits:** at most 1,200 notes, and at most 1,200 to the octave; a period of 100–7,200 ¢; files up to 256 KB (refused before reading). The description is cut to 200 characters with control characters removed, and is only ever rendered as text.
+        - **Store:** `SnapSettings.importedTuning` keeps the last import, so the Tuning menu's "Imported (.scl)" group offers it after switching away. `importTuning()` keeps the root's pitch, as any tuning change does, and is one undo step. Older files load with none, so no format bump.
+        - **Drawer:** Import .scl… and Export .scl… buttons; the imported tuning's description under the Tuning menu; a toast for success or for why a file can't be used. `openTextFile()` returns the file's name.
+        - **Performance** (browser, 560×740 staff):
+          - 43 notes: 388 lines, 1.8 ms to build, under 1 ms to draw.
+          - 192 notes: 1,729 lines, 2.6 ms, 1.5 ms.
+          - The 1,200-note limit: 10,801 lines, 16 ms, 7 ms. The staff only redraws when it changes.
+        - **Staff labels (found while checking):** a tuning named by numbers now shows labels other than the root's only once at least every other one fits, so a 192-note tuning zoomed out isn't a column of scattered numbers.
     - [ ] **(f) Frets ↔ scale** *(M — after 13.18 and (c))*
       - Scale → octave frets.
       - Octave frets → a Custom scale, or a Custom tuning if any fret is off the tuning's degrees. Single frets stay as they are.

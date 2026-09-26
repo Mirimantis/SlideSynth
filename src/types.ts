@@ -1,4 +1,4 @@
-import type { CustomScale, TuningRef } from './tuning/tuning';
+import type { CustomScale, ImportedTuningRef, TuningRef } from './tuning/tuning';
 
 import type { ChordSpec } from './utils/harmonics';
 import type { PointSelection } from './model/point-selection';
@@ -90,8 +90,11 @@ export interface Track {
  */
 export interface SnapSettings {
   enabled: boolean;
-  /** Which pitches exist (13.8): an equal division, or a table. */
+  /** Which pitches exist (13.8): an equal division, a table, or an imported .scl. */
   tuning: TuningRef;
+  /** The last .scl imported (13.8 (d)); null until one is. Kept while another
+   *  tuning is chosen, so the Tuning menu can offer it again. */
+  importedTuning: ImportedTuningRef | null;
   /** Which degree of the tuning is home: an index into its degrees. */
   root: number;
   /** Which degrees the piece uses: a scale id, 'all', or 'custom'. */
@@ -276,6 +279,7 @@ export interface AppState {
   // derived, no longer mirrored copies). Change them through the store setters.
   snapEnabled: boolean;
   tuning: TuningRef;
+  importedTuning: ImportedTuningRef | null;
   root: number;
   scaleId: string;
   customScale: CustomScale | null;

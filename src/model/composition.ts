@@ -14,6 +14,7 @@ export function createDefaultSnapSettings(): SnapSettings {
   return {
     enabled: DEFAULT_SNAP_ENABLED,
     tuning: { ...TWELVE_EDO },
+    importedTuning: null,
     root: 0,
     scaleId: ALL_NOTES,
     customScale: null,

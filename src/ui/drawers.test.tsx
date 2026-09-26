@@ -71,7 +71,7 @@ describe('Tuning drawer (BACKLOG 13.8)', () => {
     const html = panel();
     expect(html).toMatch(/<option[^>]*selected[^>]*>12-EDO/);
     expect(html).toContain('>C#</option>');
-    expect(html).not.toContain('Tuned from');
+    expect(html).not.toContain('id="tuning-from"');
     expect(html).not.toContain('Divisions');
     expect(html).toContain('Pitch lines');
     expect(html).toContain('Tune A4');
@@ -91,7 +91,7 @@ describe('Tuning drawer (BACKLOG 13.8)', () => {
     store.setTuning({ kind: 'edo', divisions: 24, equave: 'octave' });
     const html = panel();
     expect(html).toMatch(/id="tuning-divisions"[^>]*value="24"/);
-    expect(html).toContain('Tuned from');
+    expect(html).toContain('id="tuning-from"');
     expect(html).toContain('Maqam Rast');
     expect(html).not.toContain('Dorian');
   });
@@ -120,6 +120,22 @@ describe('Tuning drawer (BACKLOG 13.8)', () => {
     const html = panel();
     expect(html).toMatch(/<option[^>]*selected[^>]*value="custom"[^>]*>Custom \(11 notes\)</);
     expect(html).toContain('Custom (11 notes)</text>');
+  });
+
+  it('offers the imported .scl tuning, with its description as plain text (13.8 (d))', () => {
+    expect(panel()).not.toContain('Imported (.scl)');
+    store.importTuning({
+      kind: 'imported', name: 'meanquar', description: '<b>Aaron</b>', degrees: [0, 400, 700], period: 1200,
+      ratios: [null, null, null], periodRatio: null,
+    });
+    let html = panel();
+    expect(html).toMatch(/<option[^>]*selected[^>]*value="imported"[^>]*>meanquar \(3 notes\)</);
+    expect(html).toContain('&lt;b>Aaron&lt;/b>');
+    expect(html).not.toContain('<b>Aaron');
+    store.setTuning({ kind: 'edo', divisions: 12, equave: 'octave' });
+    html = panel();
+    expect(html).toContain('meanquar (3 notes)');
+    expect(html).not.toContain('class="tuning-description"');
   });
 
   it('a historical table keeps the 12-note scales', () => {

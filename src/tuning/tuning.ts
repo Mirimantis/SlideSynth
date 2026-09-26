@@ -21,23 +21,48 @@ import { chordOffsets, type ChordSpec, type ChordSteps } from '../utils/harmonic
 
 export type Equave = 'octave' | 'tritave';
 
+/** A tuning read from a Scala .scl file (13.8 (d)). The composition keeps
+ *  the whole tuning, since the file it came from may be gone. */
+export interface ImportedTuningRef {
+  kind: 'imported';
+  /** The file's name, without .scl. */
+  name: string;
+  /** The file's description line: display text only. */
+  description: string;
+  /** Cents above degree 0, ascending, starting at 0. */
+  degrees: number[];
+  /** The repeat, in cents: the file's last note. */
+  period: number;
+  /** Each degree's ratio where the file gave one ('1/1' for degree 0), else null. */
+  ratios: (string | null)[];
+  /** The period's ratio ('2/1'), if the file gave one. */
+  periodRatio: string | null;
+}
+
 /** A tuning, as stored in a composition. */
 export type TuningRef =
   | { kind: 'edo'; divisions: number; equave: Equave }
-  | { kind: 'table'; id: string };
+  | { kind: 'table'; id: string }
+  | ImportedTuningRef;
+
+/** Imported tunings: at most this many notes, and a period from 100 ¢ to six
+ *  octaves, so a file can't ask the staff for more than a line a cent. */
+export const MAX_IMPORTED_NOTES = 1200;
+export const MIN_IMPORTED_PERIOD = 100;
+export const MAX_IMPORTED_PERIOD = 7200;
 
 export const TWELVE_EDO: TuningRef = { kind: 'edo', divisions: 12, equave: 'octave' };
 export const MIN_EDO = 5;
 export const MAX_EDO = 72;
 const TRITAVE_CENTS = CENTS_PER_OCTAVE * Math.log2(3);
 
-export type TuningGroup = 'Equal divisions' | 'Just intonation' | 'Historical' | 'Traditional';
+export type TuningGroup = 'Equal divisions' | 'Just intonation' | 'Historical' | 'Traditional' | 'Imported';
 
 /** A fixed table of degrees. */
 interface TuningTable {
   id: string;
   name: string;
-  group: Exclude<TuningGroup, 'Equal divisions'>;
+  group: Exclude<TuningGroup, 'Equal divisions' | 'Imported'>;
   /** Cents above degree 0, ascending, starting at 0. */
   degrees: readonly number[];
   period: number;
@@ -93,12 +118,50 @@ export interface Tuning {
   /** The repeat: 1200 for the octave. */
   period: number;
   naming: Naming;
-  ratios?: readonly string[];
+  /** Per-degree ratios (just intonation, and imported files that gave them). */
+  ratios?: readonly (string | null)[];
+  /** The period as a ratio ('2/1'), for .scl export. */
+  periodRatio: string | null;
   approximate: boolean;
+  /** An imported file's description line: display text only. */
+  description?: string;
 }
 
 export function tuningKey(ref: TuningRef): string {
-  return ref.kind === 'edo' ? `edo-${ref.divisions}${ref.equave === 'tritave' ? '-3' : ''}` : ref.id;
+  if (ref.kind === 'edo') return `edo-${ref.divisions}${ref.equave === 'tritave' ? '-3' : ''}`;
+  if (ref.kind === 'table') return ref.id;
+  return `imported-${hashString(`${ref.name}|${ref.period}|${ref.degrees.join(',')}`)}`;
+}
+
+/** A short, stable hash (FNV-1a) for cache keys. */
+function hashString(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+/** Why an imported tuning can't be used, or null if it can. Files are
+ *  untrusted: a saved composition could hold anything here. */
+export function importedTuningProblem(ref: ImportedTuningRef): string | null {
+  const { degrees, period } = ref;
+  if (!Number.isFinite(period) || period < MIN_IMPORTED_PERIOD || period > MAX_IMPORTED_PERIOD) {
+    return `its period must be between ${MIN_IMPORTED_PERIOD} and ${MAX_IMPORTED_PERIOD} cents`;
+  }
+  if (!Array.isArray(degrees) || degrees.length < 1 || degrees.length > MAX_IMPORTED_NOTES) {
+    return `it must have 1 to ${MAX_IMPORTED_NOTES} notes`;
+  }
+  if (degrees[0] !== 0) return 'its first degree must be 0';
+  for (let i = 1; i < degrees.length; i++) {
+    const d = degrees[i]!;
+    if (!Number.isFinite(d) || d <= degrees[i - 1]! || d >= period) return 'its notes must rise within one period';
+  }
+  if (degrees.length * CENTS_PER_OCTAVE / period > MAX_IMPORTED_NOTES) {
+    return `it can have at most ${MAX_IMPORTED_NOTES} notes to the octave`;
+  }
+  return null;
 }
 
 export function isTwelveEdo(ref: TuningRef): boolean {
@@ -126,7 +189,27 @@ export function resolveTuning(ref: TuningRef): Tuning {
       degrees: Array.from({ length: n }, (_, i) => (i * period) / n),
       period,
       naming: ref.equave === 'octave' && LETTER_EDOS.has(n) ? 'letters' : 'numbers',
+      periodRatio: ref.equave === 'tritave' ? '3/1' : '2/1',
       approximate: false,
+    };
+  } else if (ref.kind === 'imported') {
+    if (importedTuningProblem(ref)) return resolveTuning(TWELVE_EDO);
+    const octave = Math.abs(ref.period - CENTS_PER_OCTAVE) < 1e-6;
+    const ratios = Array.isArray(ref.ratios) && ref.ratios.length === ref.degrees.length
+      ? ref.ratios.map(r => (typeof r === 'string' ? r : null))
+      : undefined;
+    t = {
+      key,
+      name: String(ref.name),
+      group: 'Imported',
+      degrees: ref.degrees,
+      period: ref.period,
+      // Like the built-in tables: 12 notes to the octave take letters.
+      naming: octave && ref.degrees.length === 12 ? 'letters' : 'ratios',
+      ratios,
+      periodRatio: typeof ref.periodRatio === 'string' ? ref.periodRatio : null,
+      approximate: false,
+      description: String(ref.description ?? ''),
     };
   } else {
     const table = TUNING_TABLES.find(x => x.id === ref.id);
@@ -140,6 +223,7 @@ export function resolveTuning(ref: TuningRef): Tuning {
       // 12-note tables name their degrees by letter; other tables by ratio.
       naming: table.degrees.length === 12 ? 'letters' : 'ratios',
       ratios: table.ratios,
+      periodRatio: '2/1',
       approximate: !!table.approximate,
     };
   }
@@ -394,6 +478,8 @@ export interface StaffGrid {
   period: number;
   /** 12-EDO: no 12-EDO reference layer, it would sit on every line. */
   twelveEdo: boolean;
+  /** Names its notes by letter; otherwise by number or ratio. */
+  lettered: boolean;
 }
 
 const staffGrids = new Map<string, StaffGrid>();
@@ -436,6 +522,7 @@ export function staffGridFor(s: Omit<PitchSettings, 'hidePitchLines'>): StaffGri
     minStep: Math.min(...gaps),
     period: tuning.period,
     twelveEdo: isTwelveEdo(s.tuning),
+    lettered: lines.some(l => /^[A-G]/.test(l.label)),
   };
   staffGrids.set(key, grid);
   return grid;

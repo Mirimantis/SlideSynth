@@ -5,7 +5,8 @@ import { createTrack } from '../model/track';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 import {
-  ALL_NOTES, CUSTOM_SCALE, isTwelveEdo, nearestDegree, resolveTuning, rootCents, scaleSteps, type TuningRef,
+  ALL_NOTES, CUSTOM_SCALE, isTwelveEdo, nearestDegree, resolveTuning, rootCents, scaleSteps,
+  type ImportedTuningRef, type TuningRef,
 } from '../tuning/tuning';
 import { batch, signal, type Signal } from './reactive';
 import { TRANSPORT_STOPPED } from './transport';
@@ -40,6 +41,7 @@ import { NO_POINTS, addPoints, onlyPoint, togglePoint, withoutCurves, type Point
 const SNAP_VIEW_FIELDS = {
   snapEnabled: 'enabled',
   tuning: 'tuning',
+  importedTuning: 'importedTuning',
   root: 'root',
   scaleId: 'scaleId',
   customScale: 'customScale',
@@ -737,6 +739,12 @@ class Store {
     if (scaleSteps(snap, after) === null) snap.scaleId = ALL_NOTES;
     snap.tuning = ref;
     this.touch('snap');
+  }
+
+  /** Use a tuning read from a .scl file, and keep it for the Tuning menu. */
+  importTuning(ref: ImportedTuningRef) {
+    this.state.composition.snap.importedTuning = ref;
+    this.setTuning(ref);
   }
 
   /** Which degree of the tuning is home. */
