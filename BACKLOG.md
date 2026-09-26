@@ -513,11 +513,11 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
         - **Pitch readout:** the draw HUD names the tuning's nearest note and the cents from it (`pitchName`).
         - **Prism:** `chordOffsets(spec, steps)` moves each Equal voice to the tuning's nearest step, keeping voices apart. The steps are the tuning's intervals counted from the root (`chordStepsFor`), so offsets stay constant along a curve. The Intonation option reads "Equal (19-EDO)" etc. outside 12-EDO. Echo renderers and snap targets take offsets instead of the chord spec.
         - **Decision:** for unequal tables (Werckmeister, just intonation) "the tuning's steps" is its intervals from the root: a chord on the root sits on the staff's lines; on other degrees it keeps the root's interval shapes.
-    - [x] **(c) The pitch-circle drawer** *(M)*
+    - [x] **(c) The pitch-circle drawer** *(M, PR #90)*
       - Rim ticks, scale dots, the root ring, and the 12-EDO inner ring.
       - Click to hear, double-click for root, Shift+click to toggle a degree (Custom scale).
       - The drawer's layout per the spec, on a Preact component.
-      - **Done (this PR):**
+      - **Done (PR #90):**
         - **`ui/pitch-circle.tsx`** (SVG, Preact) at the top of the Tuning drawer:
           - one period, C at the top for octave tunings (degree 0 for others);
           - a tick per degree; names on the rim up to 24 degrees, then only the root and the natural letters;
