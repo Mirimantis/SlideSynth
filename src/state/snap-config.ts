@@ -8,7 +8,7 @@ import { store } from './store';
 
 /**
  * The one snap-config builder (BACKLOG 15.6). Drawing, point and transform
- * drags, guide drags, ruler scrubbing, the Space-hold preview and live
+ * drags, guide drags, ruler scrubbing, the hold-A audition and live
  * performance all get their snap targets here, so they can't disagree. Before,
  * perform built its own config without Prism projection echoes, and the
  * preview built one without guides or echoes (14.4). 12.1 (snap-target

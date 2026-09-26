@@ -284,7 +284,7 @@ export interface AppState {
   /** ID of the currently selected guide (for the Selection panel / Delete). Mutually
    *  exclusive with curve/point selection. */
   selectedGuideId: string | null;
-  drawPreviewMode: 'tone' | 'composition';   // Draw-tool spacebar preview scope
+  drawPreviewMode: 'tone' | 'composition';   // Draw-tool audition (hold A) scope
   bezierAutoSmooth: boolean;                  // Draw-tool: click-placed points get horizontal handles
   /** Compose mode: scroll the canvas past the rail during playback instead of
    *  moving the playhead (BACKLOG 16.2: the view half of the old Lock Rail).

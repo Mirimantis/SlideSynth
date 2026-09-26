@@ -35,7 +35,7 @@ interface ScrubTrackEntry {
 
 export interface PreviewManager {
   /** `dynamics` (0–1, from the dynamics bus) sets the starting loudness; omit
-   *  it for the idle Spacebar preview, which sounds at a fixed level. */
+   *  it for the idle audition (hold A), which sounds at a fixed level. */
   startDrawPreview(tone: ToneDefinition, noteNumber: number, voiceId?: VoiceId, dynamics?: number): void;
   updateDrawPitch(noteNumber: number, voiceId?: VoiceId): void;
   /** Ride a sounding voice's loudness from the dynamics bus (BACKLOG 11.1).
@@ -121,7 +121,7 @@ export function createPreviewManager(): PreviewManager {
       stopDrawPreviewFor(voiceId);
       ensureResumed();
       // Fade in from 0 to the starting level: the bus value when performing,
-      // the fixed preview level for the idle Spacebar path.
+      // the fixed preview level for the idle audition path.
       const gain = dynamics === undefined ? PREVIEW_VOLUME : gainForDynamics(dynamics);
       const voice = createLiveVoice(tone, { hz: centsToFrequency(noteNumber), gain, fadeInSeconds: RAMP_IN }, getPreviewGain());
       drawSynths.set(voiceId, voice);
