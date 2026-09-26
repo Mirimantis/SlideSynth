@@ -719,18 +719,14 @@ body.perform-mode #canvas-container::after {
   user-select: none;
 }
 
-#tuning-section {
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* Tuning drawer (13.8): labels in one column, so the pickers line up. */
+.tuning-panel .transport-row > label:not(.toggle-switch) {
+  flex: 0 0 72px;
 }
 
-/* Key + scale pickers: wrap rather than scroll if the drawer is capped
-   narrower than they are (a narrow window). */
-#tuning-scale-slot .toolbar-group.scale {
-  flex-wrap: wrap;
-  max-width: 100%;
+.tuning-panel select {
+  flex: 1;
+  min-width: 0;
 }
 
 #track-list {

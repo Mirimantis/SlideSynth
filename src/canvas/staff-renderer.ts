@@ -4,15 +4,19 @@ import {
   centsToNoteName, isCCents, isNaturalCents,
   DEFAULT_BEATS_PER_MEASURE, SUBDIVISIONS_PER_BEAT,
 } from '../constants';
-import type { ScaleDefinition } from '../utils/scales';
-import { isNoteInScale, isMicrotonal, getScaleNotes } from '../utils/scales';
+import type { PitchSet } from '../tuning/tuning';
 import { getAdaptiveBeatStep } from '../utils/snap';
 import { themeColor } from '../theme/theme';
 
 /**
  * Render the background staff grid onto a canvas.
  * Draws horizontal note lines and vertical beat/subdivision lines.
- * When a scale is active, in-scale notes are highlighted and out-of-scale notes are dimmed.
+ *
+ * The pitch lines follow the pitch set (13.8): 12-EDO with All notes is the
+ * plain chromatic staff; a set on 12-EDO lines highlights its notes and dims
+ * the rest; a set off those lines draws its notes over the chromatic staff,
+ * dashed where they fall between its lines. A null set (pitch lines hidden)
+ * draws none. 13.8 (b) replaces the 12-EDO substrate with the tuning's own.
  */
 export function renderStaff(
   ctx: CanvasRenderingContext2D,
@@ -20,9 +24,7 @@ export function renderStaff(
   width: number,
   height: number,
   measureLen: number = DEFAULT_BEATS_PER_MEASURE,
-  scaleRoot: number | null = null,
-  scale: ScaleDefinition | null = null,
-  hidePitchLines: boolean = false,
+  pitchSet: PitchSet | null = null,
 ): void {
   ctx.clearRect(0, 0, width, height);
 
@@ -36,13 +38,14 @@ export function renderStaff(
   const minNote = Math.floor(bottomRight.wy / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
   const maxNote = Math.ceil(topLeft.wy / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
 
-  const hasScale = scaleRoot !== null && scale !== null;
-  const microtonalScale = hasScale && isMicrotonal(scale!);
-  // For microtonal scales, don't dim/highlight integer lines — keep default styling
+  const hasScale = pitchSet !== null && !pitchSet.plainChromatic;
+  const microtonalScale = hasScale && !pitchSet.onTwelveEdo;
+  // For microtonal sets, don't dim/highlight integer lines — keep default styling
   const highlightIntegers = hasScale && !microtonalScale;
-  // 8.19 "None" Key mode: skip default chromatic pitch lines + labels entirely.
-  // Microtonal scale guides only fire under hasScale, so they're naturally excluded.
-  const drawPitchLines = !hidePitchLines || hasScale;
+  const inSet = new Set(highlightIntegers ? pitchSet.notes.map(Math.round) : []);
+  const isInScale = (n: number) => inSet.has(n);
+  // Pitch lines hidden (8.19): no lines or labels at all.
+  const drawPitchLines = pitchSet !== null;
 
   // ── Horizontal note lines ──────────────────────────────────
   if (drawPitchLines) {
@@ -50,7 +53,7 @@ export function renderStaff(
       const { sy } = vp.worldToScreen(0, n);
 
       if (highlightIntegers) {
-        const inScale = isNoteInScale(n, scaleRoot!, scale!);
+        const inScale = isInScale(n);
         if (inScale) {
           if (isCCents(n)) {
             ctx.strokeStyle = themeColor('staff-key-c');
@@ -86,7 +89,7 @@ export function renderStaff(
 
       // Note labels on the left edge
       // When a scale is active, show labels for all in-scale notes at moderate zoom
-      const inScaleForLabel = highlightIntegers && isNoteInScale(n, scaleRoot!, scale!);
+      const inScaleForLabel = highlightIntegers && isInScale(n);
       const showLabel = isCCents(n)
         || (vp.state.zoomY >= 0.10 && (isNaturalCents(n) || inScaleForLabel))
         || vp.state.zoomY >= 0.18;
@@ -111,8 +114,7 @@ export function renderStaff(
   // For microtonal scales, draw ALL scale degrees as guide lines
   // (dashed for fractional positions, solid for integer positions)
   if (microtonalScale) {
-    const scaleNotes = getScaleNotes(scaleRoot!, scale!);
-    for (const n of scaleNotes) {
+    for (const n of pitchSet.notes) {
       if (n < minNote || n > maxNote) continue;
       const { sy } = vp.worldToScreen(0, n);
       // "Fractional" = off the 12-TET 100-cent grid (microtonal degree).

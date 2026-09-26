@@ -4,6 +4,7 @@ import { store } from '../state/store';
 import { createComposition } from '../model/composition';
 import { SnapPanel, type SnapActions } from './snap-panel';
 import { PrismPanel } from './prism-panel';
+import { TuningPanel, type TuningActions } from './tuning-panel';
 
 const actions: SnapActions = {
   askPresetName: async () => null,
@@ -54,3 +55,35 @@ describe('Harmonic Prism drawer (BACKLOG 16.4)', () => {
     expect(renderToString(<PrismPanel />).match(/class="prism-voice-oct"/g)).toHaveLength(4);
   });
 });
+
+describe('Tuning drawer (BACKLOG 13.8)', () => {
+  const noop: TuningActions = new Proxy({}, { get: () => () => {} }) as TuningActions;
+  const panel = () => renderToString(<TuningPanel actions={noop} />);
+
+  it('12-EDO: letters for the root, no Tuned from or Divisions', () => {
+    const html = panel();
+    expect(html).toMatch(/<option[^>]*selected[^>]*>12-EDO/);
+    expect(html).toContain('>C#</option>');
+    expect(html).not.toContain('Tuned from');
+    expect(html).not.toContain('Divisions');
+    expect(html).toContain('Pitch lines');
+    expect(html).toContain('Tune A4');
+  });
+
+  it('an equal division shows N, Tuned from, and only the scales that fit', () => {
+    store.setTuning({ kind: 'edo', divisions: 24, equave: 'octave' });
+    const html = panel();
+    expect(html).toMatch(/id="tuning-divisions"[^>]*value="24"/);
+    expect(html).toContain('Tuned from');
+    expect(html).toContain('Maqam Rast');
+    expect(html).not.toContain('Dorian');
+  });
+
+  it('a historical table keeps the 12-note scales', () => {
+    store.setTuning({ kind: 'table', id: 'werckmeister-3' });
+    const html = panel();
+    expect(html).toMatch(/<option[^>]*selected[^>]*>Werckmeister III/);
+    expect(html).toContain('Dorian');
+  });
+});
+

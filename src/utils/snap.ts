@@ -1,6 +1,5 @@
-import { SUBDIVISIONS_PER_BEAT, MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_SEMITONE } from '../constants';
-import type { ScaleDefinition } from './scales';
-import { nearestScaleNote, getScaleNotes } from './scales';
+import { SUBDIVISIONS_PER_BEAT, MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
+import { nearestNote, pitchSetFor, TWELVE_EDO, ALL_NOTES } from '../tuning/tuning';
 
 /** Within this many beats of a guide, the guide wins X-snap over the subdivision grid. */
 const GUIDE_X_SNAP_RADIUS_BEATS = 0.25;
@@ -10,12 +9,10 @@ const GUIDE_Y_SNAP_RADIUS_CENTS = 50;
 export interface SnapConfig {
   enabled: boolean;
   subdivisionsPerBeat: number;
-  scaleRoot: number | null;
-  scale: ScaleDefinition | null;
-  /** 8.19 "None" Key mode. With no scale active, suppresses the chromatic-
-   *  semitone Y-snap fallback so the cursor floats freely in Y. Projection
-   *  echoes, scale snap, and user guides are unaffected. */
-  hidePitchLines?: boolean;
+  /** The pitch grid Y snaps to: the tuning's notes, filtered by the scale
+   *  (13.8), ascending. Null when pitch lines are hidden: Y floats free, and
+   *  only guides and projection echoes pull it. */
+  pitchTargets: readonly number[] | null;
   /** Harmonic Prism projection echo pitches (cents). Optional. */
   projectionTargets?: readonly number[];
   /** User-placed X-guide beat positions. Snap pulls within GUIDE_X_SNAP_RADIUS_BEATS. */
@@ -33,9 +30,10 @@ export interface SnapConfig {
  *     and non-empty) → Y snaps EXCLUSIVELY to the nearest projection echo.
  *     Grid lines, scale notes, and guides are all ignored so the user can
  *     reliably hit echo targets.
- *   • Otherwise → snaps to the nearest in-scale note (if a scale is set) or
- *     the nearest integer semitone, BUT a Y-guide within
- *     GUIDE_Y_SNAP_RADIUS_SEMITONES wins over both.
+ *   • Otherwise → snaps to the nearest note of the pitch grid, BUT a Y-guide
+ *     within GUIDE_Y_SNAP_RADIUS_CENTS wins over it.
+ *   • With pitch lines hidden there's no grid: Y stays put unless a guide is
+ *     within reach.
  * Returns original coordinates if snap is disabled.
  */
 export function snapToGrid(
@@ -72,21 +70,18 @@ export function snapToGrid(
       }
     }
     snappedY = best;
-  } else if (config.scaleRoot !== null && config.scale) {
-    snappedY = nearestScaleNote(wy, config.scaleRoot, config.scale);
-  } else if (config.hidePitchLines) {
-    // 8.19 "None" Key mode: no chromatic auto-snap. Cursor Y floats free; only
-    // explicit targets (guides, projection echoes) below pull it.
-    snappedY = wy;
-  } else {
-    // Chromatic fallback: nearest 12-TET line (multiples of 100 cents).
+  } else if (config.pitchTargets) {
     const clamped = Math.max(MIN_PITCH_CENTS, Math.min(MAX_PITCH_CENTS, wy));
-    snappedY = Math.round(clamped / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
+    snappedY = nearestNote(config.pitchTargets, clamped);
+  } else {
+    // Pitch lines hidden (8.19): no grid. Cursor Y floats free; only explicit
+    // targets (guides, projection echoes) below pull it.
+    snappedY = wy;
   }
-  // Guide Y: same precedence as X — beats scale/integer snap when closer (and
-  // when projection isn't owning the snap exclusively). In 8.19 None mode the
-  // chromatic fallback is gone, so a guide within radius always wins (it's the
-  // only target competing with the raw cursor).
+  // Guide Y: same precedence as X — beats the grid when closer (and when
+  // projection isn't owning the snap exclusively). With no grid, a guide
+  // within radius always wins (it's the only target competing with the raw
+  // cursor).
   if (
     !(config.projectionTargets && config.projectionTargets.length > 0)
     && config.guideYTargets && config.guideYTargets.length > 0
@@ -95,8 +90,7 @@ export function snapToGrid(
     if (nearestGuide !== null) {
       const distToGuide = Math.abs(wy - nearestGuide);
       const distToOther = Math.abs(wy - snappedY);
-      const noBackground = config.hidePitchLines && (config.scaleRoot === null || !config.scale);
-      if (noBackground || distToGuide < distToOther) snappedY = nearestGuide;
+      if (!config.pitchTargets || distToGuide < distToOther) snappedY = nearestGuide;
     }
   }
 
@@ -111,19 +105,19 @@ export function snapToGrid(
 const MAX_ADAPTIVE_RADIUS = 300;
 
 export interface AdaptiveSnapResult {
-  /** Nearest snap target to the cursor (scale note, chromatic semitone, or
-   *  Y-guide). Null only in None Key mode with no guides anywhere nearby. */
+  /** Nearest snap target to the cursor (a note of the pitch grid, or a
+   *  Y-guide). Null only with pitch lines hidden and no guides nearby. */
   target: number | null;
   /** Half the distance to the next target on the cursor's side, capped at
    *  MAX_ADAPTIVE_RADIUS. Defines the attractor well's reach. */
   radius: number;
   /** True when |cursor - target| <= radius. Used to gate "snap engaged"
-   *  behaviors: draw-snap in None mode, magnetic-attractor activation. */
+   *  behaviors: draw-snap with pitch lines hidden, magnetic-attractor activation. */
   captured: boolean;
 }
 
 /** Build the union of snap targets active near `wy`. Mirrors snapToGrid's
- *  priority (projection exclusive, scale OR chromatic, guides additive) but
+ *  priority (projection exclusive, the pitch grid, guides additive) but
  *  returns the full local target list so the caller can pick neighbors. */
 function collectSnapTargets(wy: number, config: SnapConfig, range: number): number[] {
   const targets: number[] = [];
@@ -136,22 +130,17 @@ function collectSnapTargets(wy: number, config: SnapConfig, range: number): numb
     return targets;
   }
 
-  if (config.scaleRoot !== null && config.scale) {
-    const scaleNotes = getScaleNotes(config.scaleRoot, config.scale);
-    for (const n of scaleNotes) {
-      if (Math.abs(n - wy) <= range) targets.push(n);
+  if (config.pitchTargets) {
+    for (const n of config.pitchTargets) {
+      if (n > wy + range) break;
+      if (n >= wy - range) targets.push(n);
     }
-  } else if (!config.hidePitchLines) {
-    // Chromatic 12-TET lines every 100 cents.
-    const lo = Math.max(MIN_PITCH_CENTS, Math.floor((wy - range) / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE);
-    const hi = Math.min(MAX_PITCH_CENTS, Math.ceil((wy + range) / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE);
-    for (let n = lo; n <= hi; n += CENTS_PER_SEMITONE) targets.push(n);
   }
 
   if (config.guideYTargets) {
     for (const g of config.guideYTargets) {
       if (Math.abs(g - wy) > range) continue;
-      // Dedupe against scale/chromatic targets at the same pitch.
+      // Dedupe against grid targets at the same pitch.
       if (!targets.some(t => Math.abs(t - g) < 1e-6)) targets.push(g);
     }
   }
@@ -206,8 +195,7 @@ function nearestWithinRadius(v: number, targets: readonly number[], radius: numb
 export const DEFAULT_SNAP_CONFIG: SnapConfig = {
   enabled: true,
   subdivisionsPerBeat: SUBDIVISIONS_PER_BEAT,
-  scaleRoot: null,
-  scale: null,
+  pitchTargets: pitchSetFor({ tuning: TWELVE_EDO, root: 0, scaleId: ALL_NOTES, tunedFrom: 0, hidePitchLines: false })!.notes,
 };
 
 /**

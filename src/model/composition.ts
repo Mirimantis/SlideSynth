@@ -7,13 +7,16 @@ import {
 import { createDefaultToneLibrary } from './tone';
 import { createTrack } from './track';
 import { pitchPoints } from './lane';
+import { ALL_NOTES, TWELVE_EDO } from '../tuning/tuning';
 
 /** Default snap settings for a new composition. Also the migration target for v1 files. */
 export function createDefaultSnapSettings(): SnapSettings {
   return {
     enabled: DEFAULT_SNAP_ENABLED,
-    scaleRoot: null,
-    scaleId: null,
+    tuning: { ...TWELVE_EDO },
+    root: 0,
+    scaleId: ALL_NOTES,
+    tunedFrom: 0,
     hidePitchLines: false,
     magneticEnabled: DEFAULT_MAGNETIC_ENABLED,
     magneticStrength: DEFAULT_MAGNETIC_STRENGTH,

@@ -1,3 +1,5 @@
+import type { TuningRef } from './tuning/tuning';
+
 import type { ChordSpec } from './utils/harmonics';
 import type { PointSelection } from './model/point-selection';
 
@@ -88,12 +90,17 @@ export interface Track {
  */
 export interface SnapSettings {
   enabled: boolean;
-  scaleRoot: number | null;     // 0..11, or null = no scale
-  scaleId: string | null;       // ScaleDefinition.id, or null
-  /** When true: hide the default chromatic pitch lines and disable the
-   *  12-TET-line Y-snap fallback. Scale snap, projection echoes, and
-   *  user guides still work. Toolbar's "None" Key option (8.19) sets this
-   *  alongside scaleRoot=null; "Chromatic" leaves it false. */
+  /** Which pitches exist (13.8): an equal division, or a table. */
+  tuning: TuningRef;
+  /** Which degree of the tuning is home: an index into its degrees. */
+  root: number;
+  /** Which degrees the piece uses: a scale id, or 'all'. */
+  scaleId: string;
+  /** Which of the 12 standard notes the tuning's degree 0 sits on (0 = C).
+   *  Always 0 for 12-EDO, where it would only rotate the root. */
+  tunedFrom: number;
+  /** Pitch lines hidden (8.19's "None"): the staff draws no lines and Y has
+   *  no grid to snap to. Frets and Prism echoes still pull. */
   hidePitchLines: boolean;
   magneticEnabled: boolean;
   magneticStrength: number;     // 0..1
@@ -262,9 +269,11 @@ export interface AppState {
   // Snap-section fields — read-only views of Composition.snap (BACKLOG 15.1:
   // derived, no longer mirrored copies). Change them through the store setters.
   snapEnabled: boolean;
-  scaleRoot: number | null;    // 0-11, or null = no scale
-  scaleId: string | null;      // ScaleDefinition.id, or null
-  hidePitchLines: boolean;     // true = "None" Key mode (no default pitch lines, no chromatic Y-snap)
+  tuning: TuningRef;
+  root: number;
+  scaleId: string;
+  tunedFrom: number;
+  hidePitchLines: boolean;
   magneticEnabled: boolean;
   magneticStrength: number;
   magneticSpringK: number;
