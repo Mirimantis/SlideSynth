@@ -4,7 +4,7 @@ import { primaryShortcut } from '../commands/catalog';
 import { DYNAMICS_SOURCES, type DynamicsSource } from '../types';
 
 /**
- * Tool Properties (BACKLOG 15.4): per-tool settings for the active tool. A
+ * Tool (BACKLOG 15.4; was Tool Properties until 16.5): the active tool's settings, or Perform's. A
  * Preact component, so the handle-length slider can be dragged while the panel
  * re-renders around it.
  */

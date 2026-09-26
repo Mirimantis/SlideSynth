@@ -7,6 +7,7 @@ import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM
 import { renderStaff } from './canvas/staff-renderer';
 import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
 import { renderTransformBox } from './canvas/transform-box-renderer';
+import { outlinedGroups, renderGroupOutlines } from './canvas/group-outline';
 import { renderMarquee } from './canvas/marquee-renderer';
 import { renderProjection, renderProjectionSourceHighlight, renderPrismDrawPreview } from './canvas/projection-renderer';
 import { renderPlayhead } from './canvas/playhead';
@@ -14,7 +15,7 @@ import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, findAdaptiveSnap } from './utils/snap';
-import { createInteraction, rebuildTransformBox, RULER_HEIGHT } from './canvas/interaction';
+import { createInteraction, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT } from './canvas/interaction';
 import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
 import { createPreviewManager } from './audio/preview';
@@ -148,9 +149,9 @@ app.innerHTML = `
       </div>
     </div>
     <div id="property-panel">
-      <div class="panel-header">Tool Properties</div>
+      <div class="panel-header">Tool</div>
       <div id="tool-prop-content"></div>
-      <div class="panel-header">Object Properties</div>
+      <div class="panel-header">Selection</div>
       <div id="prop-content">
         <p class="placeholder-text">Select a point to edit properties</p>
       </div>
@@ -489,6 +490,9 @@ const interaction = createInteraction(fgCanvas, viewport, {
         store.setPlaybackPosition(Math.max(0, worldX));
       }
     }
+  },
+  onUngroup() {
+    commands.run('edit.ungroup');
   },
   onCursorLeave() {
     if (previewActive && store.getState().activeTool === 'draw') {
@@ -2847,8 +2851,14 @@ function draw() {
   fgCtx.clearRect(0, 0, rect.width, rect.height);
 
   // Transform box (rendered behind curves so unselected curves remain clickable)
+  const activeTrack = comp.tracks.find(t => t.id === state.selectedTrackId);
   if (interaction.transformBox) {
-    renderTransformBox(fgCtx, viewport, interaction.transformBox.bbox, interaction.transformBox.activeHandle);
+    const tb = interaction.transformBox;
+    renderTransformBox(fgCtx, viewport, tb.bbox, tb.activeHandle, !!activeTrack && transformBoxHoldsGroup(tb, activeTrack));
+  }
+  // Groups with a hovered or selected member share an outline (16.5).
+  if (activeTrack && !isPerformInputActive(state)) {
+    renderGroupOutlines(fgCtx, viewport, outlinedGroups(activeTrack, state.selectedCurveIds, interaction.hoverGroupedCurveId));
   }
 
   // Harmonic Prism — resolve the projection source curve up front. (The store
@@ -3205,7 +3215,7 @@ watch(() => store.getComposition(), comp => {
 const propContentEl = document.getElementById('prop-content')!;
 const toolPropContentEl = document.getElementById('tool-prop-content')!;
 effect(() => syncCompositionDerived());
-render(h(PropertyPanel, null), propContentEl);
+render(h(PropertyPanel, { commands }), propContentEl);
 render(h(ToolPropertyPanel, null), toolPropContentEl);
 
 // The top bar, Tempo drawer and Settings dialog (BACKLOG 16.3). Menus are

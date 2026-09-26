@@ -111,7 +111,7 @@ describe('Tempo drawer and Settings (BACKLOG 16.3)', () => {
     expect(html).toContain('Audible scrub');
   });
 
-  it('in Perform, Tool Properties holds the dynamics choice', () => {
+  it('in Perform, the Tool panel holds the dynamics choice', () => {
     store.setPerformMode(true);
     expect(renderToString(<ToolPropertyPanel />)).toContain('Key swell');
   });

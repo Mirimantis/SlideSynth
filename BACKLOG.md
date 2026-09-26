@@ -299,13 +299,19 @@ Implementation comes first: block out every control so it works, then hold the d
     - **Snap drawer** (`ui/snap-panel.tsx`, now Preact): Magnetic is **Gravity** in the switch, tooltips, the preset toast and the help. The store and file fields keep their `magnetic*` names. Preset matching takes just the three feel values (`SnapFeel`).
     - **Prism drawer** (`ui/prism-panel.tsx`, now Preact): the chord's "Tuning" is **Intonation**, with options Equal (12-TET) and Just.
     - `CommandButton` moved to its own module so the top bar and the strip share it.
-- [ ] **16.5 Right panel, track rows, groups** *(M)*
+- [x] **16.5 Right panel, track rows, groups** *(M, PR #84)*
   - **Right panel:** the sections become Tool and Selection. The dynamics choice moves to Perform's Tool section.
   - **Track rows:** Mute, Solo and MIDI arm become icons; Edit tone and Delete move to a ⋯ menu.
   - **Groups:** 13.12's UI half:
     - the group line and Ungroup button in Selection;
     - Ungroup on the transform box;
     - the shared outline on the canvas.
+  - **Done (PR #84):**
+    - **Right panel:** the sections are **Tool** and **Selection**. (Dynamics already moved to Perform's Tool section in 16.3.)
+    - **Selection** names what's selected above the track: *Group of n curves*, *Curve*, or *n curves* (", some grouped" when mixed), with an **Ungroup** button whenever a selected curve is grouped. Move to track stays for one movable unit.
+    - **Track rows:** Mute (speaker), Solo (headphones) and MIDI arm (MIDI socket) are icon toggles with `aria-pressed`; Edit tone… and Delete track sit in a ⋯ menu (`ActionMenuButton` in `ui/menu.tsx`, fixed to the viewport so the panel doesn't clip it). The letters M S I T X are gone.
+    - **Transform box:** an Ungroup pill beside its top-right corner when it holds a group (not for a point selection). It runs `edit.ungroup`.
+    - **Group outline** (`canvas/group-outline.ts`): a dashed amber outline around every group with a hovered or selected member, on the active track. A hovered, unselected group is labelled *Group · n*. Hover is hit-tested against grouped curves only, in Select.
 - [ ] **16.6 Space and audition** *(S)*
   - Space becomes Play/Pause only.
   - Holding A auditions: the Draw preview, and a Y guide's pitch while dragging it (absorbs 13.6).
@@ -385,7 +391,7 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
 
 Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand `Ctrl+G` groups). There is no group object: a group is just the curves that carry the same id. 13.13 and 13.14 would likely need one — a first-class group entity with an id, and room for its own lanes — which is a data-model change with a composition-version bump and migration.
 
-- [ ] **13.12 Make grouping visible, and ungrouping easy** *(S–M — UI half is 16.5)*
+- [ ] **13.12 Make grouping visible, and ungrouping easy** *(S–M — UI half done in 16.5, PR #84)*
   - Found in 15.2 testing: Prism draw correctly places two offset curves as a group, but nothing on screen says they're grouped, so it read as a bug.
   - Show grouped status on the canvas, for example a shared outline or bracket when any member is hovered or selected, or a group badge on the selection. Show it in Object Properties too ("Group (3 curves)" exists only for the Move-to-track picker today).
   - Put Ungroup somewhere easier to reach than `Ctrl+Shift+G` and the right-click menu: a button in Object Properties when a group is selected, and on the transform box.

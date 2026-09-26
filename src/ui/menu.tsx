@@ -110,6 +110,64 @@ export function MenuBar({ menus, commands }: { menus: readonly MenuSpec[]; comma
   );
 }
 
+/** An item in an action menu: something one object can do, not a catalog
+ *  command (a track row's Edit tone and Delete, 16.5). */
+export interface MenuAction {
+  label: string;
+  run(): void;
+  /** Destructive: shown in the warning colour. */
+  danger?: boolean;
+}
+
+/** A ⋯ button with a menu of actions. The menu is fixed to the viewport at
+ *  the button, so a scrolling panel doesn't clip it. */
+export function ActionMenuButton({ actions, title, class: cls, children }: {
+  actions: readonly MenuAction[];
+  title: string;
+  class?: string;
+  children: ComponentChildren;
+}) {
+  const [at, setAt] = useState<{ right: number; top: number } | null>(null);
+  const close = () => setAt(null);
+  useEscapeToClose(at !== null, close);
+  return (
+    <div class={`menu-root${at ? ' open' : ''}`}>
+      {at && <MenuOverlay onClose={close} />}
+      <button
+        class={cls}
+        title={title}
+        aria-label={title}
+        aria-haspopup="menu"
+        aria-expanded={at !== null}
+        onClick={e => {
+          const btn = e.currentTarget as HTMLElement;
+          btn.blur();
+          const r = btn.getBoundingClientRect();
+          setAt(at ? null : { right: window.innerWidth - r.right, top: r.bottom + 4 });
+        }}
+      >
+        {children}
+      </button>
+      {at && (
+        <div class="menu-dropdown action-menu" role="menu" style={{ position: 'fixed', right: `${at.right}px`, top: `${at.top}px`, left: 'auto' }}>
+          {actions.map(a => (
+            <button
+              key={a.label}
+              class={`menu-item${a.danger ? ' danger' : ''}`}
+              role="menuitem"
+              onClick={() => { close(); a.run(); }}
+            >
+              <span class="menu-check" />
+              <span class="menu-label">{a.label}</span>
+              <span class="menu-shortcut" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** A button with a menu hanging off it (the Record button's caret). */
 export function MenuButton({ entries, commands, title, class: cls, disabled, children }: {
   entries: readonly MenuEntry[];

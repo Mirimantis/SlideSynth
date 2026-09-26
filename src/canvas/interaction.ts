@@ -1,4 +1,4 @@
-import type { Vec2, BezierCurve, Lane, LanePoint, Track, TransformBoxState } from '../types';
+import type { Vec2, BezierCurve, Lane, LanePoint, Track, TransformBoxState, TransformHandle } from '../types';
 import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
@@ -52,6 +52,8 @@ export interface InteractionCallbacks {
    *  owner of the playback engine so both canvas mouse paths share one
    *  definition (BACKLOG 14.1 — see state/perform-mode.ts). */
   isPerformInputActive(): boolean;
+  /** The transform box's Ungroup button (16.5): runs the Ungroup command. */
+  onUngroup?(): void;
 }
 
 export interface InteractionState {
@@ -95,6 +97,9 @@ export interface InteractionState {
     dragStartWorld: Vec2;
     originalPositions: ReadonlyMap<string, ReadonlyMap<number, Vec2>>;
   } | null;
+  /** The grouped curve under the cursor in Select, so its group can be
+   *  outlined (16.5). Only grouped curves are hit-tested. */
+  hoverGroupedCurveId: string | null;
 }
 
 /** The edit tools' share of canvas pointer input (BACKLOG 15.2). The canvas
@@ -146,7 +151,14 @@ export function createInteraction(
     scissorsPreview: null,
     marquee: null,
     pointGroupDrag: null,
+    hoverGroupedCurveId: null,
   };
+
+  /** Hit-test the transform box, with its Ungroup button when it holds a group. */
+  function hitBox(sx: number, sy: number, tb: TransformBoxState): TransformHandle | null {
+    const track = getSelectedTrack();
+    return hitTestTransformBox(sx, sy, tb.bbox, vp, !!track && transformBoxHoldsGroup(tb, track));
+  }
 
   /**
    * True when the Compose canvas is in a Scroll-Canvas Playback state that
@@ -256,6 +268,8 @@ export function createInteraction(
     istate.cursorWorld = { x: eff.wx, y: eff.wy };
     istate.cursorScreenY = sy;
     callbacks.onCursorMove?.(eff.wx, eff.wy, sy);
+    istate.hoverGroupedCurveId = !isDragging && !istate.marquee && store.getState().activeTool === 'select'
+      ? findGroupedCurveAt({ x: raw.wx, y: raw.wy }, vp) : null;
 
     // Drag-marquee (BACKLOG 8.3) — update the rubber-band rect, redraw, return.
     if (istate.marquee) {
@@ -395,10 +409,11 @@ export function createInteraction(
       canvas.style.cursor = 'col-resize';
       canvas.title = 'Click to position playhead';
     } else if (istate.transformBox && !istate.dragging) {
-      const hit = hitTestTransformBox(sx, sy, istate.transformBox.bbox, vp);
+      const hit = hitBox(sx, sy, istate.transformBox);
       canvas.style.cursor = hit ? getTransformCursor(hit) : 'default';
       canvas.title = hit === 'octaveUp' ? '1 Octave Up'
         : hit === 'octaveDown' ? '1 Octave Down'
+        : hit === 'ungroup' ? 'Ungroup'
         : '';
     } else if (!istate.dragging && store.getState().activeTool === 'scissors') {
       canvas.style.cursor = 'crosshair';
@@ -491,11 +506,16 @@ export function createInteraction(
         // handle the anchor-toggle path.
         const inPointMode = !!istate.transformBox.pointIndicesPerCurve;
         const skipForShiftToggle = inPointMode && e.shiftKey;
-        const hit = skipForShiftToggle ? null : hitTestTransformBox(sx, sy, istate.transformBox.bbox, vp);
+        const hit = skipForShiftToggle ? null : hitBox(sx, sy, istate.transformBox);
         if (hit) {
           const track = getSelectedTrack();
           if (!track) return;
           const tb = istate.transformBox;
+
+          if (hit === 'ungroup') {
+            callbacks.onUngroup?.();
+            return;
+          }
 
           // Octave arrows are instant actions, not drags
           if (hit === 'octaveUp' || hit === 'octaveDown') {
@@ -710,7 +730,8 @@ export function createInteraction(
     const tb = istate.transformBox;
     if (!tb || store.getState().activeTool !== 'select') return false;
     const rect = canvas.getBoundingClientRect();
-    return hitTestTransformBox(e.clientX - rect.left, e.clientY - rect.top, tb.bbox, vp) !== null;
+    const hit = hitBox(e.clientX - rect.left, e.clientY - rect.top, tb);
+    return hit !== null && hit !== 'ungroup';
   }
 
   return Object.assign(istate, {
@@ -721,6 +742,7 @@ export function createInteraction(
       enter() { istate.cursorInCanvas = true; },
       leave() {
         istate.cursorInCanvas = false;
+        istate.hoverGroupedCurveId = null;
         callbacks.onCursorLeave?.();
       },
       wantsAltPress,
@@ -1376,16 +1398,35 @@ function finishDrawing(istate: InteractionState): void {
 
 
 /** Find the curve (point or segment) at a given world position. */
+/** The grouped curve under the cursor on the active track, if any. */
+function findGroupedCurveAt(worldPt: Vec2, vp: Viewport): string | null {
+  const track = getSelectedTrack();
+  if (!track) return null;
+  const grouped = track.curves.filter(c => c.groupId);
+  return grouped.length > 0 ? findCurveAmong(worldPt, vp, grouped)?.id ?? null : null;
+}
+
+/** Whether the transform box holds a group, so it offers Ungroup. A point
+ *  selection's box moves points, not curves, so it doesn't. */
+export function transformBoxHoldsGroup(tb: TransformBoxState, track: Track): boolean {
+  if (tb.pointIndicesPerCurve) return false;
+  return tb.curveIds.some(id => !!track.curves.find(c => c.id === id)?.groupId);
+}
+
 function findCurveAt(worldPt: Vec2, vp: Viewport, track: Track): BezierCurve | null {
+  return findCurveAmong(worldPt, vp, track.curves);
+}
+
+function findCurveAmong(worldPt: Vec2, vp: Viewport, curves: readonly BezierCurve[]): BezierCurve | null {
   // Check anchor points
-  for (const curve of track.curves) {
+  for (const curve of curves) {
     for (const pt of pitchPoints(curve)) {
       if (screenDist(worldPt, pt.position, vp) < FIND_CURVE_HIT_PX) return curve;
     }
   }
 
   // Check curve segments
-  for (const curve of track.curves) {
+  for (const curve of curves) {
     if (pitchPoints(curve).length < 2) continue;
     for (let i = 0; i < pitchPoints(curve).length - 1; i++) {
       const seg = getSegmentControlPoints(curve, i);

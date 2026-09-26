@@ -97,24 +97,31 @@
   gap: 3px;
 }
 
-.track-mute,
-.track-solo,
-.track-midi-arm {
+.track-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   background: var(--surface);
   color: var(--text-dim);
   border: 1px solid #335;
   border-radius: 3px;
-  padding: 2px 5px;
-  font-size: 0.65rem;
-  font-weight: 700;
+  font-size: 12px; /* drives the 1.25em SVG sizing */
+  line-height: 1;
   cursor: pointer;
   transition: all 0.15s;
 }
 
-.track-mute:hover,
-.track-solo:hover,
-.track-midi-arm:hover {
+.track-btn:hover {
   background: #1a4a80;
+  color: var(--text);
+}
+
+.track-more {
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .track-mute.active {
@@ -142,31 +149,13 @@
   animation: recordPulse 1s infinite;
 }
 
-.track-edit-tone,
-.track-delete,
-.track-tone-select {
-  background: var(--surface);
-  color: var(--text-dim);
-  border: 1px solid #335;
-  border-radius: 3px;
-  padding: 2px 5px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.15s;
+/* Destructive menu items (a track's Delete) take the warning colour. */
+.menu-dropdown .menu-item.danger {
+  color: #ef5350;
 }
 
-.track-edit-tone:hover,
-.track-tone-select:hover {
-  background: #1a4a80;
-  color: var(--accent);
-}
-
-/* Delete is destructive — hover goes red rather than the usual accent blue. */
-.track-delete:hover {
-  background: #c62828;
-  color: #fff;
-  border-color: #c62828;
+.menu-dropdown .menu-item.danger:hover {
+  background: rgba(198, 40, 40, 0.25);
 }
 
 .track-panel-actions {
@@ -250,4 +239,16 @@
 
 .prism-row input[type="number"] {
   max-width: 60px;
+}
+
+/* Selection: what's selected, with Ungroup beside it when a group is (16.5). */
+.prop-selection-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prop-selection-line .prop-label {
+  margin-bottom: 0;
 }

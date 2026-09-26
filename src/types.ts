@@ -281,7 +281,7 @@ export interface AppState {
    *  canvas / Delete key. Buttons in the Snap section still work (so the user can
    *  unlock and add new guides). Persisted to localStorage. */
   guidesLocked: boolean;
-  /** ID of the currently selected guide (for Object Properties / Delete). Mutually
+  /** ID of the currently selected guide (for the Selection panel / Delete). Mutually
    *  exclusive with curve/point selection. */
   selectedGuideId: string | null;
   drawPreviewMode: 'tone' | 'composition';   // Draw-tool spacebar preview scope
@@ -313,7 +313,9 @@ export type TransformHandle =
   | 'translate'
   | 'left' | 'right' | 'top' | 'bottom'
   | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'
-  | 'octaveUp' | 'octaveDown';
+  | 'octaveUp' | 'octaveDown'
+  /** The Ungroup button, shown when the box holds a group (16.5). */
+  | 'ungroup';
 
 export interface BoundingBox {
   minX: number;

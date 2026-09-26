@@ -268,8 +268,9 @@
     tool is filled in; hover a button for its name and key. While the Harmonic Prism's
     <strong>Draw</strong> mode is on, Draw and Perform carry a small rainbow
     <strong>chord badge</strong> showing how many voices will sound. The
-    right-hand panel stacks <strong>Tool Properties</strong> (variable settings for the active
-    tool), <strong>Object Properties</strong> (context for the selected track or point), and
+    right-hand panel stacks <strong>Tool</strong> (settings for the active tool, or Perform's),
+    <strong>Selection</strong> (what's selected: a group, curves, a point, a guide, and the
+    active track), and
     <strong>Tracks</strong>.
   </p>
   <p>
@@ -400,7 +401,7 @@
     The mouse gives you pitch, but a note also needs a <em>shape</em> — the swell and fade
     within it. That comes from a second channel, the <strong>dynamics bus</strong>: one value
     that both sets how loud you sound right now and is written into the recorded curve's
-    volume lane. Set it from <strong>Dynamics</strong> in Tool Properties while you're in Perform.
+    volume lane. Set it from <strong>Dynamics</strong> in the Tool panel while you're in Perform.
   </p>
   <ul>
     <li><strong>Fixed</strong> (default) — every performed note records at one steady level. This is how recording has always behaved.</li>
@@ -433,7 +434,7 @@
         <li>Click on an existing point to reset its handles, then drag to reshape.</li>
         <li>Press <kbd>Escape</kbd> or <kbd>Enter</kbd> to finish drawing the current curve.</li>
         <li>While in Draw mode, hold <kbd>Ctrl</kbd> to temporarily switch to Select mode.</li>
-        <li><strong>Bezier Auto-Smoothing</strong> (Tool Properties) — when on, a single
+        <li><strong>Bezier Auto-Smoothing</strong> (Tool panel) — when on, a single
             click to place a point (second point onward) gives it horizontal handles
             sized at a fraction of the neighbouring segment length (controlled by the
             <strong>Handle length</strong> slider right below the checkbox, default
@@ -551,7 +552,7 @@
         <li><strong>Pitch HUD</strong> — shows the pitch under the cursor (note name + cents + frequency in Hz) in the top-right of the canvas while the cursor has a meaningful Y. The Hz readout reflects the current Tune A4 setting, so A=432 etc. shifts every frequency in lockstep. Toggle it from the <strong>View</strong> menu. Preference persists via localStorage.</li>
         <li><strong>Perf HUD</strong> — passive observer in the top-left: frame ms (p50 / p99 over a rolling ~2 s), live synth / oscillator / voice counts, audio output latency, and where live voices are smoothed (<code>live: audio thread</code> normally; <code>main thread</code> if the browser can't run the audio worklet). Off by default; toggle from the <strong>View</strong> menu or press <kbd>!</kbd> (Shift+1). Useful when something feels sluggish — load a heavy composition (see <code>fixtures/stress-test.ssn</code>) and watch the numbers move.</li>
         <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording, switching to Perform first. From Idle, a 3-second count-in runs then Playback begins (turn <strong>Count-in</strong> off in the Record ▾ menu to start straight away). If Playback is already running, the countdown is skipped and recording arms immediately at the current beat. While armed, holding the left button plays the selected track's tone AND captures it as a curve; release commits the curve. Escape cancels.</li>
-        <li><strong>Dynamics</strong> — in Tool Properties while you're in Perform, picks what drives the loudness of what you perform: <strong>Fixed</strong> (a steady level, the original behaviour) or <strong>Key swell</strong> (hold <kbd>F</kbd> to swell). See <a href="#perform">Perform &amp; Record</a>. Remembered between sessions.</li>
+        <li><strong>Dynamics</strong> — in the Tool panel while you're in Perform, picks what drives the loudness of what you perform: <strong>Fixed</strong> (a steady level, the original behaviour) or <strong>Key swell</strong> (hold <kbd>F</kbd> to swell). See <a href="#perform">Perform &amp; Record</a>. Remembered between sessions.</li>
         <li><strong>Perform</strong> (<kbd>P</kbd>) — in Perform the left button plays the selected track's tone at the planchette's pitch, and Play runs until you stop it. In Compose the left button always runs the active tool, playing or not. See <a href="#perform">Perform &amp; Record</a>.</li>
         <li><strong>Ruler</strong> — two stacked strips at the top of the canvas: a <strong>seconds ruler</strong> (adapts tick spacing to zoom; labels decimal seconds when zoomed in and <code>M:SS</code> for larger steps) and a <strong>beat / measure ruler</strong> with subdivision ticks. The seconds ruler also reflects BPM changes.</li>
         <li><strong>Scrubbing</strong> — click and drag anywhere in the ruler bar (either strip) to position the playhead. Scrubbing is allowed into empty grid past the last point. Where the rail is showing (Perform, or Scroll during playback), scrubbing slides the content under the rail instead of moving a playhead across it. The ruler is locked while a recording runs. Scrubbing plays what's under the playhead as you drag; turn <strong>Audible scrub</strong> off in Settings for silent scrubbing.</li>
@@ -572,7 +573,7 @@
         <li>Click <strong>+ Track</strong> to add a new track.</li>
         <li>Click a track to make it active and select all of its curves. Your tool stays as it is: in Draw, <kbd>Delete</kbd> removes them and you can keep drawing; press <kbd>V</kbd> (or pick Select) to get a transform box around them.</li>
         <li>Click <strong>+ Tone</strong> to open the tone builder and design a custom synth voice.</li>
-        <li>Each track has <strong>M</strong> (mute), <strong>S</strong> (solo), <strong>I</strong> (arm for MIDI input), <strong>T</strong> (edit tone), and <strong>X</strong> (delete track) controls.</li>
+        <li>Each track row has three icon toggles — <strong>Mute</strong> (speaker), <strong>Solo</strong> (headphones) and <strong>MIDI arm</strong> (MIDI socket) — and a <strong>⋯</strong> menu with <strong>Edit tone…</strong> and <strong>Delete track</strong> (undoable). Click the tone name under the track name to pick a different tone.</li>
         <li><strong>X</strong> deletes the track and everything on it. It's a single undo step, so <kbd>Ctrl+Z</kbd> brings it straight back — handy for clearing away layers you don't want to keep. If the track is sounding when you delete it, its audio stops immediately.</li>
         <li>Tone builder supports oscillator types (sine, square, sawtooth, triangle), detune, gain layers, and optional distortion.</li>
         <li>Four built-in presets: Pure Sine, Bright Square, Warm Pad, Buzzy Saw.</li>
@@ -592,7 +593,7 @@
     <div class="detail-body">
       <ul>
         <li><strong>Draw preview</strong> — in Draw mode, hold <kbd>Space</kbd> with the cursor
-            over the canvas. The <strong>Tool Properties</strong> panel offers two modes:
+            over the canvas. The <strong>Tool</strong> panel offers two modes:
             <ul>
               <li><strong>Tone only</strong> (default) — hear the current track's tone at
                   the cursor's pitch. Move the cursor up and down to modulate pitch in real time.</li>
@@ -650,14 +651,14 @@
     <summary>Recording MIDI input to curves</summary>
     <div class="detail-body">
       <p>
-        Each track row has an <strong>I</strong> button (alongside Mute / Solo /
-        Edit Tone) that arms the track for MIDI input recording. While playback
+        Each track row has a <strong>MIDI arm</strong> button (the MIDI-socket icon,
+        beside Mute and Solo) that arms the track for MIDI input recording. While playback
         is running, MIDI notes captured into the armed track land as curves on
         release — separate per note, so chords record as multiple parallel curves
         on the same track.
       </p>
       <ul>
-        <li>Mutually exclusive — clicking <strong>I</strong> on a different track
+        <li>Mutually exclusive — clicking <strong>MIDI arm</strong> on a different track
             disarms the previous one. Click the same track's <strong>I</strong>
             again to disarm.</li>
         <li>The <strong>I</strong> button shows the current state: hollow when
@@ -776,7 +777,7 @@
       </p>
       <ul>
         <li>Switch to the <strong>Select</strong> tool, then click on a guide
-            line to select it. The Object Properties panel then shows a label
+            line to select it. The Selection panel then shows a label
             field (which renders inline on the guide) plus a Delete button.
             (Other tools like Draw fall through to their normal click action
             so guides don't get in the way of authoring.)</li>
@@ -935,7 +936,13 @@
         <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — dissolve the
           group on every selected curve (and its siblings); the curves
           become independent again.</li>
-        <li>Both actions are also in the right-click context menu.</li>
+        <li>Both actions are also in the right-click context menu. With a group
+          selected, <strong>Ungroup</strong> is also a button beside the transform
+          box's top-right corner, and in the Selection panel, which says
+          <em>Group of n curves</em>.</li>
+        <li>In the Select tool, pointing at any member of a group draws a dashed
+          amber outline around the whole group, labelled with its size; a
+          selected group keeps the outline.</li>
         <li>Copy / paste / duplicate / continue / Alt+drag preserve group
           identity within the new copy with a fresh id, so you can build
           up multiple independent clusters from one original.</li>
