@@ -11,28 +11,12 @@ import { getSegmentControlPoints, pitchPoints } from '../model/curve';
 import { evaluateCurveAtBeat } from '../audio/curve-sampler';
 import { chordOffsets, type ChordSpec } from '../utils/harmonics';
 import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
+import { prismSpectrum, themeColor } from '../theme/theme';
 
-const ECHO_STROKE = 'rgba(200, 160, 255, 0.55)';    // lavender, dimmed
 const ECHO_LINE_WIDTH = 1.25;
 const ECHO_DASH: number[] = [5, 6];
 
-/**
- * Rainbow color stops shared between the Projection source highlight (gradient
- * across the curve) and Draw mode planchettes (one solid stop per voice index).
- * Index 0 = primary/closest harmony; subsequent indices step through the
- * spectrum so siblings are visually distinct.
- */
-export const PRISM_RAINBOW_STOPS: readonly string[] = [
-  '#ff5555',  // red       — primary / harmony-0
-  '#ffaa33',  // orange    — harmony-1
-  '#ffee44',  // yellow    — harmony-2
-  '#66dd66',  // green     — harmony-3
-  '#55ccff',  // cyan      — harmony-4
-  '#aa77ff',  // purple    — extra (gradient only; harmony cap is 4)
-  '#ff66cc',  // pink      — extra (gradient only)
-];
-
-/** Equally-spaced gradient offsets matching PRISM_RAINBOW_STOPS. */
+/** Equally-spaced gradient offsets for the Prism spectrum (theme --spectrum-1..7). */
 const PRISM_RAINBOW_OFFSETS: readonly number[] = [0.00, 0.16, 0.33, 0.50, 0.66, 0.83, 1.00];
 
 /**
@@ -62,7 +46,7 @@ export function renderProjection(
   }
 
   ctx.save();
-  ctx.strokeStyle = ECHO_STROKE;
+  ctx.strokeStyle = themeColor('echo-stroke');
   ctx.lineWidth = ECHO_LINE_WIDTH;
   ctx.setLineDash(ECHO_DASH);
 
@@ -131,13 +115,13 @@ export function renderProjectionSourceHighlight(
     ? null
     : ctx.createLinearGradient(x0, 0, x1, 0);
   if (grad) {
-    for (let i = 0; i < PRISM_RAINBOW_STOPS.length; i++) {
-      grad.addColorStop(PRISM_RAINBOW_OFFSETS[i]!, PRISM_RAINBOW_STOPS[i]!);
+    for (let i = 0; i < prismSpectrum().length; i++) {
+      grad.addColorStop(PRISM_RAINBOW_OFFSETS[i]!, prismSpectrum()[i]!);
     }
   }
 
   ctx.save();
-  ctx.strokeStyle = grad ?? PRISM_RAINBOW_STOPS[PRISM_RAINBOW_STOPS.length - 1]!;
+  ctx.strokeStyle = grad ?? prismSpectrum()[prismSpectrum().length - 1]!;
   ctx.lineWidth = 4;
   ctx.lineCap = 'round';
   ctx.globalAlpha = 0.85;
@@ -194,25 +178,25 @@ export function renderPrismDrawPreview(
     if (i === 0) {
       // Primary: rainbow-filled disc with white outline.
       const grad = ctx.createLinearGradient(screenX, screenY - PRIMARY_R, screenX, screenY + PRIMARY_R);
-      for (let s = 0; s < PRISM_RAINBOW_STOPS.length; s++) {
-        grad.addColorStop(PRISM_RAINBOW_OFFSETS[s]!, PRISM_RAINBOW_STOPS[s]!);
+      for (let s = 0; s < prismSpectrum().length; s++) {
+        grad.addColorStop(PRISM_RAINBOW_OFFSETS[s]!, prismSpectrum()[s]!);
       }
       ctx.beginPath();
       ctx.arc(screenX, screenY, PRIMARY_R, 0, Math.PI * 2);
       ctx.fillStyle = grad;
       ctx.fill();
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = themeColor('prism-primary-edge');
       ctx.lineWidth = 1.5;
       ctx.stroke();
     } else {
       // Harmony i (i = 1..N-1): solid color from rainbow stops, indexed at i-1
       // so harmony-0 = red, harmony-1 = orange, etc.
-      const colorIdx = (i - 1) % PRISM_RAINBOW_STOPS.length;
+      const colorIdx = (i - 1) % prismSpectrum().length;
       ctx.beginPath();
       ctx.arc(screenX, screenY, HARMONY_R, 0, Math.PI * 2);
-      ctx.fillStyle = PRISM_RAINBOW_STOPS[colorIdx]!;
+      ctx.fillStyle = prismSpectrum()[colorIdx]!;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.strokeStyle = themeColor('prism-harmony-edge');
       ctx.lineWidth = 1;
       ctx.stroke();
     }

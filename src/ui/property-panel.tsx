@@ -186,7 +186,7 @@ function TrackProps({ track, commands }: { track: Track; commands: CommandRegist
         <div
           class="prop-value prop-tone-clickable"
           id="prop-tone-name"
-          style={{ color: tone?.color ?? '#888' }}
+          style={{ color: tone?.color ?? 'var(--tone-fallback)' }}
           title="Click to change tone"
           onClick={e => pickTone(e.currentTarget as HTMLElement)}
         >

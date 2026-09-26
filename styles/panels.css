@@ -4,7 +4,7 @@
 .drawer-section,
 #snap-section {
   padding: 8px;
-  border-bottom: 1px solid #335;
+  border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -32,7 +32,7 @@
 .transport-row input[type="number"] {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 3px 6px;
   width: 60px;
@@ -53,12 +53,12 @@
 }
 
 .track-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--highlight-rgb), 0.05);
 }
 
 .track-item.selected {
-  background: rgba(79, 195, 247, 0.15);
-  outline: 1px solid rgba(79, 195, 247, 0.3);
+  background: rgba(var(--accent-rgb), 0.15);
+  outline: 1px solid rgba(var(--accent-rgb), 0.3);
 }
 
 .track-item.muted {
@@ -106,7 +106,7 @@
   padding: 0;
   background: var(--surface);
   color: var(--text-dim);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 3px;
   font-size: 12px; /* drives the 1.25em SVG sizing */
   line-height: 1;
@@ -115,7 +115,7 @@
 }
 
 .track-btn:hover {
-  background: #1a4a80;
+  background: var(--hover-bg);
   color: var(--text);
 }
 
@@ -125,42 +125,42 @@
 }
 
 .track-mute.active {
-  background: #c62828;
-  color: #fff;
-  border-color: #c62828;
+  background: var(--danger);
+  color: var(--text-on-strong);
+  border-color: var(--danger);
 }
 
 .track-solo.active {
-  background: #f9a825;
-  color: #000;
-  border-color: #f9a825;
+  background: var(--solo);
+  color: var(--text-on-bright);
+  border-color: var(--solo);
 }
 
 /* MIDI input arm button — armed = solid grey, recording = pulsing red. */
 .track-midi-arm.armed {
-  background: #555;
-  color: #fff;
-  border-color: #555;
+  background: var(--midi-armed);
+  color: var(--text-on-strong);
+  border-color: var(--midi-armed);
 }
 .track-midi-arm.recording {
-  background: #e53935;
-  color: #fff;
-  border-color: #e53935;
+  background: var(--record);
+  color: var(--text-on-strong);
+  border-color: var(--record);
   animation: recordPulse 1s infinite;
 }
 
 /* Destructive menu items (a track's Delete) take the warning colour. */
 .menu-dropdown .menu-item.danger {
-  color: #ef5350;
+  color: var(--danger-text);
 }
 
 .menu-dropdown .menu-item.danger:hover {
-  background: rgba(198, 40, 40, 0.25);
+  background: rgba(var(--danger-rgb), 0.25);
 }
 
 .track-panel-actions {
   display: flex;
-  border-top: 1px solid #335;
+  border-top: 1px solid var(--border);
 }
 
 .track-panel-actions button {
@@ -168,7 +168,7 @@
   background: var(--surface);
   color: var(--text);
   border: none;
-  border-right: 1px solid #335;
+  border-right: 1px solid var(--border);
   padding: 8px;
   cursor: pointer;
   font-size: 0.8rem;
@@ -180,7 +180,7 @@
 }
 
 .track-panel-actions button:hover {
-  background: #1a4a80;
+  background: var(--hover-bg);
 }
 
 /* ── Harmonic Prism Panel ─────────────────────────────────────── */
@@ -190,22 +190,22 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  border-bottom: 1px solid #335;
+  border-bottom: 1px solid var(--border);
 }
 
 .prism-status {
   font-size: 0.75rem;
   padding: 4px 6px;
   border-radius: 4px;
-  background: rgba(200, 160, 255, 0.08);
+  background: rgba(var(--echo-rgb), 0.08);
   color: var(--text-dim);
-  border: 1px dashed rgba(200, 160, 255, 0.35);
+  border: 1px dashed rgba(var(--echo-rgb), 0.35);
   text-align: center;
 }
 
 .prism-status-active {
-  background: rgba(200, 160, 255, 0.18);
-  color: #d0b0ff;
+  background: rgba(var(--echo-rgb), 0.18);
+  color: var(--echo-text);
   border-style: solid;
   font-weight: 600;
 }
@@ -231,7 +231,7 @@
   flex: 1;
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 3px 6px;
   font-size: 0.8rem;

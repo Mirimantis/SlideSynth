@@ -17,12 +17,12 @@ function ensureStyle(): void {
       left: 50%;
       bottom: 48px;
       transform: translateX(-50%);
-      background: rgba(30, 30, 36, 0.95);
-      color: #f0f0f0;
+      background: var(--toast-bg);
+      color: var(--toast-text);
       padding: 8px 16px;
       border-radius: 6px;
       font: 13px/1.4 system-ui, sans-serif;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.5);
       z-index: 9999;
       pointer-events: none;
       opacity: 0;

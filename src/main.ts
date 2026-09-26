@@ -30,6 +30,7 @@ import { createMagneticState, updateMagnetic, resetMagnetic } from './utils/snap
 import { renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, LOOP_WRAP_FLASH_MS, PULSE_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { h, render } from 'preact';
 import { signal } from '@preact/signals-core';
+import { loadTheme, themeColor } from './theme/theme';
 import { PropertyPanel } from './ui/property-panel';
 import { ToolPropertyPanel } from './ui/tool-property-panel';
 import { TrackList, type TrackListActions } from './ui/track-list';
@@ -76,6 +77,10 @@ import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive
 import { effect, watch } from './state/reactive';
 import type { AppState, Composition, ToolMode, BezierCurve, TransportState, PlanchetteState } from './types';
 import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, isOpenEnded, performPhase, forcesScrollView } from './state/transport';
+
+// ── Theme (BACKLOG 16.7) ────────────────────────────────────────
+// The canvas draws with the same tokens as the stylesheets (styles/theme.css).
+loadTheme();
 
 // ── Viewport ────────────────────────────────────────────────────
 const viewport = createViewport();
@@ -2941,7 +2946,7 @@ function draw() {
     const points = previewCurve ? pitchPoints(previewCurve) : undefined;
     const track = comp.tracks.find(t => t.id === state.selectedTrackId);
     const tone = track ? comp.toneLibrary.find(t => t.id === track.toneId) : null;
-    const color = tone?.color ?? '#4fc3f7';
+    const color = tone?.color ?? themeColor('accent');
 
     if (points && points.length > 0) {
       const cx = interaction.cursorWorld.x;
@@ -3004,10 +3009,10 @@ function draw() {
     const scr = viewport.worldToScreen(interaction.scissorsPreview.x, interaction.scissorsPreview.y);
     fgCtx.beginPath();
     fgCtx.arc(scr.sx, scr.sy, 5, 0, Math.PI * 2);
-    fgCtx.fillStyle = '#ff5252';
+    fgCtx.fillStyle = themeColor('scissors-dot');
     fgCtx.fill();
     fgCtx.lineWidth = 1.5;
-    fgCtx.strokeStyle = '#fff';
+    fgCtx.strokeStyle = themeColor('scissors-dot-edge');
     fgCtx.stroke();
   }
 
@@ -3124,7 +3129,7 @@ function draw() {
   // ── Parameters Graph: selected curve's volume lane (X-locked to main canvas) ──
   {
     const selCurve = getSelectedParamCurve();
-    let paramColor = '#4fc3f7';
+    let paramColor = themeColor('accent');
     if (selCurve) {
       for (const track of comp.tracks) {
         if (track.curves.includes(selCurve)) {

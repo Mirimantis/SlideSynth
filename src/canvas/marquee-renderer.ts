@@ -1,5 +1,6 @@
 import type { Vec2 } from '../types';
 import type { Viewport } from './viewport';
+import { themeColor } from '../theme/theme';
 
 /** Render a drag-marquee rubber-band rectangle in screen space (BACKLOG 8.3).
  *  Light fill so points behind it stay visible, dashed border so it reads as
@@ -18,9 +19,9 @@ export function renderMarquee(
   const h = Math.abs(b.sy - a.sy);
 
   ctx.save();
-  ctx.fillStyle = 'rgba(120, 180, 255, 0.10)';
+  ctx.fillStyle = themeColor('marquee-fill');
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(180, 210, 255, 0.85)';
+  ctx.strokeStyle = themeColor('marquee-stroke');
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 3]);
   ctx.strokeRect(x + 0.5, y + 0.5, w, h);

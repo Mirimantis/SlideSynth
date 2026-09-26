@@ -41,7 +41,7 @@ export function TrackList({ actions }: { actions: TrackListActions }) {
           <TrackRow
             key={track.id}
             track={track}
-            color={tone?.color ?? '#888'}
+            color={tone?.color ?? 'var(--tone-fallback)'}
             toneName={tone?.name ?? '?'}
             selected={track.id === st.selectedTrackId}
             midiArm={midiRecording ? 'recording' : midiArmed ? 'armed' : ''}

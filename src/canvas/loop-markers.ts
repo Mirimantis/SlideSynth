@@ -1,8 +1,6 @@
 import type { Viewport } from './viewport';
+import { themeColor } from '../theme/theme';
 
-export const LOOP_IN_COLOR = '#4caf50';
-export const LOOP_OUT_COLOR = '#b71c1c';
-const RANGE_TINT = 'rgba(76, 175, 80, 0.07)';
 
 /**
  * Render the two draggable loop-range markers (green = in, red = out) in the
@@ -22,12 +20,12 @@ export function renderLoopMarkers(
 
   // Tint the range between markers so the active loop zone reads visually.
   if (sxOut > sxIn) {
-    ctx.fillStyle = RANGE_TINT;
+    ctx.fillStyle = themeColor('loop-range');
     ctx.fillRect(sxIn, 0, sxOut - sxIn, canvasHeight);
   }
 
-  drawMarker(ctx, sxIn, canvasHeight, LOOP_IN_COLOR, 'in');
-  drawMarker(ctx, sxOut, canvasHeight, LOOP_OUT_COLOR, 'out');
+  drawMarker(ctx, sxIn, canvasHeight, themeColor('loop-in'), 'in');
+  drawMarker(ctx, sxOut, canvasHeight, themeColor('loop-out'), 'out');
 }
 
 function drawMarker(

@@ -1,4 +1,5 @@
 import type { Viewport } from './viewport';
+import { themeColor } from '../theme/theme';
 
 /**
  * Render the playhead (vertical red line) at the given beat position.
@@ -14,7 +15,7 @@ export function renderPlayhead(
   ctx.beginPath();
   ctx.moveTo(sx, 0);
   ctx.lineTo(sx, height);
-  ctx.strokeStyle = '#f44336';
+  ctx.strokeStyle = themeColor('playhead');
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
@@ -24,6 +25,6 @@ export function renderPlayhead(
   ctx.lineTo(sx + 5, 0);
   ctx.lineTo(sx, 8);
   ctx.closePath();
-  ctx.fillStyle = '#f44336';
+  ctx.fillStyle = themeColor('playhead');
   ctx.fill();
 }

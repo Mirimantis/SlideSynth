@@ -2,6 +2,7 @@ import type { BezierCurve, ToneDefinition, Vec2 } from '../types';
 import type { Viewport } from './viewport';
 import { getSegmentControlPoints, pitchPoints } from '../model/curve';
 import { hasPoint, type PointSelection } from '../model/point-selection';
+import { themeColor } from '../theme/theme';
 
 const POINT_RADIUS = 5;
 const POINT_RADIUS_UNSELECTED = 3;
@@ -120,9 +121,9 @@ function renderCurve(
       // Full-size anchor point
       ctx.beginPath();
       ctx.arc(screen.sx, screen.sy, POINT_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = isPointHighlighted ? '#fff' : tone.color;
+      ctx.fillStyle = isPointHighlighted ? themeColor('point-highlight') : tone.color;
       ctx.fill();
-      ctx.strokeStyle = isPointHighlighted ? '#fff' : '#000';
+      ctx.strokeStyle = isPointHighlighted ? themeColor('point-highlight') : themeColor('point-outline');
       ctx.lineWidth = 1.5;
       ctx.stroke();
     } else if (isSelected) {
@@ -131,9 +132,9 @@ function renderCurve(
       // so users see exactly which points the next op will hit.
       ctx.beginPath();
       ctx.arc(screen.sx, screen.sy, POINT_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = inMultiPointSelection ? '#fff' : tone.color;
+      ctx.fillStyle = inMultiPointSelection ? themeColor('point-highlight') : tone.color;
       ctx.fill();
-      ctx.strokeStyle = inMultiPointSelection ? '#fff' : '#000';
+      ctx.strokeStyle = inMultiPointSelection ? themeColor('point-highlight') : themeColor('point-outline');
       ctx.lineWidth = 1.5;
       ctx.stroke();
     } else {
