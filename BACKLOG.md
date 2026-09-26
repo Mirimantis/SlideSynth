@@ -534,11 +534,11 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
           - `scaleSteps()` in `tuning.ts` now resolves any scale for snapping, the staff and the store.
         - **Decision:** double-click sets the root the way the Root menu does, so a scale moves with it (C major → D major), Custom scales included. The alternative, keeping the dots where they are and changing only which one is home (C major → D Dorian), is noted under Deferred.
         - Import / Export .scl buttons come with (d).
-    - [x] **(d) `.scl` import and export** *(S–M)*
+    - [x] **(d) `.scl` import and export** *(S–M, PR #91)*
       - Import into an Imported tuning, with the description line treated as untrusted text.
       - Export the notes you hear, from the root.
       - A performance check with a large file (e.g. 43 or 192 notes).
-      - **Done (this PR):**
+      - **Done (PR #91):**
         - **`tuning/scl.ts`:**
           - `parseScl` follows the Scala format: comments, the description line, the count, and cents or ratio pitches with trailing text ignored. It sorts, drops repeats, folds notes outside the period into it, and throws `SclError` with a message for the user.
           - `toScl` writes the notes you hear from the root, with the period last; ratios where the tuning has them for both notes (reduced, exact), cents otherwise.
