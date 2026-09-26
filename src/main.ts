@@ -62,7 +62,7 @@ import { ToolStrip } from './ui/tool-strip';
 import { SnapPanel, type SnapActions } from './ui/snap-panel';
 import { PrismPanel } from './ui/prism-panel';
 import { TuningPanel, type TuningActions } from './ui/tuning-panel';
-import { pitchName, prismOffsets, staffGridFor, tuningKey } from './tuning/tuning';
+import { nearestNote, pitchLabel, pitchName, prismOffsets, staffGridFor, tuningKey } from './tuning/tuning';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
 import { createDrawerRail } from './ui/drawer';
@@ -385,7 +385,7 @@ window.addEventListener('blur', () => dynamics.setSwellHeld(false));
 // guide, the guide's pitch (13.6). Scrubbing the ruler is audible on its own
 // (Settings › Audible scrub), so it needs no key.
 let auditionHeld = false;
-/** Voice for a dragged Y guide's pitch — separate from the Draw voices. */
+/** Voice for a dragged fret's pitch — separate from the Draw voices. */
 const GUIDE_AUDITION_VOICE = 'guide-audition';
 /** Voice for a pitch-circle degree held down in the Tuning drawer (13.8 (c)). */
 const CIRCLE_AUDITION_VOICE = 'circle-audition';
@@ -421,7 +421,7 @@ function syncAudition() {
   const st = store.getState();
   if (isRecordArmed(st.transport)) return;
 
-  // A dragged Y guide sounds its own pitch.
+  // A dragged fret sounds its own pitch.
   const guide = interaction.draggingGuideId
     ? st.composition.guides.find(g => g.id === interaction.draggingGuideId)
     : undefined;
@@ -948,14 +948,14 @@ async function requestMidiList() {
 }
 
 // ── Snap drawer (BACKLOG 16.4) ─────────────────────────────────
-/** Add a guide at the centre of the current viewport on the requested axis,
+/** Add a beat guide (x) or a fret (y) at the centre of the current viewport,
  *  then auto-select it so the user can immediately drag or rename it. */
 function addGuideAtViewportCenter(orientation: 'x' | 'y'): void {
   const r = canvasContainer.getBoundingClientRect();
   const centre = viewport.screenToWorld(r.width / 2, r.height / 2);
   const position = orientation === 'x'
     ? Math.max(0, Math.round(centre.wx * 4) / 4)   // round to nearest 1/4 beat for tidiness
-    : Math.round(centre.wy / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE; // nearest 12-TET line
+    : nearestNote(staffGridFor(store.getState()).lines.map(l => l.cents), centre.wy); // the tuning's nearest note
   const guide = {
     id: `guide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     orientation,
@@ -3020,7 +3020,7 @@ function draw() {
   // Snap guides — between loop markers and the playhead so the playhead always
   // wins Z-order. Skipped when guidesVisible is off (matches snap participation).
   if (state.guidesVisible && comp.guides.length > 0) {
-    renderGuides(fgCtx, viewport, comp.guides, rect.width, rect.height, state.selectedGuideId);
+    renderGuides(fgCtx, viewport, comp.guides, rect.width, rect.height, state.selectedGuideId, c => pitchLabel(state, c));
   }
 
   // Live recording trail: polyline of in-flight samples per voice. Drawn above

@@ -63,7 +63,7 @@ export const COMMANDS = [
   { id: 'edit.finishCurve', label: 'Finish curve', section: 'Tools', keys: ['Enter'], description: 'end the curve you’re drawing' },
   { id: 'snap.toggle', label: 'Snap', section: 'Tools', keys: ['S'], description: 'toggle snap' },
   { id: 'preview.audition', label: 'Audition', section: 'Tools', keys: ['A'], hold: true,
-    description: 'hold to hear the pitch under the Draw cursor, or a Y guide’s pitch while you drag it' },
+    description: 'hold to hear the pitch under the Draw cursor, or a fret’s pitch while you drag it' },
 
   // ── Edit ──
   { id: 'edit.undo', label: 'Undo', section: 'Edit', keys: ['Ctrl+Z'] },
@@ -75,7 +75,7 @@ export const COMMANDS = [
   { id: 'edit.continue', label: 'Continue curves', section: 'Edit', keys: ['Ctrl+Shift+D'],
     description: 'copy the selection so each copy starts where its original ends' },
   { id: 'edit.delete', label: 'Delete selection', section: 'Edit', keys: ['Delete', 'Backspace'],
-    description: 'the selected guide, points or curves' },
+    description: 'the selected fret or beat guide, points or curves' },
   { id: 'edit.join', label: 'Join', section: 'Edit', keys: ['Ctrl+J'], description: 'merge the selected curves into one' },
   { id: 'edit.group', label: 'Group', section: 'Edit', keys: ['Ctrl+G'] },
   { id: 'edit.ungroup', label: 'Ungroup', section: 'Edit', keys: ['Ctrl+Shift+G'] },

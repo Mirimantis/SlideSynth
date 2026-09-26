@@ -66,9 +66,18 @@ describe('Preact panels (BACKLOG 15.4)', () => {
 
     store.setSelectedGuide('g1');
     const guide = renderToString(<PropertyPanel commands={commands} />);
-    expect(guide).toContain('Snap Guide');
+    expect(guide).toContain('>Fret</div>');   // a Y guide is a fret (13.16)
+    expect(guide).toContain('C4 (6000.0 ¢)');
     expect(guide).toContain('tonic');
-    expect(guide).toContain('Delete Guide');
+    expect(guide).toContain('Delete Fret');
+  });
+
+  it('names a fret’s pitch by the tuning (13.16)', () => {
+    store.setTuning({ kind: 'edo', divisions: 19, equave: 'octave' });
+    store.setSelectedGuide('g1');
+    expect(renderToString(<PropertyPanel commands={commands} />)).toContain('C4 (6000.0 ¢)');
+    store.updateGuide('g1', { position: 6000 + 1200 / 19 * 2 + 5 });
+    expect(renderToString(<PropertyPanel commands={commands} />)).toMatch(/Db4 \+5¢ \(6131\.3 ¢\)/);
   });
 
   it('a selected group says so and offers Ungroup (16.5)', () => {
