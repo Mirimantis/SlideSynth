@@ -4,7 +4,9 @@ import { createComposition } from '../model/composition';
 import { createTrack } from '../model/track';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
-import { ALL_NOTES, getScale, isTwelveEdo, nearestDegree, resolveTuning, rootCents, type TuningRef } from '../tuning/tuning';
+import {
+  ALL_NOTES, CUSTOM_SCALE, isTwelveEdo, nearestDegree, resolveTuning, rootCents, scaleSteps, type TuningRef,
+} from '../tuning/tuning';
 import { batch, signal, type Signal } from './reactive';
 import { TRANSPORT_STOPPED } from './transport';
 import { NO_POINTS, addPoints, onlyPoint, togglePoint, withoutCurves, type PointRef, type PointSelection } from '../model/point-selection';
@@ -40,6 +42,7 @@ const SNAP_VIEW_FIELDS = {
   tuning: 'tuning',
   root: 'root',
   scaleId: 'scaleId',
+  customScale: 'customScale',
   tunedFrom: 'tunedFrom',
   hidePitchLines: 'hidePitchLines',
   referenceLines: 'referenceLines',
@@ -731,8 +734,7 @@ class Store {
     const home = rootCents(snap);
     if (isTwelveEdo(ref)) snap.tunedFrom = 0;
     snap.root = nearestDegree(after, snap.tunedFrom, home);
-    const scale = getScale(snap.scaleId);
-    if (!scale || scale.size !== after.degrees.length) snap.scaleId = ALL_NOTES;
+    if (scaleSteps(snap, after) === null) snap.scaleId = ALL_NOTES;
     snap.tuning = ref;
     this.touch('snap');
   }
@@ -745,9 +747,31 @@ class Store {
     this.touch('snap');
   }
 
-  /** A scale id, or 'all'. */
+  /** A scale id, 'all', or 'custom'. */
   setScaleId(scaleId: string) {
     this.state.composition.snap.scaleId = scaleId;
+    this.touch('snap');
+  }
+
+  /** Add a degree to the scale, or take it out (13.8 (c), Shift+click on the
+   *  pitch circle). The result is the Custom scale, starting from whatever
+   *  scale was chosen (All notes: every degree). The root always stays in;
+   *  a scale of every degree is All notes. */
+  toggleScaleDegree(degree: number) {
+    const snap = this.state.composition.snap;
+    const tuning = resolveTuning(snap.tuning);
+    const n = tuning.degrees.length;
+    const step = ((((Math.round(degree) - snap.root) % n) + n) % n);
+    if (step === 0) return;
+    const steps = new Set(scaleSteps(snap, tuning) ?? tuning.degrees.map((_, i) => i));
+    if (steps.has(step)) steps.delete(step);
+    else steps.add(step);
+    if (steps.size === n) {
+      snap.scaleId = ALL_NOTES;
+    } else {
+      snap.customScale = { size: n, steps: [...steps].sort((a, b) => a - b) };
+      snap.scaleId = CUSTOM_SCALE;
+    }
     this.touch('snap');
   }
 

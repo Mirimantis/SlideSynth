@@ -737,6 +737,93 @@ body.perform-mode #canvas-container::after {
   min-width: 0;
 }
 
+/* The pitch circle (13.8 (c)): one period of the tuning, C at the top. */
+.pitch-circle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 6px;
+  user-select: none;
+}
+.pitch-circle svg {
+  display: block;
+  overflow: visible;
+}
+.pitch-circle text {
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-family: monospace;
+  pointer-events: none;
+}
+.pitch-circle-rim {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+.pitch-circle-inner {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.pitch-circle-standard-dot {
+  fill: var(--text-dim);
+  opacity: 0.6;
+}
+.pitch-circle-standard-label {
+  fill: var(--text-dim);
+  font-size: 8px;
+  opacity: 0.8;
+}
+.pitch-circle-degree {
+  cursor: pointer;
+}
+.pitch-circle-tick {
+  stroke: var(--text-dim);
+  stroke-width: 1;
+}
+.pitch-circle-degree.in-scale .pitch-circle-tick {
+  stroke: var(--text);
+}
+.pitch-circle-dot {
+  fill: var(--accent);
+}
+.pitch-circle-root {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+.pitch-circle-label {
+  fill: var(--text-dim);
+  font-size: 10px;
+}
+.pitch-circle-degree.in-scale .pitch-circle-label {
+  fill: var(--text);
+}
+.pitch-circle-degree.root .pitch-circle-label {
+  fill: var(--accent);
+  font-weight: bold;
+}
+.pitch-circle-hit {
+  fill: transparent;
+}
+.pitch-circle-degree:hover .pitch-circle-hit {
+  fill: rgba(var(--accent-rgb), 0.18);
+}
+.pitch-circle-center-root {
+  fill: var(--accent);
+  font-size: 18px;
+  font-weight: bold;
+}
+.pitch-circle-center-scale {
+  fill: var(--text-dim);
+  font-size: 10px;
+}
+.pitch-circle-hint {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
 #track-list {
   flex: 1;
   padding: 8px;

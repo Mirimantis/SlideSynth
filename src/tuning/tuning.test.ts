@@ -10,7 +10,7 @@ import { snapToGrid, findAdaptiveSnap, type SnapConfig } from '../utils/snap';
 import { MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
 
 const settings = (over: Partial<PitchSettings> = {}): PitchSettings => ({
-  tuning: TWELVE_EDO, root: 0, scaleId: ALL_NOTES, tunedFrom: 0, hidePitchLines: false, ...over,
+  tuning: TWELVE_EDO, root: 0, scaleId: ALL_NOTES, customScale: null, tunedFrom: 0, hidePitchLines: false, ...over,
 });
 const notes = (over: Partial<PitchSettings> = {}) => pitchSetFor(settings(over))!.notes;
 /** Pitch classes (cents within the octave) of a note list. */
@@ -254,6 +254,49 @@ describe('migrating Key + Scale (BACKLOG 13.8)', () => {
     expect(current).toMatchObject({ tuning: { divisions: 31 }, root: 5, magneticStrength: 0.3 });
     expect(migrateSnapSettings({ scaleRoot: 0, scaleId: 'major', magneticStrength: 0.4 }).magneticStrength).toBe(0.4);
     expect(migrateSnapSettings(undefined).tuning).toEqual(TWELVE_EDO);
+  });
+});
+
+describe('Custom scales from the pitch circle (BACKLOG 13.8 (c))', () => {
+  it('snaps to the custom steps, counted from the root', () => {
+    const custom = { size: 12, steps: [0, 3, 7] };
+    expect(classes(notes({ root: 2, scaleId: 'custom', customScale: custom }))).toEqual([200, 500, 900]);
+    expect(staffGridFor(settings({ scaleId: 'custom', customScale: custom })).hasScale).toBe(true);
+  });
+
+  it('a custom scale that doesn’t fit plays as every note', () => {
+    const custom = { size: 12, steps: [0, 3, 7] };
+    const edo19: TuningRef = { kind: 'edo', divisions: 19, equave: 'octave' };
+    expect(notes({ tuning: edo19, scaleId: 'custom', customScale: custom })).toEqual(notes({ tuning: edo19 }));
+  });
+
+  it('Shift+click toggles degrees; the root stays; every degree is All notes', async () => {
+    const { store } = await import('../state/store');
+    const { createComposition } = await import('../model/composition');
+    store.loadComposition(createComposition());
+    store.setRoot(2);
+    store.toggleScaleDegree(3);                                    // D#: out of All notes
+    expect(store.getState()).toMatchObject({ scaleId: 'custom', customScale: { size: 12 } });
+    expect(store.getState().customScale!.steps).not.toContain(1);
+    store.toggleScaleDegree(2);                                    // the root: no change
+    expect(store.getState().customScale!.steps).toContain(0);
+    store.toggleScaleDegree(3);                                    // back in: all 12
+    expect(store.getState().scaleId).toBe(ALL_NOTES);
+
+    store.setScaleId('major');                                     // D major, then take out G
+    store.toggleScaleDegree(7);
+    expect(store.getState().customScale!.steps).toEqual([0, 2, 4, 7, 9, 11]);
+  });
+
+  it('a new tuning of another size keeps the custom scale for later', async () => {
+    const { store } = await import('../state/store');
+    store.setTuning({ kind: 'edo', divisions: 19, equave: 'octave' });
+    expect(store.getState().scaleId).toBe(ALL_NOTES);
+    expect(store.getState().customScale).not.toBeNull();
+  });
+
+  it('files without one load with none', () => {
+    expect(migrateSnapSettings({ tuning: TWELVE_EDO, root: 0, scaleId: ALL_NOTES, tunedFrom: 0, hidePitchLines: false }).customScale).toBeNull();
   });
 });
 

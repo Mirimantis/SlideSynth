@@ -1,4 +1,4 @@
-import type { TuningRef } from './tuning/tuning';
+import type { CustomScale, TuningRef } from './tuning/tuning';
 
 import type { ChordSpec } from './utils/harmonics';
 import type { PointSelection } from './model/point-selection';
@@ -94,8 +94,11 @@ export interface SnapSettings {
   tuning: TuningRef;
   /** Which degree of the tuning is home: an index into its degrees. */
   root: number;
-  /** Which degrees the piece uses: a scale id, or 'all'. */
+  /** Which degrees the piece uses: a scale id, 'all', or 'custom'. */
   scaleId: string;
+  /** The scale built on the pitch circle (13.8 (c)); null until one is made.
+   *  Kept while another scale is chosen, so it can be chosen again. */
+  customScale: CustomScale | null;
   /** Which of the 12 standard notes the tuning's degree 0 sits on (0 = C).
    *  Always 0 for 12-EDO, where it would only rotate the root. */
   tunedFrom: number;
@@ -275,6 +278,7 @@ export interface AppState {
   tuning: TuningRef;
   root: number;
   scaleId: string;
+  customScale: CustomScale | null;
   tunedFrom: number;
   hidePitchLines: boolean;
   referenceLines: boolean;

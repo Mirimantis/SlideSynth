@@ -195,7 +195,7 @@ function nearestWithinRadius(v: number, targets: readonly number[], radius: numb
 export const DEFAULT_SNAP_CONFIG: SnapConfig = {
   enabled: true,
   subdivisionsPerBeat: SUBDIVISIONS_PER_BEAT,
-  pitchTargets: pitchSetFor({ tuning: TWELVE_EDO, root: 0, scaleId: ALL_NOTES, tunedFrom: 0, hidePitchLines: false })!.notes,
+  pitchTargets: pitchSetFor({ tuning: TWELVE_EDO, root: 0, scaleId: ALL_NOTES, customScale: null, tunedFrom: 0, hidePitchLines: false })!.notes,
 };
 
 /**

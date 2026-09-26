@@ -27,7 +27,7 @@ export interface SnapQuery {
 
 /** The slice of app state a snap config is built from. */
 export type SnapSources = Pick<AppState,
-  'snapEnabled' | 'tuning' | 'root' | 'scaleId' | 'tunedFrom' | 'hidePitchLines' | 'guidesVisible' | 'harmonicPrism'
+  'snapEnabled' | 'tuning' | 'root' | 'scaleId' | 'customScale' | 'tunedFrom' | 'hidePitchLines' | 'guidesVisible' | 'harmonicPrism'
 > & { composition: Pick<Composition, 'tracks' | 'guides'> };
 
 export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {

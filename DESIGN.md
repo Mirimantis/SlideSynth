@@ -98,7 +98,7 @@ src/
 │                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), and one renderer per layer
 ├── tuning/          # tuning.ts: tunings, scales, degree names, and the pitch set the staff and snap use (13.8)
 ├── ui/              # Preact (.tsx): top-bar, menu, tool-strip, settings-dialog, tempo-panel, snap-panel,
-│                    #   prism-panel, tuning-panel, track-list, property-panel, tool-property-panel.
+│                    #   prism-panel, tuning-panel, pitch-circle, track-list, property-panel, tool-property-panel.
 │                    #   Vanilla DOM: drawer, tone builder/picker, older dialogs, HUDs
 ├── theme/           # theme.ts: the canvas's reader for the colour tokens in styles/theme.css
 ├── export/          # json-export (.gliss envelope + migrations), wav-export, midi-import
@@ -324,6 +324,11 @@ The Key and Scale dropdowns mixed two different axes: the **tuning** (which pitc
   - the root marked with a ring;
   - for non-12 tunings, a faint inner ring of the 12 standard notes, so you can see how far each degree sits from them.
 - **Gestures:** click a degree to hear it; double-click to make it the root; Shift+click to add it to or remove it from the scale (making a Custom scale).
+- *(Built in 13.8 (c).)*
+  - Hearing a degree lasts as long as it's pressed.
+  - Double-click moves the scale with the root, as the Root menu does.
+  - A Custom scale is stored as steps from the root, with the tuning size it fits (`SnapSettings.customScale`), and is kept while other scales are chosen.
+  - Past 24 degrees the rim names only the root and the natural letters.
 - **Below the circle:**
   - Tuning, Root and Scale;
   - Tune A4 with its cents readout;

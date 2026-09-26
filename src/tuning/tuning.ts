@@ -213,6 +213,13 @@ export function degreeName(tuning: Tuning, tunedFrom: number, degree: number): s
   return number;
 }
 
+/** A degree's short name, for the pitch circle's rim: its letter, else its
+ *  ratio or number. */
+export function degreeLabel(tuning: Tuning, tunedFrom: number, degree: number): string {
+  const { letter, ratio, number } = degreeParts(tuning, tunedFrom, degree);
+  return letter ?? (tuning.naming === 'ratios' && ratio ? ratio : number);
+}
+
 /** A note's name on the staff and in the pitch readout: letter and octave
  *  ("Eb4"), or the degree's number or ratio. `nearest` adds the nearest
  *  standard note ("6 ≈D4") to a name that doesn't say where it is. */
@@ -241,6 +248,16 @@ export interface ScaleDefinition {
 
 /** Every degree of the tuning. */
 export const ALL_NOTES = 'all';
+/** The scale built on the pitch circle (13.8 (c)): `customScale`. */
+export const CUSTOM_SCALE = 'custom';
+
+/** A scale made by Shift+clicking the pitch circle's degrees. */
+export interface CustomScale {
+  /** The tuning size it was made in; it fits tunings of this size. */
+  size: number;
+  /** Degree steps from the root, ascending, starting at 0. */
+  steps: number[];
+}
 
 export const SCALES: readonly ScaleDefinition[] = [
   { id: 'major', name: 'Major (Ionian)', group: 'Western Modes', size: 12, degrees: [0, 2, 4, 5, 7, 9, 11] },
@@ -281,6 +298,19 @@ export function scalesFor(tuning: Tuning): ScaleDefinition[] {
   return SCALES.filter(s => s.size === tuning.degrees.length);
 }
 
+/** Does this custom scale fit the tuning? */
+export function customFits(custom: CustomScale | null, tuning: Tuning): custom is CustomScale {
+  return !!custom && custom.size === tuning.degrees.length;
+}
+
+/** The chosen scale's steps from the root, or null for every note: All
+ *  notes, or a scale that doesn't fit the tuning. */
+export function scaleSteps(s: Pick<PitchSettings, 'scaleId' | 'customScale'>, tuning: Tuning): readonly number[] | null {
+  if (s.scaleId === CUSTOM_SCALE) return customFits(s.customScale, tuning) ? s.customScale.steps : null;
+  const scale = s.scaleId === ALL_NOTES ? undefined : getScale(s.scaleId);
+  return scale && scale.size === tuning.degrees.length ? scale.degrees : null;
+}
+
 // ── The pitch grid ──────────────────────────────────────────────
 
 /** What picks the pitch grid: a view of the composition's snap settings. */
@@ -290,6 +320,8 @@ export interface PitchSettings {
   scaleId: string;
   tunedFrom: number;
   hidePitchLines: boolean;
+  /** The pitch circle's scale, used when `scaleId` is 'custom'. */
+  customScale: CustomScale | null;
 }
 
 /** Snapping's view of the pitch grid (the staff's is `staffGridFor`). */
@@ -307,11 +339,8 @@ const pitchSets = new Map<string, PitchSet>();
 export function pitchSetFor(s: PitchSettings): PitchSet | null {
   if (s.hidePitchLines) return null;
   const tuning = resolveTuning(s.tuning);
-  const scale = s.scaleId === ALL_NOTES ? null : getScale(s.scaleId);
   // A scale that doesn't fit the tuning plays as All notes.
-  const steps = scale && scale.size === tuning.degrees.length
-    ? scale.degrees
-    : tuning.degrees.map((_, i) => i);
+  const steps = scaleSteps(s, tuning) ?? tuning.degrees.map((_, i) => i);
   const key = `${tuning.key}|${s.root}|${steps.join(',')}|${s.tunedFrom}`;
   const hit = pitchSets.get(key);
   if (hit) return hit;
@@ -374,13 +403,12 @@ const staffGrids = new Map<string, StaffGrid>();
 export function staffGridFor(s: Omit<PitchSettings, 'hidePitchLines'>): StaffGrid {
   const tuning = resolveTuning(s.tuning);
   const n = tuning.degrees.length;
-  const scale = s.scaleId === ALL_NOTES ? null : getScale(s.scaleId);
-  const fits = !!scale && scale.size === n;
-  const key = `${tuning.key}|${s.root}|${fits ? scale!.id : ALL_NOTES}|${s.tunedFrom}`;
+  const steps = scaleSteps(s, tuning);
+  const key = `${tuning.key}|${s.root}|${steps?.join(',') ?? ALL_NOTES}|${s.tunedFrom}`;
   const hit = staffGrids.get(key);
   if (hit) return hit;
 
-  const inScale = new Set(fits ? scale!.degrees.map(step => (s.root + step) % n) : tuning.degrees.map((_, i) => i));
+  const inScale = new Set(steps ? steps.map(step => (s.root + step) % n) : tuning.degrees.map((_, i) => i));
   const anchor = s.tunedFrom * CENTS_PER_SEMITONE;
   const lines: StaffLine[] = [];
   const first = Math.floor((MIN_PITCH_CENTS - anchor) / tuning.period) - 1;
@@ -404,7 +432,7 @@ export function staffGridFor(s: Omit<PitchSettings, 'hidePitchLines'>): StaffGri
   const gaps = tuning.degrees.map((d, i) => (tuning.degrees[i + 1] ?? tuning.period) - d);
   const grid: StaffGrid = {
     lines,
-    hasScale: fits,
+    hasScale: steps !== null,
     minStep: Math.min(...gaps),
     period: tuning.period,
     twelveEdo: isTwelveEdo(s.tuning),
@@ -449,6 +477,13 @@ export function prismOffsets(spec: ChordSpec, s: Pick<PitchSettings, 'tuning' | 
 /** Drop float noise so equal pitches compare equal (0.0001 ¢ is inaudible). */
 function roundCents(c: number): number {
   return Math.round(c * 10000) / 10000;
+}
+
+/** The pitch circle's audition pitch for a degree: in the period starting at
+ *  degree 0 at or above `from` (C4 by default). */
+export function degreeCents(s: Pick<PitchSettings, 'tuning' | 'tunedFrom'>, degree: number, from = 6000): number {
+  const t = resolveTuning(s.tuning);
+  return from + s.tunedFrom * CENTS_PER_SEMITONE + (t.degrees[degree] ?? 0);
 }
 
 /** Where the root sits within the octave, in cents above C. */
