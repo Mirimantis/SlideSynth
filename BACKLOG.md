@@ -312,11 +312,11 @@ Implementation comes first: block out every control so it works, then hold the d
     - **Track rows:** Mute (speaker), Solo (headphones) and MIDI arm (MIDI socket) are icon toggles with `aria-pressed`; Edit tone… and Delete track sit in a ⋯ menu (`ActionMenuButton` in `ui/menu.tsx`, fixed to the viewport so the panel doesn't clip it). The letters M S I T X are gone.
     - **Transform box:** an Ungroup pill beside its top-right corner when it holds a group (not for a point selection). It runs `edit.ungroup`.
     - **Group outline** (`canvas/group-outline.ts`): a dashed amber outline around every group with a hovered or selected member, on the active track. A hovered, unselected group is labelled *Group · n*. Hover is hit-tested against grouped curves only, in Select.
-- [x] **16.6 Space and audition** *(S)*
+- [x] **16.6 Space and audition** *(S, PR #85)*
   - Space becomes Play/Pause only.
   - Holding A auditions: the Draw preview, and a Y guide's pitch while dragging it (absorbs 13.6).
   - ~~Scrubbing is audible by default; *Settings › Audible scrub* turns it off.~~ Done in 16.3.
-  - **Done (this PR):**
+  - **Done (PR #85):**
     - **Space** (`transport.playPause`) acts on the press: play, pause, stop a recording, or cancel a count-in. No hold, no 250 ms timer; auto-repeat is ignored.
     - **A** (`preview.audition`, a hold command) auditions:
       - in Draw (not Perform), the cursor's pitch — both Draw Preview modes, Prism chords included;
@@ -375,7 +375,7 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
   - Drag down from the top ruler to create an X guide; drag out of the pitch ruler (13.4) to create a Y guide. Release back over the ruler to cancel.
   - Reuse the existing guide-drag path, including self-excluding snap.
   - A click without a drag still scrubs the playhead. The Add buttons stay as the keyboard-reachable path.
-- [x] **13.6 Audition a Y guide's pitch while dragging** *(S — done in 16.6)*
+- [x] **13.6 Audition a Y guide's pitch while dragging** *(S — done in 16.6, PR #85)*
   - Sounds the snapped pitch on the current track's tone. Sequence after 13.5.
   - **Absorbed by 16.6** (2026-09-24): the key is hold A, not Space. Y guides can already be dragged, so this doesn't need to wait for 13.5.
 - [ ] **13.9 Octave highlight follows the key root** *(S)*
