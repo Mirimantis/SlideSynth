@@ -2,7 +2,9 @@ import '@preact/signals'; // components re-render when the store fields they rea
 import { store } from '../state/store';
 import { history } from '../state/history';
 import { centsToNoteName, CENTS_PER_SEMITONE } from '../constants';
-import { getMovableSelection } from '../model/curve-groups';
+import { anyGrouped, getMovableSelection } from '../model/curve-groups';
+import type { CommandRegistry } from '../commands/registry';
+import { CommandButton } from './command-button';
 import { pitchPoints } from '../model/curve';
 import { openTonePicker } from './tone-picker';
 import type { BezierCurve, GuideDefinition, Track } from '../types';
@@ -14,13 +16,14 @@ function liveTrack(trackId: string): Track | undefined {
 }
 
 /**
- * Object Properties (BACKLOG 15.4): the selected guide, the selected point, or
- * the active track (with a Move-to-track picker when the selection is one
- * movable unit). A Preact component that reads the store while rendering, so
- * it follows undo, redo and edits made elsewhere. Handlers look state up by id
- * when they run, since an undo swaps in new objects.
+ * Selection (BACKLOG 15.4; was Object Properties until 16.5): the selected
+ * guide, the selected point, or the active track, with the selected curves
+ * above it — a group says so and offers Ungroup (13.12), and one movable unit
+ * gets a Move-to-track picker. A Preact component that reads the store while
+ * rendering, so it follows undo, redo and edits made elsewhere. Handlers look
+ * state up by id when they run, since an undo swaps in new objects.
  */
-export function PropertyPanel() {
+export function PropertyPanel({ commands }: { commands: CommandRegistry }) {
   const st = store.getState();
   const comp = st.composition;
 
@@ -35,7 +38,7 @@ export function PropertyPanel() {
   const curve = curveId ? track.curves.find(c => c.id === curveId) : undefined;
   if (curve && st.selectedPointIndex !== null) return <PointProps curve={curve} index={st.selectedPointIndex} />;
 
-  return <TrackProps track={track} />;
+  return <TrackProps track={track} commands={commands} />;
 }
 
 function GuideProps({ guide, locked }: { guide: GuideDefinition; locked: boolean }) {
@@ -103,14 +106,17 @@ function GuideProps({ guide, locked }: { guide: GuideDefinition; locked: boolean
   );
 }
 
-function TrackProps({ track }: { track: Track }) {
+function TrackProps({ track, commands }: { track: Track; commands: CommandRegistry }) {
   const st = store.getState();
   const comp = st.composition;
   const trackId = track.id;
   const tone = comp.toneLibrary.find(t => t.id === track.toneId);
+  const selected = track.curves.filter(c => st.selectedCurveIds.has(c.id));
   // 8.2: a selection that forms one movable unit can move to another track.
   const movable = getMovableSelection(st);
   const otherTracks = movable ? comp.tracks.filter(t => t.id !== trackId) : [];
+  const grouped = anyGrouped(selected);
+  const isOneGroup = !!movable && grouped;
 
   const moveTo = (target: string) => {
     if (!movable || !target) return;
@@ -134,12 +140,24 @@ function TrackProps({ track }: { track: Track }) {
 
   return (
     <>
+      {selected.length > 0 && (
+        <>
+          <div class="prop-section prop-selection-line">
+            <div class="prop-label">
+              {isOneGroup ? `Group of ${selected.length} curves`
+                : selected.length === 1 ? 'Curve'
+                : `${selected.length} curves${grouped ? ', some grouped' : ''}`}
+            </div>
+            {grouped && (
+              <CommandButton id="edit.ungroup" commands={commands} class="snap-preset-btn prop-ungroup-btn">
+                Ungroup
+              </CommandButton>
+            )}
+          </div>
+        </>
+      )}
       {movable && (
         <>
-          <div class="panel-header">Curve</div>
-          <div class="prop-section">
-            <div class="prop-label">{movable.curveIds.length > 1 ? `Group (${movable.curveIds.length} curves)` : 'Curve'}</div>
-          </div>
           <div class="prop-section">
             <div class="prop-label">Move to track</div>
             {/* Always shows "-- Select --": picking moves the curves and the
@@ -156,9 +174,9 @@ function TrackProps({ track }: { track: Track }) {
               <option value={NEW_TRACK_VALUE}>+ New track</option>
             </select>
           </div>
-          <div class="panel-header" style={{ marginTop: '8px' }}>Track</div>
         </>
       )}
+      {selected.length > 0 && <div class="panel-header" style={{ marginTop: '8px' }}>Track</div>}
       <div class="prop-section">
         <div class="prop-label">Track</div>
         <div class="prop-value">{track.name}</div>

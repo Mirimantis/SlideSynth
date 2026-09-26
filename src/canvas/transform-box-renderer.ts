@@ -5,15 +5,25 @@ const HANDLE_SIZE = 8; // px, full width/height of handle square
 const HALF = HANDLE_SIZE / 2;
 const ARROW_SIZE = 14; // px, size of octave arrow buttons
 const ARROW_GAP = 10;  // px, gap between box edge and arrow
+const UNGROUP_W = 52;  // px, the Ungroup button right of the box's top-right corner
+const UNGROUP_H = 16;
+const UNGROUP_GAP = 12;
+
+/** The Ungroup button's rectangle, beside the top-right handle. */
+function ungroupRect(right: number, top: number) {
+  return { x: right + UNGROUP_GAP, y: top - UNGROUP_H / 2, w: UNGROUP_W, h: UNGROUP_H };
+}
 
 /**
- * Render a transform bounding box with 8 drag handles.
+ * Render a transform bounding box with 8 drag handles, the octave arrows, and
+ * an Ungroup button when the box holds a group.
  */
 export function renderTransformBox(
   ctx: CanvasRenderingContext2D,
   vp: Viewport,
   bbox: BoundingBox,
   activeHandle: TransformHandle | null,
+  showUngroup = false,
 ): void {
   // Convert bbox corners to screen space
   // Note: in world coords, maxY = higher pitch = lower screen Y
@@ -71,6 +81,24 @@ export function renderTransformBox(
 
   drawArrow(ctx, arrowX, upY, ARROW_SIZE, 'up');
   drawArrow(ctx, arrowX, downY, ARROW_SIZE, 'down');
+
+  if (showUngroup) {
+    const r = ungroupRect(right, top);
+    ctx.beginPath();
+    ctx.roundRect(r.x, r.y, r.w, r.h, r.h / 2);
+    ctx.fillStyle = 'rgba(30, 40, 60, 0.9)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 202, 40, 0.8)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255, 202, 40, 0.95)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Ungroup', r.x + r.w / 2, r.y + r.h / 2 + 0.5);
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
+  }
 }
 
 function drawArrow(
@@ -101,6 +129,7 @@ export function hitTestTransformBox(
   screenY: number,
   bbox: BoundingBox,
   vp: Viewport,
+  showUngroup = false,
 ): TransformHandle | null {
   const tl = vp.worldToScreen(bbox.minX, bbox.maxY);
   const br = vp.worldToScreen(bbox.maxX, bbox.minY);
@@ -122,6 +151,11 @@ export function hitTestTransformBox(
     { x: left, y: midY, id: 'left' },
     { x: right, y: midY, id: 'right' },
   ];
+
+  if (showUngroup) {
+    const r = ungroupRect(right, top);
+    if (screenX >= r.x && screenX <= r.x + r.w && screenY >= r.y && screenY <= r.y + r.h) return 'ungroup';
+  }
 
   // Check octave arrows first
   const arrowX = midX;
@@ -159,7 +193,7 @@ export function getTransformCursor(handle: TransformHandle | null): string {
     case 'top': case 'bottom': return 'ns-resize';
     case 'topLeft': case 'bottomRight': return 'nwse-resize';
     case 'topRight': case 'bottomLeft': return 'nesw-resize';
-    case 'octaveUp': case 'octaveDown': return 'pointer';
+    case 'octaveUp': case 'octaveDown': case 'ungroup': return 'pointer';
     default: return 'default';
   }
 }
