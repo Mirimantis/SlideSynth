@@ -246,7 +246,7 @@ Implementation comes first: block out every control so it works, then hold the d
       - **Prism chord voice 0 was ignored when performing.** Perform and the Space-hold preview put the primary voice at the cursor, assuming chord voice 0 has offset 0. That's false for a symmetric chord, which centres on the cursor, and for a root octave offset (8.13). So a symmetric triad sounded and recorded its middle voice twice and never its lowest. Draw was right all along. The primary planchette still tracks the cursor (magnetic, HUD); what it sounds, records and draws on the rail adds voice 0's offset (`primaryChordOffset`).
       - **Harmony planchettes froze on the rail** when the pointer left the canvas; only the primary was cleared.
       - **The Draw tool's hover overlays** (the chord preview dots, the preview line, the Slice marker) froze where Perform was entered.
-- [x] **16.3 Top bar, menus, Settings, Tempo drawer** *(M–L)*
+- [x] **16.3 Top bar, menus, Settings, Tempo drawer** *(M–L, PR #82)*
   - **Top bar:**
     - the transport, with the Record split button and its menu, and Keep;
     - Snap and Loop side by side;
@@ -256,7 +256,7 @@ Implementation comes first: block out every control so it works, then hold the d
   - **Settings dialog:** MIDI device, audible scrub.
   - **Tempo drawer:** BPM, time signature, metronome and its volume.
   - The Transport drawer goes away.
-  - **Done (this PR):**
+  - **Done (PR #82):**
     - **Top bar** (`ui/top-bar.tsx`): a Preact component made of small parts that each read only what they show. Left to right:
       - name and length;
       - File, Edit and View menus;
