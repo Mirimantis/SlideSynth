@@ -1,5 +1,6 @@
 import type { BoundingBox, TransformHandle } from '../types';
 import type { Viewport } from './viewport';
+import { themeColor } from '../theme/theme';
 
 const HANDLE_SIZE = 8; // px, full width/height of handle square
 const HALF = HANDLE_SIZE / 2;
@@ -41,13 +42,13 @@ export function renderTransformBox(
   const midY = (top + bottom) / 2;
 
   // Semi-transparent fill
-  ctx.fillStyle = 'rgba(100, 180, 255, 0.06)';
+  ctx.fillStyle = themeColor('transform-fill');
   ctx.fillRect(left, top, w, h);
 
   // Dashed outline
   ctx.beginPath();
   ctx.rect(left, top, w, h);
-  ctx.strokeStyle = 'rgba(100, 180, 255, 0.6)';
+  ctx.strokeStyle = themeColor('transform-outline');
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
   ctx.stroke();
@@ -67,8 +68,8 @@ export function renderTransformBox(
 
   for (const handle of handles) {
     const isActive = handle.id === activeHandle;
-    ctx.fillStyle = isActive ? '#fff' : 'rgba(100, 180, 255, 0.9)';
-    ctx.strokeStyle = 'rgba(40, 80, 120, 0.8)';
+    ctx.fillStyle = isActive ? themeColor('transform-handle-active') : themeColor('transform-handle');
+    ctx.strokeStyle = themeColor('transform-handle-edge');
     ctx.lineWidth = 1;
     ctx.fillRect(handle.x - HALF, handle.y - HALF, HANDLE_SIZE, HANDLE_SIZE);
     ctx.strokeRect(handle.x - HALF, handle.y - HALF, HANDLE_SIZE, HANDLE_SIZE);
@@ -86,12 +87,12 @@ export function renderTransformBox(
     const r = ungroupRect(right, top);
     ctx.beginPath();
     ctx.roundRect(r.x, r.y, r.w, r.h, r.h / 2);
-    ctx.fillStyle = 'rgba(30, 40, 60, 0.9)';
+    ctx.fillStyle = themeColor('ungroup-bg');
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 202, 40, 0.8)';
+    ctx.strokeStyle = themeColor('ungroup-edge');
     ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.fillStyle = 'rgba(255, 202, 40, 0.95)';
+    ctx.fillStyle = themeColor('ungroup-text');
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -116,9 +117,9 @@ function drawArrow(
   ctx.lineTo(cx - half, base);
   ctx.lineTo(cx + half, base);
   ctx.closePath();
-  ctx.fillStyle = 'rgba(100, 180, 255, 0.85)';
+  ctx.fillStyle = themeColor('transform-arrow');
   ctx.fill();
-  ctx.strokeStyle = 'rgba(40, 80, 120, 0.8)';
+  ctx.strokeStyle = themeColor('transform-handle-edge');
   ctx.lineWidth = 1;
   ctx.stroke();
 }

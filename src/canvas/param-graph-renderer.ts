@@ -2,6 +2,7 @@ import type { Lane } from '../types';
 import type { Viewport } from './viewport';
 import type { ParamViewport } from './param-viewport';
 import { getLaneSegmentControlPoints } from '../model/lane';
+import { themeColor } from '../theme/theme';
 
 const POINT_RADIUS = 4;
 const HANDLE_RADIUS = 3;
@@ -36,7 +37,7 @@ export function renderParamGraph(
   ctx.lineWidth = 1;
   for (const v of [0, 0.5, 1]) {
     const y = pvp.worldToScreen(0, v).sy;
-    ctx.strokeStyle = v === 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)';
+    ctx.strokeStyle = v === 0.5 ? themeColor('param-grid-mid') : themeColor('param-grid');
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(width, y);
@@ -49,7 +50,7 @@ export function renderParamGraph(
   let step = 1;
   while ((rightBeat - leftBeat) / step > 40) step *= 2;
   const firstBeat = Math.ceil(leftBeat / step) * step;
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.strokeStyle = themeColor('param-grid-faint');
   for (let b = firstBeat; b <= rightBeat; b += step) {
     const x = pvp.beatToX(b);
     ctx.beginPath();
@@ -62,7 +63,7 @@ export function renderParamGraph(
   if (playheadBeat !== null) {
     const x = pvp.beatToX(playheadBeat);
     if (x >= 0 && x <= width) {
-      ctx.strokeStyle = 'rgba(255,80,80,0.7)';
+      ctx.strokeStyle = themeColor('param-playhead');
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x, 0);
@@ -77,7 +78,7 @@ export function renderParamGraph(
   const endX = pvp.beatToX(pitchEndBeat);
 
   // ── Range boundary markers at the pitch curve's start / end ──
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.strokeStyle = themeColor('param-range');
   ctx.lineWidth = 1;
   for (const x of [startX, endX]) {
     ctx.beginPath();
@@ -144,9 +145,9 @@ export function renderParamGraph(
     const isSel = selectedIdx === i;
     ctx.beginPath();
     ctx.arc(s.sx, s.sy, POINT_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = isSel ? '#fff' : color;
+    ctx.fillStyle = isSel ? themeColor('point-highlight') : color;
     ctx.fill();
-    ctx.strokeStyle = isSel ? '#fff' : '#000';
+    ctx.strokeStyle = isSel ? themeColor('point-highlight') : themeColor('point-outline');
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }

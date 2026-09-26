@@ -7,6 +7,7 @@ import {
 import type { ScaleDefinition } from '../utils/scales';
 import { isNoteInScale, isMicrotonal, getScaleNotes } from '../utils/scales';
 import { getAdaptiveBeatStep } from '../utils/snap';
+import { themeColor } from '../theme/theme';
 
 /**
  * Render the background staff grid onto a canvas.
@@ -52,28 +53,28 @@ export function renderStaff(
         const inScale = isNoteInScale(n, scaleRoot!, scale!);
         if (inScale) {
           if (isCCents(n)) {
-            ctx.strokeStyle = '#5577aa';
+            ctx.strokeStyle = themeColor('staff-key-c');
             ctx.lineWidth = 2.0;
           } else if (isNaturalCents(n)) {
-            ctx.strokeStyle = '#445566';
+            ctx.strokeStyle = themeColor('staff-key-natural');
             ctx.lineWidth = 1.0;
           } else {
-            ctx.strokeStyle = '#4a6080';
+            ctx.strokeStyle = themeColor('staff-key-accidental');
             ctx.lineWidth = 1.0;
           }
         } else {
-          ctx.strokeStyle = '#1a1a28';
+          ctx.strokeStyle = themeColor('staff-key-out');
           ctx.lineWidth = 0.3;
         }
       } else {
         if (isCCents(n)) {
-          ctx.strokeStyle = '#445';
+          ctx.strokeStyle = themeColor('staff-line-c');
           ctx.lineWidth = 1.5;
         } else if (isNaturalCents(n)) {
-          ctx.strokeStyle = '#334';
+          ctx.strokeStyle = themeColor('staff-line-natural');
           ctx.lineWidth = 0.8;
         } else {
-          ctx.strokeStyle = '#262636';
+          ctx.strokeStyle = themeColor('staff-line-accidental');
           ctx.lineWidth = 0.5;
         }
       }
@@ -92,12 +93,12 @@ export function renderStaff(
       if (showLabel) {
         if (highlightIntegers) {
           if (inScaleForLabel) {
-            ctx.fillStyle = isCCents(n) ? '#99bbdd' : '#667788';
+            ctx.fillStyle = isCCents(n) ? themeColor('staff-key-label-c') : themeColor('staff-key-label');
           } else {
-            ctx.fillStyle = '#333';
+            ctx.fillStyle = themeColor('staff-key-label-out');
           }
         } else {
-          ctx.fillStyle = isCCents(n) ? '#8899aa' : '#556';
+          ctx.fillStyle = isCCents(n) ? themeColor('staff-label-c') : themeColor('staff-label');
         }
         ctx.font = isCCents(n) ? 'bold 11px monospace' : '10px monospace';
         ctx.textBaseline = 'middle';
@@ -118,7 +119,7 @@ export function renderStaff(
       const centsOff = Math.round(n - Math.floor(n / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE);
       const isFractional = centsOff !== 0;
 
-      ctx.strokeStyle = '#4a6a8a';
+      ctx.strokeStyle = themeColor('staff-micro-line');
       ctx.lineWidth = 1.0;
       if (isFractional) {
         ctx.setLineDash([4, 4]);
@@ -134,7 +135,7 @@ export function renderStaff(
       // Guide line label: nearest lower 12-TET line + cents remainder
       if (vp.state.zoomY >= 0.14) {
         const baseCents = Math.floor(n / CENTS_PER_SEMITONE) * CENTS_PER_SEMITONE;
-        ctx.fillStyle = '#6688aa';
+        ctx.fillStyle = themeColor('staff-micro-label');
         ctx.font = '9px monospace';
         ctx.textBaseline = 'middle';
         const label = centsOff > 0
@@ -171,13 +172,13 @@ export function renderStaff(
         const isQuarter = subdiv === SUBDIVISIONS_PER_BEAT && s % (SUBDIVISIONS_PER_BEAT / 4) === 0;
 
         if (isEighth) {
-          ctx.strokeStyle = '#2a2a3a';
+          ctx.strokeStyle = themeColor('staff-subdiv-eighth');
           ctx.lineWidth = 0.8;
         } else if (isQuarter) {
-          ctx.strokeStyle = '#222233';
+          ctx.strokeStyle = themeColor('staff-subdiv-quarter');
           ctx.lineWidth = 0.5;
         } else {
-          ctx.strokeStyle = '#1e1e2a';
+          ctx.strokeStyle = themeColor('staff-subdiv-fine');
           ctx.lineWidth = 0.3;
         }
 
@@ -195,10 +196,10 @@ export function renderStaff(
     const isMeasureStart = measureLen > 0 && b % measureLen === 0;
 
     if (isMeasureStart) {
-      ctx.strokeStyle = '#556';
+      ctx.strokeStyle = themeColor('staff-measure');
       ctx.lineWidth = 1.5;
     } else {
-      ctx.strokeStyle = '#334';
+      ctx.strokeStyle = themeColor('staff-beat');
       ctx.lineWidth = 0.8;
     }
 
@@ -209,7 +210,7 @@ export function renderStaff(
 
     // Beat number label at the bottom
     if (isMeasureStart || vp.state.zoomX >= 50) {
-      ctx.fillStyle = isMeasureStart ? '#8899aa' : '#445';
+      ctx.fillStyle = isMeasureStart ? themeColor('staff-measure-label') : themeColor('staff-beat-label');
       ctx.font = isMeasureStart ? 'bold 11px monospace' : '10px monospace';
       ctx.textBaseline = 'bottom';
       ctx.fillText(String(b + 1), sx + 3, height - 4);

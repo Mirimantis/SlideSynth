@@ -99,8 +99,11 @@ src/
 ├── ui/              # Preact (.tsx): top-bar, menu, tool-strip, settings-dialog, tempo-panel, snap-panel,
 │                    #   prism-panel, track-list, property-panel, tool-property-panel. Vanilla DOM: toolbar
 │                    #   (Key/Scale), drawer, tone builder/picker, older dialogs, HUDs
+├── theme/           # theme.ts: the canvas's reader for the colour tokens in styles/theme.css
 ├── export/          # json-export (.gliss envelope + migrations), wav-export, midi-import
 └── utils/           # bezier-math, snap, snap-magnetic, snap-presets, scales, harmonics, svg helpers
+
+styles/              # theme.css (every colour, as tokens), main / panels / dialogs (layout, via var())
 ```
 
 ### Mechanisms that work well
@@ -262,7 +265,12 @@ Scrubbing the ruler is audible by default, replacing the Space-hold scrub previe
 
 #### Themeable from the start
 
-Every colour, in both the CSS and the canvas renderers, comes from one set of named theme tokens (16.7), so the theme session (16.9) can restyle the app without touching layout or logic. The chrome's ornaments, such as hand-drawn vector scrollwork, will be SVG assets that go through the icon pipeline (PR #59).
+Every colour, in both the CSS and the canvas renderers, comes from one set of named theme tokens (16.7), so the theme session (16.9) can restyle the app without touching layout or logic.
+
+- **Where:** [styles/theme.css](styles/theme.css) defines every colour as a CSS custom property on `:root`. `*-rgb` tokens hold bare channels for colours used at several alphas: `rgba(var(--accent-rgb), 0.12)`.
+- **Chrome:** the other stylesheets, help.html and inline component styles use `var(--token)`.
+- **Canvas:** renderers call `themeColor('staff-line-c')` ([src/theme/theme.ts](src/theme/theme.ts)). `loadTheme()` resolves each token from the page's stylesheets through a probe element, so the canvas and the chrome can't drift. A theme switch calls it again and redraws.
+- **Enforced:** `theme.test.ts` fails on a colour literal anywhere else. The exceptions are data: the preset tones' colours and a new tone's default. It also fails on a token that's used but not defined, or that the canvas expects but the CSS lacks. The chrome's ornaments, such as hand-drawn vector scrollwork, will be SVG assets that go through the icon pipeline (PR #59).
 
 ### Layout before Phase 16 (for reference)
 

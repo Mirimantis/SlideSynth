@@ -323,9 +323,19 @@ Implementation comes first: block out every control so it works, then hold the d
       - while dragging a Y guide, the guide's pitch on the active track's tone, retuned as it moves (13.6).
     - The audition re-syncs every frame while A is held, so it picks up a guide drag that starts mid-hold and the cursor coming back onto the canvas. Nothing sounds while a recording is armed. Losing window focus stops it (the keyup would never arrive).
     - The old Space-hold ruler scrub preview is gone; audible scrubbing (16.3) covers it.
-- [ ] **16.7 Theme tokens** *(M)*
+- [x] **16.7 Theme tokens** *(M, PR #86)*
   - Move every colour onto one set of named tokens. Today there are ~130 literal colours across `styles/*.css` and ~60 in the canvas renderers and `constants.ts`. The canvas should read the same tokens as the CSS, not a parallel list.
   - No visual change; it's the groundwork that lets 16.9 restyle the app without touching layout or logic.
+  - **Done (PR #86):**
+    - **`styles/theme.css`**, linked first by index.html and help.html, defines every colour as a token.
+      - Channels: `--accent-rgb` and the like, for alpha variants.
+      - Chrome: surfaces, text, borders, states (record, solo, danger, gold, perform, …).
+      - Canvas: staff, rulers, points, transform box, group outline, marquee, guides, loop, playhead, planchette, metronome flash, the Prism spectrum, the Parameters Graph.
+    - **CSS:** main / panels / dialogs use only `var()`. The colour variables left main.css's `:root`; its layout variables stayed. help.html dropped its own copy of the palette, keeping a lighter dim text as `--help-text-dim`.
+    - **Canvas:** `src/theme/theme.ts` lists the canvas tokens (`CANVAS_TOKENS`) and resolves them once at startup (`loadTheme()`, through a probe element, so `rgba(var(--x-rgb), a)` works). Renderers call `themeColor(token)`; `prismSpectrum()` replaces `PRISM_RAINBOW_STOPS`. The module-level colour constants (guide, loop, planchette, echo) are gone.
+    - **Components:** the tone fallback, the toast and the scissors dot use tokens too.
+    - **Guard** (`theme.test.ts`): no colour literal outside theme.css, except the preset tones' colours, a new tone's default and the missing-token magenta; no `var()` without a definition; every canvas token defined. Vitest now loads `styles/*.css` (`test.css.include`) so the test can read them.
+    - Values are unchanged, so nothing looks different.
 - [ ] **16.8 Perform experience** *(L, own planning session — after 16.2)*
   - Make Perform feel like picking up an instrument, not sitting down in an airplane cockpit: a musical instrument with a recording studio attached, visually distinct from the compose DAW.
   - **Session inputs:**

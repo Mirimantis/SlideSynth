@@ -1,0 +1,182 @@
+/*
+ * Theme tokens (BACKLOG 16.7): every colour in the app, in one place.
+ *
+ * The stylesheets use these through var(), and the canvas renderers read the
+ * same tokens through src/theme/theme.ts (themeColor('staff-line-c')), so a
+ * theme is a new set of values here and nothing else. No other stylesheet or
+ * renderer may name a colour directly; theme.test.ts checks.
+ *
+ * `*-rgb` tokens are bare channels, for colours used at several alphas:
+ * rgba(var(--accent-rgb), 0.12).
+ *
+ * Not tokens: a tone's own colour (it's data, saved in the file) and the
+ * shape-only SVG icons (they take currentColor).
+ */
+
+:root {
+  /* ── Channels (for alpha variants) ───────────────────────────── */
+  --accent-rgb: 79, 195, 247;
+  --surface-rgb: 15, 52, 96;
+  --selection-rgb: 100, 180, 255;
+  --gold-rgb: 255, 202, 40;
+  --perform-rgb: 206, 147, 216;
+  --echo-rgb: 200, 160, 255;
+  --danger-rgb: 198, 40, 40;
+  --playhead-rgb: 244, 67, 54;
+  --loop-in-rgb: 76, 175, 80;
+  --shadow-rgb: 0, 0, 0;
+  --highlight-rgb: 255, 255, 255;
+  --overlay-rgb: 20, 20, 28;
+
+  /* ── Chrome: surfaces and text ───────────────────────────────── */
+  --bg: #1a1a2e;
+  --bg-light: #16213e;
+  --surface: #0f3460;
+  --hover-bg: #1a4a80;
+  --text: #e0e0e0;
+  --text-dim: #888;
+  --text-muted: #8899aa;
+  /* The user manual's dim text: a shade lighter for long-form reading. */
+  --help-text-dim: #999;
+  /* Text on a bright fill (accent, solo, the chord badge). */
+  --text-on-bright: #000;
+  /* Text on a warm fill (a queued Record, a lit Keep). */
+  --text-on-warm: #1b2430;
+  /* Text on a strong fill (the reds). */
+  --text-on-strong: #fff;
+  --accent: #4fc3f7;
+  --accent-hover: #81d4fa;
+  --border: #335;
+  --border-strong: #446;
+  --border-faint: #262636;
+
+  /* Icons: shape-only SVGs take currentColor, driven from here. */
+  --icon-color: var(--text-dim);
+  --icon-color-hover: var(--accent-hover);
+  --icon-color-active: var(--accent);
+
+  /* ── Chrome: states ──────────────────────────────────────────── */
+  /* Perform mode (16.2): its own colour, so playing reads as a different
+     place from composing. A first cue only; 16.8 designs it. */
+  --perform: #ce93d8;
+  --danger: #c62828;
+  --danger-text: #ef5350;
+  --error-text: #ff8a80;
+  --record: #e53935;
+  --record-text: #ff6464;
+  --solo: #f9a825;
+  --gold: #ffca28;
+  --midi-armed: #555;
+  /* The Harmonic Prism's lavender (projection echoes, the Prism status). */
+  --echo-text: #d0b0ff;
+  --chord-badge-bg: linear-gradient(135deg, #ef5350, #ffca28, #66bb6a, #42a5f5, #ab47bc);
+  --toast-bg: rgba(30, 30, 36, 0.95);
+  --toast-text: #f0f0f0;
+  /* The Parameters Graph's resize handle. */
+  --handle-bg: #2a3a55;
+  --handle-edge-light: #46618f;
+  --handle-edge-dark: #1a2742;
+  /* A track whose tone is missing. */
+  --tone-fallback: #888;
+
+  /* ── Canvas: staff ───────────────────────────────────────────── */
+  /* Pitch lines with no key: C, the other naturals, accidentals. */
+  --staff-line-c: #445;
+  --staff-line-natural: #334;
+  --staff-line-accidental: #262636;
+  --staff-label-c: #8899aa;
+  --staff-label: #556;
+  /* Pitch lines with a key: in-scale C, naturals, accidentals; out of scale. */
+  --staff-key-c: #5577aa;
+  --staff-key-natural: #445566;
+  --staff-key-accidental: #4a6080;
+  --staff-key-out: #1a1a28;
+  --staff-key-label-c: #99bbdd;
+  --staff-key-label: #667788;
+  --staff-key-label-out: #333;
+  /* Microtonal scale degrees. */
+  --staff-micro-line: #4a6a8a;
+  --staff-micro-label: #6688aa;
+  /* Beat lines: measure, beat, then eighth / sixteenth-quarter / finest subdivision. */
+  --staff-measure: #556;
+  --staff-beat: #334;
+  --staff-subdiv-eighth: #2a2a3a;
+  --staff-subdiv-quarter: #222233;
+  --staff-subdiv-fine: #1e1e2a;
+  --staff-measure-label: #8899aa;
+  --staff-beat-label: #445;
+
+  /* ── Canvas: rulers ──────────────────────────────────────────── */
+  --ruler-border: #446;
+  --ruler-divider: #334;
+  --ruler-seconds-bg: #161628;
+  --ruler-seconds-minor: #334;
+  --ruler-seconds-major: #667;
+  --ruler-seconds-label: #99a;
+  --ruler-beats-bg: #111122;
+  --ruler-tick-measure: #778;
+  --ruler-tick-beat: #556;
+  --ruler-tick-eighth: #556;
+  --ruler-tick-quarter: #445;
+  --ruler-tick-fine: #334;
+  --ruler-measure-label: #aabbcc;
+  --ruler-beat-label: #667;
+
+  /* ── Canvas: curves and editing ──────────────────────────────── */
+  --point-outline: #000;
+  --point-highlight: #fff;
+  --transform-fill: rgba(var(--selection-rgb), 0.06);
+  --transform-outline: rgba(var(--selection-rgb), 0.6);
+  --transform-handle: rgba(var(--selection-rgb), 0.9);
+  --transform-handle-active: #fff;
+  --transform-handle-edge: rgba(40, 80, 120, 0.8);
+  --transform-arrow: rgba(var(--selection-rgb), 0.85);
+  --ungroup-bg: rgba(30, 40, 60, 0.9);
+  --ungroup-edge: rgba(var(--gold-rgb), 0.8);
+  --ungroup-text: rgba(var(--gold-rgb), 0.95);
+  --group-outline: rgba(var(--gold-rgb), 0.7);
+  --group-label: rgba(var(--gold-rgb), 0.9);
+  --marquee-fill: rgba(120, 180, 255, 0.1);
+  --marquee-stroke: rgba(180, 210, 255, 0.85);
+  --scissors-dot: #ff5252;
+  --scissors-dot-edge: #fff;
+
+  /* ── Canvas: guides and loop ─────────────────────────────────── */
+  --guide: #7a8fa6;
+  --guide-selected: #e6c84a;
+  --guide-label-bg: rgba(20, 28, 40, 0.85);
+  --loop-in: #4caf50;
+  --loop-out: #b71c1c;
+  --loop-range: rgba(var(--loop-in-rgb), 0.07);
+
+  /* ── Canvas: playhead, planchette, metronome ─────────────────── */
+  --playhead: #f44336;
+  --planchette: #f44336;
+  --planchette-ghost: rgba(var(--playhead-rgb), 0.35);
+  --planchette-pulse: #ffeb3b;
+  --loop-flash: #fff;
+  --metronome-downbeat: #ffeb3b;
+  --metronome-accent: #ffb74d;
+  --metronome-beat: #f4a3a3;
+
+  /* ── Canvas: Harmonic Prism ──────────────────────────────────── */
+  --echo-stroke: rgba(var(--echo-rgb), 0.55);
+  --prism-primary-edge: #fff;
+  --prism-harmony-edge: rgba(var(--highlight-rgb), 0.85);
+  /* The spectrum, in voice order: primary, then each harmony; the last two
+     appear only in gradients. */
+  --spectrum-1: #ff5555;
+  --spectrum-2: #ffaa33;
+  --spectrum-3: #ffee44;
+  --spectrum-4: #66dd66;
+  --spectrum-5: #55ccff;
+  --spectrum-6: #aa77ff;
+  --spectrum-7: #ff66cc;
+
+  /* ── Canvas: Parameters Graph ────────────────────────────────── */
+  --param-grid: rgba(var(--highlight-rgb), 0.12);
+  --param-grid-mid: rgba(var(--highlight-rgb), 0.06);
+  --param-grid-faint: rgba(var(--highlight-rgb), 0.04);
+  --param-playhead: rgba(255, 80, 80, 0.7);
+  --param-range: rgba(var(--highlight-rgb), 0.18);
+}

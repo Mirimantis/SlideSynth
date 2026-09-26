@@ -2,7 +2,7 @@ import type { PlanchetteState } from '../types';
 import type { RecordedSample } from '../model/curve';
 import type { Viewport } from './viewport';
 import { RULER_HEIGHT } from './interaction';
-import { PRISM_RAINBOW_STOPS } from './projection-renderer';
+import { prismSpectrum, themeColor } from '../theme/theme';
 
 // Terminology:
 //   Rail       — the stationary vertical line in the middle of the canvas while
@@ -18,10 +18,6 @@ export const PLANCHETTE_SCREEN_X_RATIO = RAIL_SCREEN_X_RATIO;
 
 export const PULSE_DURATION_MS = 200;
 export const LOOP_WRAP_FLASH_MS = 250;
-const PRIMARY_COLOR = '#f44336';
-const GHOST_COLOR = 'rgba(244, 67, 54, 0.35)';
-const PULSE_COLOR = '#ffeb3b';
-const LOOP_FLASH_COLOR = '#ffffff';
 const CIRCLE_RADIUS = 9;
 
 /**
@@ -37,7 +33,7 @@ export function rainbowGlyphStroke(
   r: number,
 ): CanvasGradient {
   const grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
-  const stops = PRISM_RAINBOW_STOPS;
+  const stops = prismSpectrum();
   for (let i = 0; i < stops.length; i++) {
     grad.addColorStop(i / Math.max(1, stops.length - 1), stops[i]!);
   }
@@ -57,11 +53,11 @@ export function prismPlanchetteStroke(
   if (voiceId === 'primary') return rainbowGlyphStroke(ctx, cx, cy, r);
   if (voiceId.startsWith('harmony-')) {
     const idx = Number(voiceId.slice('harmony-'.length));
-    if (Number.isInteger(idx) && idx >= 0 && idx < PRISM_RAINBOW_STOPS.length) {
-      return PRISM_RAINBOW_STOPS[idx]!;
+    if (Number.isInteger(idx) && idx >= 0 && idx < prismSpectrum().length) {
+      return prismSpectrum()[idx]!;
     }
   }
-  return PRIMARY_COLOR;
+  return themeColor('planchette');
 }
 
 /**
@@ -73,7 +69,7 @@ export function renderPlanchetteGlyph(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
-  color: string | CanvasGradient = PRIMARY_COLOR,
+  color: string | CanvasGradient = themeColor('planchette'),
 ): void {
   const r = CIRCLE_RADIUS;
   ctx.save();
@@ -136,7 +132,7 @@ export function renderRail(
   ctx.beginPath();
   ctx.moveTo(railX, topY);
   ctx.lineTo(railX, canvasHeight);
-  ctx.strokeStyle = loopFlashing ? LOOP_FLASH_COLOR : PRIMARY_COLOR;
+  ctx.strokeStyle = loopFlashing ? themeColor('loop-flash') : themeColor('planchette');
   ctx.lineWidth = loopFlashing ? 4 : 2;
   if (loopFlashing) ctx.globalAlpha = Math.max(0.3, loopFlashAlpha);
   ctx.stroke();
@@ -148,7 +144,7 @@ export function renderRail(
   ctx.lineTo(railX + 6, topY);
   ctx.lineTo(railX, topY + 9);
   ctx.closePath();
-  ctx.fillStyle = PRIMARY_COLOR;
+  ctx.fillStyle = themeColor('planchette');
   ctx.fill();
   ctx.restore();
 }
@@ -210,7 +206,7 @@ export function renderPlanchettes(
       if (Math.abs(rawScreenY - snappedScreenY) > 2 && rawScreenY >= topY && rawScreenY <= canvasHeight) {
         ctx.beginPath();
         ctx.arc(railX, rawScreenY, 3, 0, Math.PI * 2);
-        ctx.fillStyle = GHOST_COLOR;
+        ctx.fillStyle = themeColor('planchette-ghost');
         ctx.fill();
       }
     }
@@ -224,7 +220,7 @@ export function renderPlanchettes(
 
     const color: string | CanvasGradient = prismMode
       ? prismPlanchetteStroke(ctx, railX, snappedScreenY, CIRCLE_RADIUS, p.voiceId)
-      : PRIMARY_COLOR;
+      : themeColor('planchette');
     renderPlanchetteGlyph(ctx, railX, snappedScreenY, color);
 
     // Snap-line-cross pulse — brief horizontal flash at the planchette's Y.
@@ -236,7 +232,7 @@ export function renderPlanchettes(
       ctx.beginPath();
       ctx.moveTo(0, snappedScreenY);
       ctx.lineTo(canvasWidth, snappedScreenY);
-      ctx.strokeStyle = PULSE_COLOR;
+      ctx.strokeStyle = themeColor('planchette-pulse');
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.restore();
@@ -265,7 +261,7 @@ export function renderMetronomeFlash(
   const maxRadius = tier === 'downbeat' ? 22 : tier === 'accent' ? 16 : 12;
   const radius = CIRCLE_RADIUS + (maxRadius - CIRCLE_RADIUS) * t;
   const lineWidth = tier === 'downbeat' ? 2.5 : 1.8;
-  const color = tier === 'downbeat' ? '#ffeb3b' : tier === 'accent' ? '#ffb74d' : '#f4a3a3';
+  const color = themeColor(tier === 'downbeat' ? 'metronome-downbeat' : tier === 'accent' ? 'metronome-accent' : 'metronome-beat');
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.strokeStyle = color;
@@ -284,16 +280,16 @@ export function renderMetronomeFlash(
 export function recordingTrailColor(voiceId: string, prismMode: boolean): string {
   if (prismMode) {
     if (voiceId === 'primary') {
-      return PRISM_RAINBOW_STOPS[Math.floor(PRISM_RAINBOW_STOPS.length / 2)] ?? PRIMARY_COLOR;
+      return prismSpectrum()[Math.floor(prismSpectrum().length / 2)] ?? themeColor('planchette');
     }
     if (voiceId.startsWith('harmony-')) {
       const idx = Number(voiceId.slice('harmony-'.length));
-      if (Number.isInteger(idx) && idx >= 0 && idx < PRISM_RAINBOW_STOPS.length) {
-        return PRISM_RAINBOW_STOPS[idx]!;
+      if (Number.isInteger(idx) && idx >= 0 && idx < prismSpectrum().length) {
+        return prismSpectrum()[idx]!;
       }
     }
   }
-  return PRIMARY_COLOR;
+  return themeColor('planchette');
 }
 
 /**
@@ -390,9 +386,9 @@ export function renderFreePlanchette(
     if (Math.abs(rawScreenY - snappedScreenY) > 2 && rawScreenY >= topY && rawScreenY <= canvasHeight) {
       ctx.beginPath();
       ctx.arc(screenX, rawScreenY, 3, 0, Math.PI * 2);
-      ctx.fillStyle = GHOST_COLOR;
+      ctx.fillStyle = themeColor('planchette-ghost');
       ctx.fill();
     }
   }
-  renderPlanchetteGlyph(ctx, screenX, snappedScreenY, PRIMARY_COLOR);
+  renderPlanchetteGlyph(ctx, screenX, snappedScreenY, themeColor('planchette'));
 }

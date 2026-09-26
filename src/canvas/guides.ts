@@ -1,11 +1,9 @@
 import type { GuideDefinition } from '../types';
 import type { Viewport } from './viewport';
 import { centsToNoteName } from '../constants';
+import { themeColor } from '../theme/theme';
 
-export const GUIDE_COLOR = '#7a8fa6';
-export const GUIDE_SELECTED_COLOR = '#e6c84a';
 const LABEL_FONT = '11px monospace';
-const LABEL_BG = 'rgba(20, 28, 40, 0.85)';
 /** How far past the edge to draw the label so it sits in the ruler/staff strip. */
 const LABEL_PADDING = 4;
 
@@ -22,7 +20,7 @@ export function renderGuides(
   ctx.save();
   for (const g of guides) {
     const isSelected = g.id === selectedGuideId;
-    const color = isSelected ? GUIDE_SELECTED_COLOR : GUIDE_COLOR;
+    const color = isSelected ? themeColor('guide-selected') : themeColor('guide');
     ctx.strokeStyle = color;
     ctx.lineWidth = isSelected ? 1.6 : 1;
     ctx.setLineDash(isSelected ? [] : [4, 4]);
@@ -59,7 +57,7 @@ function drawLabel(
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
   const w = ctx.measureText(text).width;
-  ctx.fillStyle = LABEL_BG;
+  ctx.fillStyle = themeColor('guide-label-bg');
   ctx.fillRect(x - 2, y - 8, w + 4, 16);
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);

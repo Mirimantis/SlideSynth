@@ -5,26 +5,12 @@
 }
 
 :root {
-  --bg: #1a1a2e;
-  --bg-light: #16213e;
-  --surface: #0f3460;
-  --text: #e0e0e0;
-  --text-dim: #888;
-  --accent: #4fc3f7;
-  --accent-hover: #81d4fa;
+  /* Layout. Colours are theme tokens: styles/theme.css. */
   --panel-width: 200px;
   --panel-width-left: 240px;
   --rail-width: 48px;
   --param-graph-height: 140px;
   --toolbar-height: auto;
-  /* Icon colors — SVG shapes use currentColor; these drive it dynamically so
-     the UI can be re-skinned without editing the SVG geometry. */
-  --icon-color: var(--text-dim);
-  --icon-color-hover: var(--accent-hover);
-  --icon-color-active: var(--accent);
-  /* Perform mode (BACKLOG 16.2): its own colour, so playing reads as a
-     different place from composing. A first cue only; 16.8 designs it. */
-  --perform: #ce93d8;
 }
 
 /* ── SVG icons (shape-only assets, color from currentColor) ─────── */
@@ -68,7 +54,7 @@ body {
 
 #toolbar {
   background: var(--bg-light);
-  border-bottom: 1px solid #335;
+  border-bottom: 1px solid var(--border);
   padding: 6px 12px;
   flex-shrink: 0;
   display: flex;
@@ -136,7 +122,7 @@ body {
 }
 
 .icon-toggle:hover {
-  background: rgba(79, 195, 247, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
   color: var(--icon-color-hover);
 }
 
@@ -184,7 +170,7 @@ body.perform-mode #canvas-container::after {
 }
 
 .comp-name-input:hover {
-  border-color: #335;
+  border-color: var(--border);
 }
 
 .comp-name-input:focus {
@@ -238,9 +224,9 @@ body.perform-mode #canvas-container::after {
   margin-top: 4px;
   padding: 4px 0;
   background: var(--bg-light);
-  border: 1px solid #446;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.5);
   min-width: 220px;
   z-index: 950;
 }
@@ -264,7 +250,7 @@ body.perform-mode #canvas-container::after {
 }
 
 .menu-dropdown .menu-item:hover:not(:disabled) {
-  background: rgba(79, 195, 247, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
 }
 
 .menu-dropdown .menu-item:disabled {
@@ -287,7 +273,7 @@ body.perform-mode #canvas-container::after {
 .menu-divider {
   height: 1px;
   margin: 4px 0;
-  background: #335;
+  background: var(--border);
 }
 
 /* ── Top-bar icon buttons: Undo / Redo, Settings ─────────────────── */
@@ -333,7 +319,7 @@ body.perform-mode #canvas-container::after {
 .toolbar-group input[type="number"] {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 3px 6px;
   width: 60px;
@@ -343,7 +329,7 @@ body.perform-mode #canvas-container::after {
 .toolbar-group select {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 3px 6px;
   font-size: 0.8rem;
@@ -362,7 +348,7 @@ body.perform-mode #canvas-container::after {
 .transport button {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 4px 10px;
   cursor: pointer;
@@ -371,7 +357,7 @@ body.perform-mode #canvas-container::after {
 }
 
 .transport button:hover:not(:disabled) {
-  background: #1a4a80;
+  background: var(--hover-bg);
 }
 
 .transport button:disabled {
@@ -392,7 +378,7 @@ body.perform-mode #canvas-container::after {
 }
 
 .toolbar-loop-label:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--highlight-rgb), 0.05);
 }
 
 .toolbar-loop-label input {
@@ -405,8 +391,8 @@ body.perform-mode #canvas-container::after {
   position: relative;
   width: 30px;
   height: 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid #335;
+  background: rgba(var(--highlight-rgb), 0.1);
+  border: 1px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
@@ -414,7 +400,7 @@ body.perform-mode #canvas-container::after {
 }
 
 .toggle-switch-track:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--highlight-rgb), 0.15);
 }
 
 .toggle-switch-track input {
@@ -482,7 +468,7 @@ body.perform-mode #canvas-container::after {
 
 #property-panel {
   background: var(--bg-light);
-  border-right: 1px solid #335;
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -490,11 +476,11 @@ body.perform-mode #canvas-container::after {
 
 #property-panel {
   border-right: none;
-  border-left: 1px solid #335;
+  border-left: 1px solid var(--border);
 }
 
 #tool-prop-content {
-  border-bottom: 1px solid #262636;
+  border-bottom: 1px solid var(--border-faint);
 }
 
 /* Object Properties takes only the height its content needs — it must NOT grow
@@ -522,7 +508,7 @@ body.perform-mode #canvas-container::after {
   font-weight: 600;
   color: var(--accent);
   padding: 8px 12px;
-  border-bottom: 1px solid #335;
+  border-bottom: 1px solid var(--border);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   cursor: pointer;
@@ -543,14 +529,14 @@ body.perform-mode #canvas-container::after {
 }
 
 .panel-header:hover {
-  background: rgba(79, 195, 247, 0.06);
+  background: rgba(var(--accent-rgb), 0.06);
 }
 
 /* ── Icon rail + sliding drawers (WS3) ─────────────────────────── */
 
 #rail {
   background: var(--bg-light);
-  border-right: 1px solid #335;
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -576,12 +562,12 @@ body.perform-mode #canvas-container::after {
 }
 
 .rail-icon:hover {
-  background: rgba(79, 195, 247, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--icon-color-hover);
 }
 
 .rail-icon.active {
-  background: rgba(79, 195, 247, 0.16);
+  background: rgba(var(--accent-rgb), 0.16);
   color: var(--icon-color-active);
 }
 
@@ -592,7 +578,7 @@ body.perform-mode #canvas-container::after {
   width: 28px;
   height: 1px;
   margin: 4px 0;
-  background: #335;
+  background: var(--border);
 }
 
 .tool-strip {
@@ -619,7 +605,7 @@ body.perform-mode #canvas-container::after {
 }
 
 .strip-btn:hover {
-  background: rgba(79, 195, 247, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--icon-color-hover);
 }
 
@@ -644,7 +630,7 @@ body.perform-mode #canvas-container::after {
 }
 
 .strip-btn.perform-entry:hover {
-  background: rgba(206, 147, 216, 0.15);
+  background: rgba(var(--perform-rgb), 0.15);
 }
 
 .strip-btn.perform-entry.active {
@@ -671,8 +657,8 @@ body.perform-mode #canvas-container::after {
   height: 13px;
   padding: 0 2px;
   border-radius: 7px;
-  background: linear-gradient(135deg, #ef5350, #ffca28, #66bb6a, #42a5f5, #ab47bc);
-  color: #000;
+  background: var(--chord-badge-bg);
+  color: var(--text-on-bright);
   font-size: 9px;
   font-weight: 700;
   line-height: 13px;
@@ -706,10 +692,10 @@ body.perform-mode #canvas-container::after {
   max-height: 100%;
   box-sizing: border-box;
   background: var(--bg-light);
-  border-right: 1px solid #335;
-  border-bottom: 1px solid #335;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   border-bottom-right-radius: 6px;
-  box-shadow: 4px 4px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: 4px 4px 16px rgba(var(--shadow-rgb), 0.35);
   transform: translateX(-105%);
   transition: transform 0.18s ease;
   pointer-events: auto;
@@ -727,7 +713,7 @@ body.perform-mode #canvas-container::after {
   font-weight: 600;
   color: var(--accent);
   padding: 8px 12px;
-  border-bottom: 1px solid #335;
+  border-bottom: 1px solid var(--border);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   user-select: none;
@@ -756,7 +742,7 @@ body.perform-mode #canvas-container::after {
   background: var(--surface);
   color: var(--text);
   border: none;
-  border-top: 1px solid #335;
+  border-top: 1px solid var(--border);
   padding: 8px;
   cursor: pointer;
   font-size: 0.85rem;
@@ -764,7 +750,7 @@ body.perform-mode #canvas-container::after {
 }
 
 #add-track-btn:hover {
-  background: #1a4a80;
+  background: var(--hover-bg);
 }
 
 .placeholder-text {
@@ -808,9 +794,9 @@ body.perform-mode #canvas-container::after {
   left: 0;
   right: 0;
   height: 7px;
-  background: #2a3a55;
-  border-top: 1px solid #46618f;
-  border-bottom: 1px solid #1a2742;
+  background: var(--handle-bg);
+  border-top: 1px solid var(--handle-edge-light);
+  border-bottom: 1px solid var(--handle-edge-dark);
   cursor: row-resize;
   z-index: 4;
   transition: background 0.15s;
@@ -825,7 +811,7 @@ body.perform-mode #canvas-container::after {
   width: 28px;
   height: 0;
   transform: translate(-50%, -50%);
-  border-top: 2px dotted rgba(255, 255, 255, 0.35);
+  border-top: 2px dotted rgba(var(--highlight-rgb), 0.35);
 }
 
 #param-resize-handle:hover,
@@ -912,7 +898,7 @@ body.perform-mode #canvas-container::after {
   font-family: ui-monospace, 'SF Mono', Consolas, monospace;
   font-weight: 600;
   letter-spacing: 0.03em;
-  text-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 0 10px rgba(var(--shadow-rgb), 0.6);
   z-index: 12;
   pointer-events: none;
   display: flex;
@@ -950,13 +936,13 @@ body.perform-mode #canvas-container::after {
   top: 48px; /* below the ruler, same as pitch HUD */
   left: 12px;
   color: var(--text);
-  background: rgba(20, 20, 28, 0.78);
+  background: rgba(var(--overlay-rgb), 0.78);
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 0.78rem;
   font-family: ui-monospace, 'SF Mono', Consolas, monospace;
   letter-spacing: 0.03em;
-  text-shadow: 0 0 8px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 0 8px rgba(var(--shadow-rgb), 0.7);
   z-index: 12;
   pointer-events: none;
   display: flex;
@@ -992,7 +978,7 @@ body.perform-mode #canvas-container::after {
   font-size: 8rem;
   font-weight: 700;
   color: var(--accent);
-  text-shadow: 0 0 24px rgba(79, 195, 247, 0.6);
+  text-shadow: 0 0 24px rgba(var(--accent-rgb), 0.6);
   z-index: 13; /* above the pitch HUD (12) */
   pointer-events: none;
 }
@@ -1007,10 +993,10 @@ body.perform-mode #canvas-container::after {
   align-items: center;
   gap: 6px;
   padding: 16px 24px;
-  background: rgba(20, 20, 28, 0.92);
+  background: rgba(var(--overlay-rgb), 0.92);
   border: 1px solid var(--accent);
   border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 24px rgba(79, 195, 247, 0.25);
+  box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.6), 0 0 24px rgba(var(--accent-rgb), 0.25);
   color: var(--text);
   z-index: 14; /* above the countdown overlay (13) */
   pointer-events: none;
@@ -1027,7 +1013,7 @@ body.perform-mode #canvas-container::after {
   font-size: 2.4rem;
   font-weight: 700;
   color: var(--accent);
-  text-shadow: 0 0 12px rgba(79, 195, 247, 0.5);
+  text-shadow: 0 0 12px rgba(var(--accent-rgb), 0.5);
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
 }
@@ -1065,9 +1051,9 @@ body.perform-mode #canvas-container::after {
   position: fixed;
   min-width: 180px;
   background: var(--bg-light);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.5);
   padding: 4px 0;
   z-index: 50;
   font-size: 0.85rem;
@@ -1085,7 +1071,7 @@ body.perform-mode #canvas-container::after {
 }
 
 .context-menu-item:hover:not(.disabled) {
-  background: #1a4a80;
+  background: var(--hover-bg);
 }
 
 .context-menu-item.disabled {
@@ -1106,8 +1092,8 @@ body.perform-mode #canvas-container::after {
 /* Record button */
 .record-btn {
   background: var(--surface);
-  color: #ff6464;
-  border: 1px solid #335;
+  color: var(--record-text);
+  border: 1px solid var(--border);
 }
 
 .record-btn[hidden] {
@@ -1115,36 +1101,36 @@ body.perform-mode #canvas-container::after {
 }
 
 .record-btn.armed {
-  color: #fff;
-  background: #c62828;
+  color: var(--text-on-strong);
+  background: var(--danger);
   animation: recordPulse 1s infinite;
 }
 
 .record-btn.recording {
-  color: #fff;
-  background: #e53935;
+  color: var(--text-on-strong);
+  background: var(--record);
 }
 
 /* Queued one-pass record (10.5) — waiting for the loop point, not yet
    capturing, so amber rather than the armed/recording reds. */
 .record-btn.queued {
-  color: #1b2430;
-  background: #f9a825;
-  border-color: #f9a825;
+  color: var(--text-on-warm);
+  background: var(--solo);
+  border-color: var(--solo);
   animation: recordPulse 1s infinite;
 }
 
 /* Keep button — lights when the rolling buffer holds a keepable phrase (10.2) */
 .keep-btn {
   background: var(--surface);
-  color: #8899aa;
-  border: 1px solid #335;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
 }
 
 .keep-btn.keepable:not(:disabled) {
-  color: #1b2430;
-  background: #ffca28;
-  border-color: #ffca28;
+  color: var(--text-on-warm);
+  background: var(--gold);
+  border-color: var(--gold);
 }
 
 @keyframes recordPulse {

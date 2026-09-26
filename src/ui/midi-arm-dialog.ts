@@ -31,7 +31,7 @@ export function openMidiArmDialog(opts: {
 
     const trackRows = opts.tracks.map((t, i) => {
       const tone = opts.toneLibrary.find(x => x.id === t.toneId);
-      const color = tone?.color ?? '#888';
+      const color = tone?.color ?? 'var(--tone-fallback)';
       const toneName = tone?.name ?? '?';
       return `
         <label class="midi-arm-row">

@@ -6,7 +6,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(var(--shadow-rgb), 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -21,7 +21,7 @@
   width: 90%;
   max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 48px rgba(var(--shadow-rgb), 0.5);
 }
 
 .modal h2 {
@@ -97,7 +97,7 @@
 .tb-row select {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 4px 8px;
   font-size: 0.85rem;
@@ -110,7 +110,7 @@
 .tb-row input[type="color"] {
   width: 36px;
   height: 28px;
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
   background: transparent;
@@ -123,7 +123,7 @@
 }
 
 .tb-section {
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px;
   margin-bottom: 12px;
@@ -162,7 +162,7 @@
 .tb-layer select {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 3px 4px;
   font-size: 0.75rem;
@@ -176,7 +176,7 @@
 .tb-layer input[type="number"] {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 4px;
   width: 55px;
@@ -197,7 +197,7 @@
 .tb-small-btn {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 8px;
   font-size: 0.75rem;
@@ -206,7 +206,7 @@
 }
 
 .tb-small-btn:hover {
-  background: #1a4a80;
+  background: var(--hover-bg);
 }
 
 .tb-actions {
@@ -215,13 +215,13 @@
   gap: 8px;
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid #335;
+  border-top: 1px solid var(--border);
 }
 
 .tb-btn {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 6px 16px;
   font-size: 0.85rem;
@@ -230,7 +230,7 @@
 }
 
 .tb-btn:hover:not(:disabled) {
-  background: #1a4a80;
+  background: var(--hover-bg);
 }
 
 .tb-btn:disabled {
@@ -240,7 +240,7 @@
 
 .tb-btn.primary {
   background: var(--accent);
-  color: #000;
+  color: var(--text-on-bright);
   font-weight: 600;
   border-color: var(--accent);
 }
@@ -251,7 +251,7 @@
 
 /* Inline error text for the preset save dialog. */
 .ps-warning {
-  color: #ff8a80;
+  color: var(--error-text);
   font-size: 0.75rem;
   margin: 4px 0 0 68px;
 }
@@ -276,7 +276,7 @@
   transition: background 0.12s;
 }
 .midi-arm-row:hover {
-  background: rgba(79, 195, 247, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 .midi-arm-row input[type="radio"] {
   accent-color: var(--accent);
@@ -309,7 +309,7 @@
   flex: 1;
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 3px 6px;
   font-size: 0.8rem;
@@ -319,7 +319,7 @@
 .snap-preset-btn {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid #335;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 8px;
   font-size: 0.75rem;
@@ -327,7 +327,7 @@
   transition: background 0.15s;
 }
 .snap-preset-btn:hover:not(:disabled) {
-  background: #1a4a80;
+  background: var(--hover-bg);
 }
 .snap-preset-btn:disabled {
   opacity: 0.4;
@@ -338,7 +338,7 @@
 
 .prop-section {
   padding: 6px 12px;
-  border-bottom: 1px solid #262636;
+  border-bottom: 1px solid var(--border-faint);
 }
 
 .prop-label {
@@ -424,9 +424,9 @@
 .tone-picker-popup {
   position: fixed;
   background: var(--bg-light);
-  border: 1px solid #446;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.5);
   min-width: 180px;
   max-height: 300px;
   overflow-y: auto;
@@ -439,7 +439,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 6px 10px;
-  border-bottom: 1px solid #335;
+  border-bottom: 1px solid var(--border);
 }
 
 .tone-picker-item {
@@ -452,12 +452,12 @@
 }
 
 .tone-picker-item:hover {
-  background: rgba(79, 195, 247, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
 }
 
 .tone-picker-item.current {
-  background: rgba(79, 195, 247, 0.2);
-  outline: 1px solid rgba(79, 195, 247, 0.3);
+  background: rgba(var(--accent-rgb), 0.2);
+  outline: 1px solid rgba(var(--accent-rgb), 0.3);
 }
 
 .tone-picker-swatch {
@@ -503,6 +503,6 @@
 }
 
 .prop-tone-clickable:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--highlight-rgb), 0.08);
   text-decoration: underline;
 }

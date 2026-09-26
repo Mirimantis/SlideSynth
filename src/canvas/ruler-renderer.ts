@@ -1,6 +1,7 @@
 import type { Viewport } from './viewport';
 import { RULER_HEIGHT, SECONDS_RULER_HEIGHT, BEAT_RULER_HEIGHT } from './interaction';
 import { getAdaptiveBeatStep } from '../utils/snap';
+import { themeColor } from '../theme/theme';
 
 /**
  * Render the ruler bar at the top of the canvas.
@@ -18,7 +19,7 @@ export function renderRuler(
   renderBeatRuler(ctx, vp, width, measureLen, SECONDS_RULER_HEIGHT);
 
   // Outer bottom border of the whole ruler area
-  ctx.strokeStyle = '#446';
+  ctx.strokeStyle = themeColor('ruler-border');
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, RULER_HEIGHT - 0.5);
@@ -40,11 +41,11 @@ function renderSecondsRuler(
   const h = SECONDS_RULER_HEIGHT;
 
   // Slightly lighter background so the two rulers are visually distinct
-  ctx.fillStyle = '#161628';
+  ctx.fillStyle = themeColor('ruler-seconds-bg');
   ctx.fillRect(0, 0, width, h);
 
   // Divider between seconds ruler and beat ruler
-  ctx.strokeStyle = '#334';
+  ctx.strokeStyle = themeColor('ruler-divider');
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, h - 0.5);
@@ -73,7 +74,7 @@ function renderSecondsRuler(
 
   // Minor ticks
   if (drawMinor) {
-    ctx.strokeStyle = '#334';
+    ctx.strokeStyle = themeColor('ruler-seconds-minor');
     ctx.lineWidth = 0.5;
     const firstMinor = Math.ceil(minSecond / minorStep) * minorStep;
     for (let s = firstMinor; s <= maxSecond + 1e-6; s += minorStep) {
@@ -90,9 +91,9 @@ function renderSecondsRuler(
   }
 
   // Major ticks + labels
-  ctx.strokeStyle = '#667';
+  ctx.strokeStyle = themeColor('ruler-seconds-major');
   ctx.lineWidth = 0.8;
-  ctx.fillStyle = '#99a';
+  ctx.fillStyle = themeColor('ruler-seconds-label');
   ctx.font = '9px monospace';
   ctx.textBaseline = 'top';
 
@@ -161,7 +162,7 @@ function renderBeatRuler(
   const baseY = topY + h; // screen-y of ruler bottom edge
 
   // Dark background
-  ctx.fillStyle = '#111122';
+  ctx.fillStyle = themeColor('ruler-beats-bg');
   ctx.fillRect(0, topY, width, h);
 
   // Visible beat range
@@ -202,13 +203,13 @@ function renderBeatRuler(
         let color: string;
         if (isEighthTick) {
           tickH = 7;
-          color = '#556';
+          color = themeColor('ruler-tick-eighth');
         } else if (isQuarterTick) {
           tickH = 5;
-          color = '#445';
+          color = themeColor('ruler-tick-quarter');
         } else {
           tickH = 3;
-          color = '#334';
+          color = themeColor('ruler-tick-fine');
         }
 
         ctx.strokeStyle = color;
@@ -224,11 +225,11 @@ function renderBeatRuler(
     let tickH: number;
     if (isMeasure) {
       tickH = h - 2; // full-height tick
-      ctx.strokeStyle = '#778';
+      ctx.strokeStyle = themeColor('ruler-tick-measure');
       ctx.lineWidth = 1.5;
     } else {
       tickH = 10;
-      ctx.strokeStyle = '#556';
+      ctx.strokeStyle = themeColor('ruler-tick-beat');
       ctx.lineWidth = 0.8;
     }
 
@@ -240,13 +241,13 @@ function renderBeatRuler(
     // Labels — measure numbers always, beat numbers when zoomed in
     if (isMeasure) {
       const measureNum = b / measureLen + 1;
-      ctx.fillStyle = '#aabbcc';
+      ctx.fillStyle = themeColor('ruler-measure-label');
       ctx.font = 'bold 10px monospace';
       ctx.textBaseline = 'top';
       ctx.fillText(String(measureNum), sx + 3, topY + 2);
     } else if (zx >= 50) {
       const beatInMeasure = (b % measureLen) + 1;
-      ctx.fillStyle = '#667';
+      ctx.fillStyle = themeColor('ruler-beat-label');
       ctx.font = '9px monospace';
       ctx.textBaseline = 'top';
       ctx.fillText(String(beatInMeasure), sx + 2, topY + 4);

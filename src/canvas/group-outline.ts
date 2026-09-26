@@ -1,6 +1,7 @@
 import type { BezierCurve, Track } from '../types';
 import type { Viewport } from './viewport';
 import { computeMultiCurveBBox } from '../model/curve';
+import { themeColor } from '../theme/theme';
 
 /**
  * Group outlines (BACKLOG 13.12 / 16.5): the members of a group share one
@@ -50,7 +51,7 @@ export function renderGroupOutlines(ctx: CanvasRenderingContext2D, vp: Viewport,
     const h = br.sy - tl.sy + PAD * 2;
 
     ctx.save();
-    ctx.strokeStyle = 'rgba(255, 202, 40, 0.7)';
+    ctx.strokeStyle = themeColor('group-outline');
     ctx.lineWidth = 1.5;
     ctx.setLineDash([6, 3]);
     ctx.beginPath();
@@ -59,7 +60,7 @@ export function renderGroupOutlines(ctx: CanvasRenderingContext2D, vp: Viewport,
     ctx.setLineDash([]);
     if (labelled) {
       ctx.font = '10px sans-serif';
-      ctx.fillStyle = 'rgba(255, 202, 40, 0.9)';
+      ctx.fillStyle = themeColor('group-label');
       ctx.textBaseline = 'bottom';
       ctx.fillText(`Group · ${members.length}`, x + 2, y - 2);
     }
