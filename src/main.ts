@@ -62,7 +62,8 @@ import { ToolStrip } from './ui/tool-strip';
 import { SnapPanel, type SnapActions } from './ui/snap-panel';
 import { PrismPanel } from './ui/prism-panel';
 import { TuningPanel, type TuningActions } from './ui/tuning-panel';
-import { nearestNote, pitchLabel, pitchName, prismOffsets, staffGridFor, tuningKey } from './tuning/tuning';
+import { nearestNote, pitchLabel, pitchName, prismOffsets, resolveTuning, staffGridFor, tuningKey } from './tuning/tuning';
+import { fretLinePitch } from './model/frets';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
 import { createDrawerRail } from './ui/drawer';
@@ -427,8 +428,10 @@ function syncAudition() {
     : undefined;
   const tone = activeTone();
   if (guide?.orientation === 'y' && tone) {
-    if (preview.isDrawPreviewActive(GUIDE_AUDITION_VOICE)) preview.updateDrawPitch(guide.position, GUIDE_AUDITION_VOICE);
-    else preview.startDrawPreview(tone, guide.position, GUIDE_AUDITION_VOICE);
+    // The line being dragged: one of an octave fret's, or the fret itself.
+    const pitch = fretLinePitch(guide, interaction.draggingGuideLine, resolveTuning(st.tuning).period);
+    if (preview.isDrawPreviewActive(GUIDE_AUDITION_VOICE)) preview.updateDrawPitch(pitch, GUIDE_AUDITION_VOICE);
+    else preview.startDrawPreview(tone, pitch, GUIDE_AUDITION_VOICE);
     return;
   }
   if (preview.isDrawPreviewActive(GUIDE_AUDITION_VOICE)) preview.stopDrawPreview(GUIDE_AUDITION_VOICE);
@@ -3020,7 +3023,10 @@ function draw() {
   // Snap guides — between loop markers and the playhead so the playhead always
   // wins Z-order. Skipped when guidesVisible is off (matches snap participation).
   if (state.guidesVisible && comp.guides.length > 0) {
-    renderGuides(fgCtx, viewport, comp.guides, rect.width, rect.height, state.selectedGuideId, c => pitchLabel(state, c));
+    renderGuides(
+      fgCtx, viewport, comp.guides, rect.width, rect.height, state.selectedGuideId,
+      c => pitchLabel(state, c), resolveTuning(state.tuning).period,
+    );
   }
   // The handle frets and beat guides are dragged out of (13.17), over the ruler's left end.
   renderGuideHandle(fgCtx, GUIDE_HANDLE_WIDTH, RULER_HEIGHT, state.guidesLocked);

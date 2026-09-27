@@ -8,7 +8,8 @@ import { pointSelectionOf, pointCount, hasPoint, type PointRef, type PointSelect
 import { snapToGrid } from '../utils/snap';
 import { currentSnapConfig } from '../state/snap-config';
 import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
-import { prismOffsets } from '../tuning/tuning';
+import { prismOffsets, resolveTuning } from '../tuning/tuning';
+import { moveFretLine } from '../model/frets';
 import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/curve-groups';
 import { nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
@@ -92,6 +93,9 @@ export interface InteractionState {
   draggingLoopMarker: 'start' | 'end' | null;
   /** ID of the guide currently being dragged. */
   draggingGuideId: string | null;
+  /** Which line of an octave fret is being dragged (13.18): `k` periods from
+   *  its placed pitch. 0 for single frets and beat guides. */
+  draggingGuideLine: number;
   /** A drag out of the guide handle (13.17): where it started, and the new
    *  guide once the direction has picked one (down: a fret, right: a beat
    *  guide). Releasing back over the handle cancels. */
@@ -163,6 +167,7 @@ export function createInteraction(
     scrubbing: false,
     draggingLoopMarker: null,
     draggingGuideId: null,
+    draggingGuideLine: 0,
     guideHandleDrag: null,
     cursorScreenY: 0,
     cursorInCanvas: false,
@@ -260,6 +265,7 @@ export function createInteraction(
         if (!store.getState().guidesVisible) store.setGuidesVisible(true);
         handleOut.guideId = guide.id;
         istate.draggingGuideId = guide.id;
+        istate.draggingGuideLine = 0;
         canvas.style.cursor = orientation === 'y' ? 'row-resize' : 'col-resize';
         canvas.title = '';
       }
@@ -273,10 +279,16 @@ export function createInteraction(
       if (guide) {
         const dragSnap = currentSnapConfig({ zoomX: vp.state.zoomX, atBeat: raw.wx, excludeGuideId: guide.id });
         const snappedNow = dragSnap.enabled ? snapToGrid(raw.wx, raw.wy, dragSnap) : raw;
-        const next = guide.orientation === 'x'
-          ? Math.max(0, snappedNow.wx)
-          : Math.max(MIN_PITCH_CENTS, Math.min(MAX_PITCH_CENTS, snappedNow.wy));
-        store.updateGuide(guide.id, { position: next });
+        if (guide.orientation === 'x') {
+          store.updateGuide(guide.id, { position: Math.max(0, snappedNow.wx) });
+        } else {
+          // The dragged line goes where the cursor snaps; an octave fret's
+          // other lines follow by the same interval (13.18).
+          const pitch = Math.max(MIN_PITCH_CENTS, Math.min(MAX_PITCH_CENTS, snappedNow.wy));
+          const moved = moveFretLine(guide, istate.draggingGuideLine, pitch, resolveTuning(store.getState().tuning).period);
+          istate.draggingGuideLine = moved.k;
+          store.updateGuide(guide.id, { position: moved.position });
+        }
       }
       return;
     }
@@ -539,11 +551,12 @@ export function createInteraction(
       && !state.guidesLocked
       && state.composition.guides.length > 0
     ) {
-      const hitGuideId = hitTestGuides(vp, sx, sy, state.composition.guides);
-      if (hitGuideId) {
+      const hit = hitTestGuides(vp, sx, sy, state.composition.guides, resolveTuning(state.tuning).period);
+      if (hit) {
         history.snapshot();
-        store.setSelectedGuide(hitGuideId);
-        istate.draggingGuideId = hitGuideId;
+        store.setSelectedGuide(hit.id);
+        istate.draggingGuideId = hit.id;
+        istate.draggingGuideLine = hit.k;
         return;
       }
       // Missed: in Select mode, clear guide selection so the tool actions below

@@ -1,7 +1,8 @@
 import type { AppState, Composition } from '../types';
 import type { SnapConfig } from '../utils/snap';
 import { getAdaptiveSubdivisions } from '../utils/snap';
-import { pitchSetFor, prismOffsets } from '../tuning/tuning';
+import { pitchSetFor, prismOffsets, resolveTuning } from '../tuning/tuning';
+import { fretLines } from '../model/frets';
 import { computeProjectionTargetsAtX } from '../canvas/projection-renderer';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { store } from './store';
@@ -54,9 +55,12 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
   if (st.guidesVisible) {
     const xs: number[] = [];
     const ys: number[] = [];
+    // An octave fret pulls at every one of its lines (13.18).
+    const period = resolveTuning(st.tuning).period;
     for (const g of st.composition.guides) {
       if (g.id === q.excludeGuideId) continue;
-      (g.orientation === 'x' ? xs : ys).push(g.position);
+      if (g.orientation === 'x') xs.push(g.position);
+      else for (const line of fretLines(g, period)) ys.push(line.cents);
     }
     if (xs.length > 0) guideXTargets = xs;
     if (ys.length > 0) guideYTargets = ys;
