@@ -56,11 +56,16 @@ describe('Harmonic Prism drawer (BACKLOG 16.4)', () => {
     expect(html).not.toContain('>Tuning</label>');
   });
 
-  it('Equal names the tuning whose steps it counts in (13.8 (b))', () => {
+  it('Equal counts from the root, Per note in the named tuning (13.8 (b), 13.21)', () => {
     store.setPrismChordSpec({ tuning: '12-TET' });
-    expect(renderToString(<PrismPanel />)).toMatch(/<option[^>]*selected[^>]*>Equal \(12-TET\)</);
+    let html = renderToString(<PrismPanel />);
+    expect(html).toMatch(/<option[^>]*selected[^>]*>Equal \(12-TET\)</);
+    // In 12-EDO Per note is the same as Equal, so it isn't offered.
+    expect(html).not.toContain('value="per-note"');
     store.setTuning({ kind: 'edo', divisions: 19, equave: 'octave' });
-    expect(renderToString(<PrismPanel />)).toMatch(/<option[^>]*selected[^>]*>Equal \(19-EDO\)</);
+    html = renderToString(<PrismPanel />);
+    expect(html).toMatch(/<option[^>]*selected[^>]*>Equal \(from root\)</);
+    expect(html).toMatch(/<option value="per-note">Per note \(19-EDO\)</);
   });
 
   it('has one octave row per voice', () => {

@@ -396,6 +396,20 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
 - [ ] **13.11 Recording simplification density** *(S–M)*
   - A setting to keep all recorded points, or 1/2, 1/4, 1/8, instead of today's fixed RDP fit.
   - Option to run simplification later on a kept curve (relates to 12.4 raw takes).
+- [ ] **13.24 Transform by interval** *(S)*
+  - The transform box moves a selection up or down an octave. Offer other intervals too: a third, fourth, fifth, and the Prism chord's own intervals, in the current tuning's steps (as the Prism counts them, 13.8 (b)).
+  - With Alt+drag duplicate, that makes a harmony copy you can hear and edit, the explicit version of a projection echo (13.25).
+  - **Decide when building:** where the choices live (a menu on the octave buttons, or a stepper beside them), and whether an interval move of several curves counts from each curve's own note (Per note, 13.21) or moves them all by the same cents.
+- [ ] **13.26 Area Nudge tool** *(M, own planning session)*
+  - A transform tool that moves only the points of a curve near the cursor, with an adjustable **falloff**: points at the cursor move fully, farther ones less, out to a radius, like a soft-brush nudge or proportional editing.
+  - For adjusting part of a complex curve smoothly. A curve recorded with gravity snapping carries the spring's wobble as many points, and moving a few of them by hand leaves jagged edges. The nudge moves an area and keeps a smooth glissando on either side.
+  - **Session inputs:**
+    - the falloff: its shape (smooth, linear, sharp), its radius (in beats, pixels or both), and how it's adjusted (a slider, the scroll wheel while nudging, a ring drawn round the cursor);
+    - which axes: pitch only by default, time too (with Shift constraining, as elsewhere), and keeping points in time order;
+    - handles: whether Bezier handles move with their points, or are recomputed (auto-smooth) after the nudge;
+    - scope: the selected curves only, or any curve under the brush; and what a nudge does to other lanes (volume stays time-locked, as with the transform box);
+    - one undo step per drag;
+    - relation to 13.11 (fewer recorded points to start with) and to 12.4 raw takes.
 - [ ] **8.4 Parameter lanes UI — remaining** *(M, own planning session)*
   - The Parameters Graph below the canvas shipped in PR #58, showing the selected curve's volume lane.
   - Remaining: more lane types (pan, cutoff, per-layer mix), show/hide/solo per lane, and a lane picker.
@@ -599,14 +613,20 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - **(e) Scale generator for other equal divisions** — MOS: large and small step counts plus mode rotation; the MIT `moment-of-symmetry` library covers the maths. A second editor, so its own item.
     - **Retuning on the circle** — dragging a degree around the pitch circle to make a Custom tuning directly. The frets route (f) covers it for now.
     - **"Make home" on the circle** — a gesture (e.g. Alt+double-click) that changes the root but keeps the same notes: C major's dots with A as home is A natural minor. Recognise a named scale when the rotation is one, else keep it Custom.
-- [ ] **13.21 Prism chords per note in unequal tunings** *(M — first slice S)*
+- [ ] **13.21 Prism chords per note in unequal tunings** *(M — first slice S done, PR #97)*
   - Since 13.8 (b), Equal intonation in an unequal tuning (Werckmeister, meantone, just intonation) builds every chord from the root's intervals. So a chord on any other note is the root chord moved, and every key sounds the same.
   - **Add a second option**, e.g. Intonation **Tuning (per note)** beside **Equal (from root)**: the chord uses the tuning's own notes above the base, as a keyboard in that temperament would. E major's third in Werckmeister is wider than C major's.
   - **The rule** (deterministic): find the tuning's note nearest the base, count up the chord's degrees from it (in a 12-note table the semitone counts; otherwise the step counts from 13.8 (b)), and shift the whole chord by the base's offset from that note.
   - **Expect:** well temperaments give each key its colour, as intended. Meantone, Pythagorean and 5-limit just intonation hit their wolf intervals on some chords (D minor in 5-limit has a fifth about 20¢ flat), historically honest but possibly surprising. Equal tunings give the same result either way.
   - **The cost is movement**, not the rule: today a chord's offsets are constant, so harmony voices are parallel copies of the curve. Per note, the shape changes as the base crosses between notes.
-  - **First slice (S):** Prism Draw clicks and performing. The shape is taken at the note's start and held through the glide, so harmony voices never jump mid-note. Projection echoes keep the from-root shapes.
+  - [x] **First slice (S, PR #97):** Prism Draw clicks and performing. The shape is taken at the note's start and held through the glide, so harmony voices never jump mid-note. Projection echoes keep the from-root shapes.
+    - **Done (PR #97):**
+      - Intonation **Per note (tuning name)** beside **Equal (from root)**; not offered in 12-EDO, where it's the same.
+      - `noteRootAt` / `prismOffsetsAt` in `tuning.ts`; `prismOffsets` takes the note's degree. Draw clicks, the Draw cursor's chord dots and hold-A audition use the note under the cursor. A performed note holds the degree it started on (`heldNoteRoot` in main.ts) until the press ends, so a chord-spec change mid-note still applies.
+      - A 12-note octave table now counts its notes by the semitones (for Equal too): a third is four notes up however far it's tempered (7-limit's 7/6 minor third), rather than whichever step is nearest.
+      - Between presses while playing, the rail's harmony dots follow the cursor's note.
   - **Then (M):** projection echoes per note: sampled and drawn in steps instead of as shifted copies. Their snap targets are already computed at each beat, so those are easy.
+    - **Parked (2026-09-27):** tried, and the jogs where an echo steps to the next note's chord looked wrong. Projection itself may be retired (13.25), so this waits on that decision.
   - **Later, if wanted:** live re-shaping during a glide, with hysteresis so a base sitting on a boundary doesn't flicker.
 - [ ] **13.23 Key guides and a tuning hot bar** *(L, own planning session)*
   - Beat guides today only bookmark places. Let one carry a **key change**: place it, set its tuning, root and scale (**a key guide**), and from that beat on the staff, snapping and labels follow the new settings until the next key guide.
@@ -621,6 +641,12 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - **Performing:** a hot-bar press while looping (does the guide land once, or every pass?), undo, and what happens with a press very near an existing key guide.
     - **Keys:** 1–0 are also wanted for chord-spec favourites (8.12), so the two need to share or split them. MIDI mapping belongs with the MIDI input work (9.x).
     - Naming alongside 13.16 (beat guides and frets).
+- [ ] **13.25 Retire Prism Projection?** *(S — undecided, 2026-09-27)*
+  - In practice Projection gets little use; Prism Draw is the part that's fun. An echo is a silent, snappable copy of a curve at a chord interval, which two planned tools give explicitly: **13.24** (move or duplicate by an interval) makes the copy, and **13.10** (curves as pitch guides, perhaps a track muted as a guide) makes it silent and snappable. You get only the echoes you want, and can hear one before committing.
+  - **What removal loses:** echoes follow the source live as it's edited (copies don't); and one switch gives every chord voice over up to ±3 octaves (copies would need several moves, or a "copy to each chord voice" action).
+  - **Removal touches:** the echo renderer in `projection-renderer.ts` (the Prism Draw preview dots stay), Projection's snap targets in `snap-config.ts`, `projectionSourceId` / `projectionOctaveRange` / `activeMode` in the store and types, the `prism.projection` command (Ctrl+H), the drawer switch and Octaves ± row, and help. Saved chord specs and workspace prefs that carry the fields load and ignore them.
+  - Decide after 13.24 and 13.10 exist, so there's something to move to.
+  - The per-note echoes tried for 13.21 (drawn in steps) were dropped: the jogs at note boundaries looked wrong, and the effort isn't worth it while Projection's future is open.
 - [ ] **13.15 Gravity feel preview** *(M)*
   - A small animated waveform in the Snap drawer showing what Force, Spring and Damping do: its amplitude, frequency and falloff change as you move the sliders.
   - Drive it from the real `snap-magnetic` integrator (a step response into a well), so the preview is the feel, not an illustration of it.

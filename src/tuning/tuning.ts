@@ -566,9 +566,27 @@ export function chordStepsFor(s: Pick<PitchSettings, 'tuning' | 'root'>): ChordS
   return { intervals, period: tuning.period };
 }
 
-/** The Prism chord's voice offsets in the current tuning. */
-export function prismOffsets(spec: ChordSpec, s: Pick<PitchSettings, 'tuning' | 'root'>): number[] {
-  return chordOffsets(spec, chordStepsFor(s));
+/** The Prism chord's voice offsets in the current tuning.
+ *
+ *  `noteRoot`: the degree a Per note chord (13.21) counts from, from
+ *  `noteRootAt`. Without one (projection echoes, which keep the from-root
+ *  shapes), and for the other intonations, the chord counts from the root. */
+export function prismOffsets(spec: ChordSpec, s: Pick<PitchSettings, 'tuning' | 'root'>, noteRoot?: number): number[] {
+  const root = spec.tuning === 'per-note' && noteRoot !== undefined ? noteRoot : s.root;
+  return chordOffsets(spec, chordStepsFor({ tuning: s.tuning, root }));
+}
+
+/** Per note (13.21): the degree a chord on `base` counts from, the tuning's
+ *  note nearest it. The chord is that note's chord, moved by the base's
+ *  offset from it, so its offsets from the base are the note's own. */
+export function noteRootAt(s: Pick<PitchSettings, 'tuning' | 'tunedFrom'>, base: number): number {
+  return nearestDegree(resolveTuning(s.tuning), s.tunedFrom, base);
+}
+
+/** The Prism chord on `base`: counted from its own note with Per note, from
+ *  the root otherwise. */
+export function prismOffsetsAt(spec: ChordSpec, s: Pick<PitchSettings, 'tuning' | 'root' | 'tunedFrom'>, base: number): number[] {
+  return prismOffsets(spec, s, noteRootAt(s, base));
 }
 
 /** Drop float noise so equal pitches compare equal (0.0001 ¢ is inaudible). */
