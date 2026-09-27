@@ -63,7 +63,10 @@ import { ToolStrip } from './ui/tool-strip';
 import { SnapPanel, type SnapActions } from './ui/snap-panel';
 import { PrismPanel } from './ui/prism-panel';
 import { TuningPanel, type TuningActions } from './ui/tuning-panel';
-import { nearestNote, noteRootAt, pitchLabel, pitchName, prismOffsets, prismOffsetsAt, resolveTuning, staffGridFor, tuningKey } from './tuning/tuning';
+import {
+  DEFAULT_MOVE_INTERVAL, moveIntervalShort, nearestNote, noteRootAt, pitchLabel, pitchName, prismOffsets, prismOffsetsAt,
+  resolveTuning, staffGridFor, tuningKey,
+} from './tuning/tuning';
 import { fretLinePitch, shownGuides } from './model/frets';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
@@ -2923,7 +2926,10 @@ function draw() {
   const activeTrack = comp.tracks.find(t => t.id === state.selectedTrackId);
   if (interaction.transformBox) {
     const tb = interaction.transformBox;
-    renderTransformBox(fgCtx, viewport, tb.bbox, tb.activeHandle, !!activeTrack && transformBoxHoldsGroup(tb, activeTrack));
+    renderTransformBox(
+      fgCtx, viewport, tb.bbox, tb.activeHandle, !!activeTrack && transformBoxHoldsGroup(tb, activeTrack),
+      state.moveInterval === DEFAULT_MOVE_INTERVAL ? null : moveIntervalShort(state.moveInterval),
+    );
   }
   // Groups with a hovered or selected member share an outline (16.5).
   if (activeTrack && !isPerformInputActive(state)) {
@@ -3305,6 +3311,7 @@ const MENUS: readonly MenuSpec[] = [
       'edit.undo', 'edit.redo', '-',
       'edit.cut', 'edit.copy', 'edit.paste', 'edit.duplicate', 'edit.continue', 'edit.delete', '-',
       'edit.join', 'edit.group', 'edit.ungroup', '-',
+      'edit.moveUp', 'edit.moveDown', 'edit.copyUp', 'edit.copyDown', '-',
       'edit.smooth', 'edit.sharpen',
     ],
   },

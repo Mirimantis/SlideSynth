@@ -331,6 +331,9 @@ export interface AppState {
   perfHudVisible: boolean;                    // Perf HUD user preference (localStorage-backed)
   metronomeEnabled: boolean;                  // Metronome user preference (localStorage-backed)
   metronomeVolume: number;                    // 0..1 — metronome master gain (localStorage-backed)
+  /** What the transform box's arrows move by (13.24); see tuning.ts
+   *  MoveInterval. Workspace pref (localStorage). */
+  moveInterval: number;
   autoSmoothXRatio: number;                   // 0..1 — fraction of neighbor segment length used for Draw auto-smooth + Smooth Curve action (localStorage-backed)
   dynamicsSource: DynamicsSource;             // What drives performed volume (localStorage-backed)
   harmonicPrism: HarmonicPrismState;          // Harmonic Prism feature (chordSpec + octaveRange localStorage-backed)

@@ -458,7 +458,7 @@
         <li><kbd>Shift</kbd>+click on a <em>curve segment</em> to add/remove the whole curve from a multi-curve selection.</li>
         <li>Drag a rectangle on empty canvas to <strong>marquee-select</strong> every anchor point inside the rect (active track only). Hold <kbd>Shift</kbd> to add to the existing selection.</li>
         <li>With multiple points selected, drag any one of them to translate the whole group together. Press <kbd>Delete</kbd> to remove every selected point (curves that drop below 2 points are removed).</li>
-        <li>The Transform Box wraps just the selected points when you have a multi-point selection — its scale handles and octave arrows act on those points only.</li>
+        <li>The Transform Box wraps just the selected points when you have a multi-point selection — its scale handles and interval arrows act on those points only (<kbd>Alt</kbd>+click moves them rather than copying).</li>
         <li>When a single curve is selected, drag its handles (handleIn / handleOut) to adjust curvature.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to the horizontal or vertical axis.</li>
         <li>Right-click anywhere on the canvas to open an action menu with
@@ -521,7 +521,26 @@
       <ul>
         <li>Drag corners or edges to resize the selection.</li>
         <li>Drag the interior to translate all selected curves.</li>
-        <li>Use the octave shift arrows (<strong>&#9650; &#9660;</strong>) to shift pitch by &plusmn;12 semitones.</li>
+        <li>The arrows (<strong>&#9650; &#9660;</strong>) move the selection up or down by an
+          interval: an octave, unless you choose another under <strong>Move by</strong> in the
+          Tool panel while Select is active (one step of the tuning, a minor 2nd through a major
+          7th, or the octave). When it isn't the octave, its short name shows beside the arrows
+          ("P5").
+          <ul>
+            <li>The interval is counted in the tuning, from each curve's own first note (the
+              first selected point, with a point selection). So curves on the tuning's notes
+              land on them: in Werckmeister III a major third up from E is E's own third (to G#),
+              wider than C's. A curve that starts between notes keeps its offset from the
+              nearest one. In a tuning that doesn't repeat at the octave (Bohlen–Pierce), the
+              octave is its period.</li>
+            <li><kbd>Alt</kbd>+click an arrow to move a <strong>copy</strong> and leave the
+              original: a harmony line in one click. The copy is selected, so another click
+              stacks the next voice.</li>
+            <li>From the keyboard: <kbd>Shift</kbd>+<kbd>&uarr;</kbd> / <kbd>&darr;</kbd> moves,
+              <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>&uarr;</kbd> / <kbd>&darr;</kbd> makes a moved
+              copy. They're in the Edit menu too.</li>
+          </ul>
+        </li>
         <li>Hold <kbd>Alt</kbd> when you start dragging to duplicate the selection before transforming.</li>
       </ul>
     </div>

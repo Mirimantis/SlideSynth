@@ -79,6 +79,12 @@ export const COMMANDS = [
   { id: 'edit.join', label: 'Join', section: 'Edit', keys: ['Ctrl+J'], description: 'merge the selected curves into one' },
   { id: 'edit.group', label: 'Group', section: 'Edit', keys: ['Ctrl+G'] },
   { id: 'edit.ungroup', label: 'Ungroup', section: 'Edit', keys: ['Ctrl+Shift+G'] },
+  { id: 'edit.moveUp', label: 'Move up by interval', section: 'Edit', keys: ['Shift+ArrowUp'],
+    description: 'the selection, by the Move by interval in the Tool panel (Select), each curve from its own note' },
+  { id: 'edit.moveDown', label: 'Move down by interval', section: 'Edit', keys: ['Shift+ArrowDown'] },
+  { id: 'edit.copyUp', label: 'Copy up by interval', section: 'Edit', keys: ['Alt+Shift+ArrowUp'],
+    description: 'a moved copy of the selected curves: a harmony line (or Alt+click an arrow on the transform box)' },
+  { id: 'edit.copyDown', label: 'Copy down by interval', section: 'Edit', keys: ['Alt+Shift+ArrowDown'] },
   { id: 'edit.smooth', label: 'Smooth Curve', section: 'Edit', keys: ['Shift+S'], description: 'reset handles to the auto-smooth defaults' },
   { id: 'edit.sharpen', label: 'Sharpen Curve', section: 'Edit', keys: ['Alt+S'], description: 'clear all handles for sharp corners' },
 

@@ -8,7 +8,7 @@ import {
   deepCopyLanePoints, deepCopyLanes, splitLanesAtBeat, concatNonPitchLanes,
   smoothLaneHandles, sharpenLaneHandles, repositionLaneX,
 } from './lane';
-import { AUTO_SMOOTH_X_RATIO } from '../constants';
+import { AUTO_SMOOTH_X_RATIO, MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
 
 // The functions here are the PITCH-LANE view of a curve: the main canvas edits
 // the mandatory pitch lane (lanes[0]) through these curve-level wrappers, while
@@ -42,6 +42,31 @@ export function removePointFromCurve(curve: BezierCurve, index: number): void {
 /** Delete every selected point (BACKLOG 8.3 multi-point delete). A curve left
  *  with fewer than 2 points is removed entirely — it has no segment to render
  *  or play. Mutates the composition in place; the caller notifies the store. */
+/**
+ * Move curves' pitch by an interval (13.24): each curve by `shiftFor` its own
+ * base pitch, so each counts the interval from its own note. The base is the
+ * first selected point with a point selection, else the curve's first point.
+ * Handles are relative, so they come along.
+ */
+export function shiftCurvesByInterval(
+  curves: readonly BezierCurve[],
+  subset: PointSelection | null,
+  shiftFor: (base: number) => number,
+): void {
+  for (const curve of curves) {
+    const points = pitchPoints(curve);
+    const picked = subset?.get(curve.id);
+    const indices = picked && picked.size > 0 ? [...picked].sort((a, b) => a - b) : points.map((_, i) => i);
+    const first = points[indices[0] ?? -1];
+    if (!first) continue;
+    const shift = shiftFor(first.position.y);
+    for (const i of indices) {
+      const pt = points[i];
+      if (pt) pt.position.y = Math.max(MIN_PITCH_CENTS, Math.min(MAX_PITCH_CENTS, pt.position.y + shift));
+    }
+  }
+}
+
 export function deleteSelectedPoints(comp: Composition, sel: PointSelection): void {
   for (const track of comp.tracks) {
     for (let ci = track.curves.length - 1; ci >= 0; ci--) {

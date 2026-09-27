@@ -25,7 +25,9 @@ export interface KeyLike {
 }
 
 const KEY_ALIASES: Readonly<Record<string, string>> = { Space: ' ', Esc: 'Escape', Del: 'Delete' };
-const KEY_DISPLAY: Readonly<Record<string, string>> = { ' ': 'Space', PageUp: 'Page Up', PageDown: 'Page Down' };
+const KEY_DISPLAY: Readonly<Record<string, string>> = {
+  ' ': 'Space', PageUp: 'Page Up', PageDown: 'Page Down', ArrowUp: '↑', ArrowDown: '↓',
+};
 
 export function parseChord(text: string): KeyChord {
   const parts = text.split('+');

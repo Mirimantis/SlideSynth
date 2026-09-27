@@ -5,7 +5,7 @@ import { createTrack } from '../model/track';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 import {
-  ALL_NOTES, CUSTOM_SCALE, isTwelveEdo, nearestDegree, resolveTuning, rootCents, scaleSteps,
+  ALL_NOTES, CUSTOM_SCALE, DEFAULT_MOVE_INTERVAL, MOVE_INTERVALS, isTwelveEdo, nearestDegree, resolveTuning, rootCents, scaleSteps,
   type ImportedTuningRef, type TuningRef,
 } from '../tuning/tuning';
 import { fretsToScale, scaleToFrets, type FretsAsScale } from '../tuning/frets-scale';
@@ -102,6 +102,7 @@ const PERF_HUD_STORAGE_KEY = 'slidesynth.perfHud';
 const METRONOME_ENABLED_STORAGE_KEY = 'slidesynth.metronomeEnabled';
 const METRONOME_VOLUME_STORAGE_KEY = 'slidesynth.metronomeVolume';
 const AUTO_SMOOTH_X_RATIO_STORAGE_KEY = 'slidesynth.autoSmoothXRatio';
+const MOVE_INTERVAL_STORAGE_KEY = 'slidesynth.moveInterval';
 const PRISM_CHORD_SPEC_STORAGE_KEY = 'slidesynth.prismChordSpec';
 const PRISM_OCTAVE_RANGE_STORAGE_KEY = 'slidesynth.prismOctaveRange';
 const PRISM_DRAW_MODE_STORAGE_KEY = 'slidesynth.prismDrawMode';
@@ -126,6 +127,10 @@ function saveBoolPref(key: string, value: boolean): void {
   } catch {
     // Silently ignore — preference just won't persist.
   }
+}
+
+function validMoveInterval(n: number): number {
+  return MOVE_INTERVALS.includes(n) ? n : DEFAULT_MOVE_INTERVAL;
 }
 
 function loadNumberPref(key: string, defaultValue: number): number {
@@ -278,6 +283,7 @@ function createInitialState(): RawState {
     metronomeEnabled: loadBoolPref(METRONOME_ENABLED_STORAGE_KEY, false),
     metronomeVolume: loadNumberPref(METRONOME_VOLUME_STORAGE_KEY, 0.6),
     autoSmoothXRatio: Math.max(0, Math.min(1, loadNumberPref(AUTO_SMOOTH_X_RATIO_STORAGE_KEY, AUTO_SMOOTH_X_RATIO))),
+    moveInterval: validMoveInterval(loadNumberPref(MOVE_INTERVAL_STORAGE_KEY, DEFAULT_MOVE_INTERVAL)),
     dynamicsSource: loadStringPref(DYNAMICS_SOURCE_STORAGE_KEY, DYNAMICS_SOURCES, 'fixed'),
     harmonicPrism: {
       chordSpec: loadChordSpecPref(DEFAULT_CHORD_SPEC),
@@ -854,6 +860,15 @@ class Store {
   setReferenceLines(visible: boolean) {
     this.state.composition.snap.referenceLines = visible;
     this.touch('snap');
+  }
+
+  /** What the transform box's arrows move by (13.24). */
+  setMoveInterval(interval: number) {
+    const valid = validMoveInterval(interval);
+    if (this.state.moveInterval === valid) return;
+    this.state.moveInterval = valid;
+    saveNumberPref(MOVE_INTERVAL_STORAGE_KEY, valid);
+    this.touch('moveInterval');
   }
 
   setAutoSmoothXRatio(r: number) {

@@ -396,10 +396,17 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
 - [ ] **13.11 Recording simplification density** *(S–M)*
   - A setting to keep all recorded points, or 1/2, 1/4, 1/8, instead of today's fixed RDP fit.
   - Option to run simplification later on a kept curve (relates to 12.4 raw takes).
-- [ ] **13.24 Transform by interval** *(S)*
+- [x] **13.24 Transform by interval** *(S)*
   - The transform box moves a selection up or down an octave. Offer other intervals too: a third, fourth, fifth, and the Prism chord's own intervals, in the current tuning's steps (as the Prism counts them, 13.8 (b)).
   - With Alt+drag duplicate, that makes a harmony copy you can hear and edit, the explicit version of a projection echo (13.25).
   - **Decide when building:** where the choices live (a menu on the octave buttons, or a stepper beside them), and whether an interval move of several curves counts from each curve's own note (Per note, 13.21) or moves them all by the same cents.
+  - **Done (this PR):**
+    - **Move by** (Tool panel, while Select is active): One step, Minor 2nd … Major 7th, Octave (the period in non-octave tunings, "Period (3/1)"). A workspace pref (`moveInterval`), octave by default. The transform box's arrows move by it, with its short name beside them ("P5") when it isn't the octave.
+    - **Each curve counts from its own note** (`moveIntervalCents` in `tuning.ts`): the interval from the tuning's note nearest the curve's first point (first selected point for a point selection), as the Prism counts: a 12-note octave table by its notes, other tunings the nearest step. So curves on the tuning's notes land on them; one between notes keeps its offset.
+    - **Alt+click an arrow** moves a copy (`duplicateCurves({ inPlace })`) and selects it, so the next click stacks another voice. One undo step either way. Point selections just move.
+    - **Commands:** Move up / down by interval (Shift+↑ / ↓) and Copy up / down by interval (Alt+Shift+↑ / ↓), in the Edit menu. `moveSelectionByInterval` in `interaction.ts` serves the arrows and the commands.
+    - *Behaviour change:* the octave arrows used 1200¢ in every tuning and could push a curve past the pitch range; they now use the tuning's period and clamp to the range.
+    - Not done: a "copy to each chord voice" action (13.25 lists it as what removal of Projection would miss).
 - [ ] **13.26 Area Nudge tool** *(M, own planning session)*
   - A transform tool that moves only the points of a curve near the cursor, with an adjustable **falloff**: points at the cursor move fully, farther ones less, out to a radius, like a soft-brush nudge or proportional editing.
   - For adjusting part of a complex curve smoothly. A curve recorded with gravity snapping carries the spring's wobble as many points, and moving a few of them by hand leaves jagged edges. The nudge moves an area and keeps a smooth glissando on either side.

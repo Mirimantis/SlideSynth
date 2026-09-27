@@ -122,7 +122,7 @@ export function pasteCurves(atBeat: number): string[] | null {
  * horizontal offset. Group identity is preserved within the dupe set with a
  * fresh ID. Returns the new curve IDs, or null.
  */
-export function duplicateCurves(): string[] | null {
+export function duplicateCurves(opts: { inPlace?: boolean } = {}): string[] | null {
   const state = store.getState();
   if (state.selectedCurveIds.size === 0 || !state.selectedTrackId) return null;
 
@@ -143,7 +143,8 @@ export function duplicateCurves(): string[] | null {
   }
   if (minX === Infinity) return null;
 
-  const offsetX = (maxX - minX) + 0.25;
+  // In place: a copy to move by an interval (13.24), not along in time.
+  const offsetX = opts.inPlace ? 0 : (maxX - minX) + 0.25;
   const newIds: string[] = [];
 
   history.snapshot();
