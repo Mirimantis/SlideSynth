@@ -8,6 +8,8 @@ import {
   ALL_NOTES, CUSTOM_SCALE, isTwelveEdo, nearestDegree, resolveTuning, rootCents, scaleSteps,
   type ImportedTuningRef, type TuningRef,
 } from '../tuning/tuning';
+import { fretsToScale, scaleToFrets, type FretsAsScale } from '../tuning/frets-scale';
+import { repeats } from '../model/frets';
 import { batch, signal, type Signal } from './reactive';
 import { TRANSPORT_STOPPED } from './transport';
 import { NO_POINTS, addPoints, onlyPoint, togglePoint, withoutCurves, type PointRef, type PointSelection } from '../model/point-selection';
@@ -739,6 +741,51 @@ class Store {
     if (scaleSteps(snap, after) === null) snap.scaleId = ALL_NOTES;
     snap.tuning = ref;
     this.touch('snap');
+  }
+
+  /** Scale → frets (13.8 (f)): an octave fret on each note of the scale (the
+   *  tuning with All notes) that doesn't have one, and the pitch lines off so
+   *  the frets are the grid. Returns how many were added, or null if the
+   *  scale has too many notes. Caller snapshots history. */
+  addScaleFrets(): number | null {
+    const snap = this.state.composition.snap;
+    const frets = scaleToFrets(snap, this.state.composition.guides);
+    if (!frets) return null;
+    this.state.composition.guides.push(...frets);
+    snap.hidePitchLines = true;
+    this.touch('composition', 'snap');
+    this.setGuidesVisible(true);
+    return frets.length;
+  }
+
+  /** Frets → scale (13.8 (f)): the octave frets become the scale (a Custom
+   *  scale on this tuning), or a tuning of their own if any is off the
+   *  tuning's notes. The octave frets are used up; single frets stay. Pitch
+   *  lines come back on. Returns what they became, or null if there were no
+   *  octave frets. Caller snapshots history. */
+  applyFretsAsScale(): FretsAsScale | null {
+    const comp = this.state.composition;
+    const snap = comp.snap;
+    const result = fretsToScale(snap, comp.guides);
+    if (!result) return null;
+    if (result.kind === 'scale') {
+      snap.root = result.root;
+      snap.scaleId = result.scaleId;
+      if (result.customScale) snap.customScale = result.customScale;
+    } else {
+      snap.tuning = result.tuning;
+      snap.importedTuning = result.tuning;
+      snap.tunedFrom = result.tunedFrom;
+      snap.root = 0;
+      snap.scaleId = ALL_NOTES;
+    }
+    snap.hidePitchLines = false;
+    comp.guides = comp.guides.filter(g => !repeats(g));
+    if (this.state.selectedGuideId && !comp.guides.some(g => g.id === this.state.selectedGuideId)) {
+      this.state.selectedGuideId = null;
+    }
+    this.touch('composition', 'snap', ...SELECTION);
+    return result;
   }
 
   /** Use a tuning read from a .scl file, and keep it for the Tuning menu. */

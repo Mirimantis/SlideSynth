@@ -314,7 +314,7 @@ The Key and Scale dropdowns mixed two different axes: the **tuning** (which pitc
 - For non-12 tunings, an optional faint **12-EDO reference layer** helps with orientation.
 - Snapping without a scale rounds to the tuning's degrees, not to 100-cent steps.
 - The octave highlight marks the root, not C (absorbs 13.9).
-- *(Built in 13.8 (b).)* The reference layer is a drawer switch, on by default. Labels thin out by zoom as 12-EDO's did, and zoomed out, lines outside the scale fade. The draw HUD names the nearest note of the tuning.
+- *(Built in 13.8 (b).)* The reference layer is a drawer switch, off by default (on in (b); too busy as a default, so off since (f)). Labels thin out by zoom as 12-EDO's did, and zoomed out, lines outside the scale fade. The draw HUD names the nearest note of the tuning.
 - 12-EDO stays the default, so the default view doesn't change.
 
 #### The drawer: a pitch circle over the controls
@@ -346,6 +346,10 @@ The scale is the pitch grid; frets (13.16) are exceptions and additions on top o
   - If not, it's a **Custom tuning** with All notes. Frets are exact pitches, so the tuning / scale split stays honest.
   - Single (non-repeating) frets are one-off pitches and stay behind as frets.
 - Round trip: explode a scale, tune it by ear, promote it back.
+- *(Built in 13.8 (f).)*
+  - Scale → frets turns pitch lines off, so the frets are the grid while you tune; Frets → scale uses the octave frets up and turns pitch lines back on.
+  - A scale of frets that matches one of the tuning's named scales comes back by name.
+  - A Custom tuning ("From frets") starts on the root fret's exact pitch, so Tuned from can sit between the standard notes (D +17¢).
 
 #### .scl files
 

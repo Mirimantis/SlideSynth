@@ -8,6 +8,7 @@ import {
   type Equave, type TuningGroup, type TuningRef,
 } from '../tuning/tuning';
 import { PitchCircle, type PitchCircleActions } from './pitch-circle';
+import { repeats } from '../model/frets';
 
 /**
  * The Tuning drawer (BACKLOG 13.8; spec in DESIGN.md › Tuning spec): the
@@ -29,6 +30,9 @@ export interface TuningActions extends PitchCircleActions {
   importScl(): void;
   /** Download the notes you hear as a .scl file. */
   exportScl(): void;
+  /** Scale → frets and Frets → scale (13.8 (f)); main.ts reports the result. */
+  scaleToFrets(): void;
+  fretsToScale(): void;
 }
 
 const PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -52,6 +56,7 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
     : ref.id;
   // The imported tuning in use, else the last one imported.
   const imported = ref.kind === 'imported' ? ref : st.importedTuning;
+  const hasOctaveFrets = st.composition.guides.some(repeats);
   const scales = scalesFor(tuning);
   const scaleGroups = [...new Set(scales.map(s => s.group))];
   const custom = customFits(st.customScale, tuning) ? st.customScale : null;
@@ -88,7 +93,7 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
             </optgroup>
           ))}
           {imported && (
-            <optgroup label="Imported (.scl)">
+            <optgroup label="Imported and from frets">
               <option value={IMPORTED}>{`${imported.name} (${imported.degrees.length} notes)`}</option>
             </optgroup>
           )}
@@ -140,6 +145,9 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
             onChange={e => { actions.setTunedFrom(Number(value(e))); blur(e); }}
           >
             {PITCH_CLASSES.map((name, pc) => <option key={name} value={String(pc)}>{name}</option>)}
+            {!Number.isInteger(st.tunedFrom) && (
+              <option value={String(st.tunedFrom)}>{betweenNotes(st.tunedFrom)}</option>
+            )}
           </select>
         </div>
       )}
@@ -161,6 +169,21 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
           onChange={actions.setReferenceLines}
         />
       )}
+      <div class="transport-row tuning-files">
+        <button
+          id="scale-to-frets-btn" class="snap-preset-btn"
+          title="Put an octave fret on each note of the scale (every note with All notes), and turn pitch lines off so the frets are the grid: drag them to tune the scale by ear (hold A to hear)"
+          onClick={e => { blur(e); actions.scaleToFrets(); }}
+        >Scale → frets</button>
+        <button
+          id="frets-to-scale-btn" class="snap-preset-btn"
+          disabled={!hasOctaveFrets}
+          title={hasOctaveFrets
+            ? 'Make the octave frets the scale: a Custom scale if they\'re all on the tuning\'s notes, otherwise a tuning of their own. Single frets stay'
+            : 'Needs octave frets (a fret with Octaves on, in the Selection panel)'}
+          onClick={e => { blur(e); actions.fretsToScale(); }}
+        >Frets → scale</button>
+      </div>
       <div class="transport-row tuning-files">
         <button
           id="scl-import-btn" class="snap-preset-btn"
@@ -197,6 +220,15 @@ function Switch({ id, label, title, checked, disabled = false, onChange }: {
       </label>
     </div>
   );
+}
+
+/** A Tuned from between the standard notes (a tuning made from frets): the
+ *  nearest note and the cents off it, "D +17¢". */
+function betweenNotes(tunedFrom: number): string {
+  const nearest = Math.round(tunedFrom);
+  const off = Math.round((tunedFrom - nearest) * 100);
+  const name = PITCH_CLASSES[((nearest % 12) + 12) % 12]!;
+  return off === 0 ? name : `${name} ${off > 0 ? '+' : ''}${off}¢`;
 }
 
 /** N, and what's divided: the octave, or the 3:1 twelfth (Bohlen–Pierce). */

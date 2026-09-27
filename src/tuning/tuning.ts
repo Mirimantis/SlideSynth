@@ -277,7 +277,9 @@ function degreeParts(tuning: Tuning, tunedFrom: number, degree: number): DegreeP
   let letter: string | null = null;
   if (tuning.naming === 'letters') {
     if (n === 12) {
-      letter = PITCH_CLASS_NAMES[(((tunedFrom + d) % 12) + 12) % 12]!;
+      // Tuned from can be between standard notes (a tuning made from frets,
+      // 13.8 (f)): letters then name the nearest.
+      letter = PITCH_CLASS_NAMES[(((Math.round(tunedFrom) + d) % 12) + 12) % 12]!;
     } else if (tunedFrom === 0) {
       // A meantone EDO: letters only while degree 0 is on C.
       let names = meantoneCache.get(n);
