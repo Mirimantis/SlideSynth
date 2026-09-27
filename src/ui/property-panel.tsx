@@ -2,7 +2,8 @@ import '@preact/signals'; // components re-render when the store fields they rea
 import { store } from '../state/store';
 import { history } from '../state/history';
 import { centsToNoteName, CENTS_PER_SEMITONE } from '../constants';
-import { pitchLabel } from '../tuning/tuning';
+import { pitchLabel, resolveTuning } from '../tuning/tuning';
+import { repeats } from '../model/frets';
 import { anyGrouped, getMovableSelection } from '../model/curve-groups';
 import type { CommandRegistry } from '../commands/registry';
 import { CommandButton } from './command-button';
@@ -42,13 +43,24 @@ export function PropertyPanel({ commands }: { commands: CommandRegistry }) {
   return <TrackProps track={track} commands={commands} />;
 }
 
+/** Subscribe a child to composition edits. Guides and points are edited in
+ *  place, so a drag leaves a child's props unchanged, and @preact/signals
+ *  skips a component whose props and signals haven't changed. */
+const followComposition = () => void store.getState().composition;
+
 function GuideProps({ guide, locked }: { guide: GuideDefinition; locked: boolean }) {
+  followComposition();
   const id = guide.id;
   const fret = guide.orientation === 'y';
   const position = fret
     ? `${pitchLabel(store.getState(), guide.position)} (${guide.position.toFixed(1)} ¢)`
     : `${guide.position.toFixed(3)} beats`;
   const kind = fret ? 'Fret' : 'Beat guide';
+  // Octave frets repeat every period of the tuning (13.18): the octave, or
+  // e.g. 3:1 in Bohlen–Pierce.
+  const tuning = resolveTuning(store.getState().tuning);
+  const octave = Math.abs(tuning.period - 1200) < 1e-6;
+  const everyPeriod = octave ? 'every octave' : `every ${tuning.periodRatio ?? `${tuning.period.toFixed(1)} ¢`}`;
   const savedLabel = () => store.getComposition().guides.find(g => g.id === id)?.label ?? '';
   return (
     <>
@@ -59,7 +71,32 @@ function GuideProps({ guide, locked }: { guide: GuideDefinition; locked: boolean
       <div class="prop-section">
         <div class="prop-label">{fret ? 'Pitch' : 'Position'}</div>
         <div class="prop-value">{position}</div>
+        {repeats(guide) && <div class="prop-value-sub">and {everyPeriod} above and below</div>}
       </div>
+      {fret && (
+        <div class="prop-section">
+          <label
+            class="toggle-switch"
+            title={`Octaves: repeat this fret ${everyPeriod} across the canvas. Every line is the same fret: select or drag any one and they all follow. Single keeps only the pitch it was placed at`}
+          >
+            <span class="toggle-switch-track">
+              <input
+                type="checkbox"
+                id="prop-fret-octaves"
+                checked={repeats(guide)}
+                disabled={locked}
+                onChange={e => {
+                  history.snapshot();
+                  store.updateGuide(id, { repeat: (e.currentTarget as HTMLInputElement).checked ? 'octave' : undefined });
+                  (e.currentTarget as HTMLInputElement).blur();
+                }}
+              />
+              <span class="toggle-switch-thumb" />
+            </span>
+            <span class="toggle-switch-label">{octave ? 'Octaves' : 'Every period'}</span>
+          </label>
+        </div>
+      )}
       <div class="prop-section">
         <div class="prop-label">Label</div>
         {/* Uncontrolled while typing; keyed on the saved label so an undo or
@@ -227,6 +264,7 @@ function TrackProps({ track, commands }: { track: Track; commands: CommandRegist
 }
 
 function PointProps({ curve, index }: { curve: BezierCurve; index: number }) {
+  followComposition();
   const points = pitchPoints(curve);
   const point = points[index];
   if (!point) return <p class="placeholder-text">Invalid selection</p>;

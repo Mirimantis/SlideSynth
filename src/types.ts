@@ -129,6 +129,9 @@ export interface GuideDefinition {
   orientation: 'x' | 'y';
   position: number;             // beats for 'x', pitch cents for 'y'
   label: string;                // user-editable, may be empty
+  /** Frets only (13.18): 'octave' repeats the fret every period of the
+   *  tuning; `position` stays the pitch it was placed at. Absent: one line. */
+  repeat?: 'octave';
 }
 
 // ── Composition ─────────────────────────────────────────────────

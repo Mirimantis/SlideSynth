@@ -908,12 +908,17 @@ class Store {
     this.touch('composition', ...SELECTION);
   }
 
-  /** Patch a guide's mutable fields (label / position). */
-  updateGuide(id: string, fields: Partial<Pick<GuideDefinition, 'label' | 'position'>>): void {
+  /** Patch a guide's mutable fields (label / position / repeat). */
+  updateGuide(id: string, fields: Partial<Pick<GuideDefinition, 'label' | 'position' | 'repeat'>>): void {
     const g = this.state.composition.guides.find(g => g.id === id);
     if (!g) return;
     if (fields.label !== undefined) g.label = fields.label;
     if (fields.position !== undefined) g.position = fields.position;
+    if ('repeat' in fields) {
+      // Single keeps only the pitch the fret was placed at (13.18).
+      if (fields.repeat === 'octave' && g.orientation === 'y') g.repeat = 'octave';
+      else delete g.repeat;
+    }
     this.touch('composition');
   }
 

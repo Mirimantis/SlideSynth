@@ -72,6 +72,22 @@ describe('Preact panels (BACKLOG 15.4)', () => {
     expect(guide).toContain('Delete Fret');
   });
 
+  it('a fret offers Octaves, named by the tuning’s period (13.18)', () => {
+    store.setSelectedGuide('g1');
+    let html = renderToString(<PropertyPanel commands={commands} />);
+    expect(html).toMatch(/id="prop-fret-octaves"/);
+    expect(html).toContain('>Octaves</span>');
+    expect(html).not.toContain('every octave above and below');
+    store.updateGuide('g1', { repeat: 'octave' });
+    html = renderToString(<PropertyPanel commands={commands} />);
+    expect(html).toMatch(/id="prop-fret-octaves"[^>]*checked/);
+    expect(html).toContain('and every octave above and below');
+    store.setTuning({ kind: 'edo', divisions: 13, equave: 'tritave' });
+    html = renderToString(<PropertyPanel commands={commands} />);
+    expect(html).toContain('>Every period</span>');
+    expect(html).toContain('and every 3/1 above and below');
+  });
+
   it('names a fret’s pitch by the tuning (13.16)', () => {
     store.setTuning({ kind: 'edo', divisions: 19, equave: 'octave' });
     store.setSelectedGuide('g1');

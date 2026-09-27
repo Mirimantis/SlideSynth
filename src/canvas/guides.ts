@@ -1,13 +1,15 @@
 import type { GuideDefinition } from '../types';
 import type { Viewport } from './viewport';
 import { themeColor } from '../theme/theme';
+import { fretLines } from '../model/frets';
 
 const LABEL_FONT = '11px monospace';
 /** How far past the edge to draw the label so it sits in the ruler/staff strip. */
 const LABEL_PADDING = 4;
 
 /** Render every guide as a thin dashed line with optional inline label.
- *  `fretName` names an unlabelled fret's pitch (by the current tuning). */
+ *  `fretName` names an unlabelled fret's pitch (by the current tuning);
+ *  `period` is the tuning's repeat, where an octave fret draws its lines. */
 export function renderGuides(
   ctx: CanvasRenderingContext2D,
   vp: Viewport,
@@ -16,6 +18,7 @@ export function renderGuides(
   canvasHeight: number,
   selectedGuideId: string | null,
   fretName: (cents: number) => string,
+  period: number,
 ): void {
   if (guides.length === 0) return;
   ctx.save();
@@ -33,11 +36,16 @@ export function renderGuides(
       ctx.stroke();
       drawLabel(ctx, g.label || defaultLabel(g, fretName), sx, LABEL_PADDING + 14, color, 'left');
     } else {
-      const sy = vp.worldToScreen(0, g.position).sy;
-      ctx.moveTo(0, sy);
-      ctx.lineTo(canvasWidth, sy);
-      ctx.stroke();
-      drawLabel(ctx, g.label || defaultLabel(g, fretName), LABEL_PADDING + 32, sy - 4, color, 'left');
+      // Every line of an octave fret, each named by its own pitch.
+      for (const line of fretLines(g, period)) {
+        const sy = vp.worldToScreen(0, line.cents).sy;
+        if (sy < -8 || sy > canvasHeight + 8) continue;
+        ctx.beginPath();
+        ctx.moveTo(0, sy);
+        ctx.lineTo(canvasWidth, sy);
+        ctx.stroke();
+        drawLabel(ctx, g.label || fretName(line.cents), LABEL_PADDING + 32, sy - 4, color, 'left');
+      }
     }
   }
   ctx.restore();
@@ -92,13 +100,14 @@ export function renderGuideHandle(ctx: CanvasRenderingContext2D, width: number, 
   ctx.restore();
 }
 
-/** Default label so an unnamed guide still has something useful to read. */
+/** Default label so an unnamed beat guide still has something useful to read. */
 function defaultLabel(g: GuideDefinition, fretName: (cents: number) => string): string {
   return g.orientation === 'x' ? `b${g.position.toFixed(2)}` : fretName(g.position);
 }
 
 /**
- * Returns the closest guide whose line is within `hitRadiusPx` of (sx, sy).
+ * Returns the closest guide whose line is within `hitRadiusPx` of (sx, sy),
+ * and which of an octave fret's lines was hit (`k`, 0 otherwise).
  * X-guides hit on horizontal distance; Y-guides on vertical distance.
  */
 export function hitTestGuides(
@@ -106,22 +115,20 @@ export function hitTestGuides(
   sx: number,
   sy: number,
   guides: readonly GuideDefinition[],
+  period: number,
   hitRadiusPx: number = 6,
-): string | null {
-  let best: string | null = null;
+): { id: string; k: number } | null {
+  let best: { id: string; k: number } | null = null;
   let bestDist = hitRadiusPx;
   for (const g of guides) {
-    let d: number;
     if (g.orientation === 'x') {
-      const guideSx = vp.worldToScreen(g.position, 0).sx;
-      d = Math.abs(sx - guideSx);
+      const d = Math.abs(sx - vp.worldToScreen(g.position, 0).sx);
+      if (d <= bestDist) { bestDist = d; best = { id: g.id, k: 0 }; }
     } else {
-      const guideSy = vp.worldToScreen(0, g.position).sy;
-      d = Math.abs(sy - guideSy);
-    }
-    if (d <= bestDist) {
-      bestDist = d;
-      best = g.id;
+      for (const line of fretLines(g, period)) {
+        const d = Math.abs(sy - vp.worldToScreen(0, line.cents).sy);
+        if (d <= bestDist) { bestDist = d; best = { id: g.id, k: line.k }; }
+      }
     }
   }
   return best;
