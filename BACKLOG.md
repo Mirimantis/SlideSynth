@@ -613,14 +613,14 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - **(e) Scale generator for other equal divisions** — MOS: large and small step counts plus mode rotation; the MIT `moment-of-symmetry` library covers the maths. A second editor, so its own item.
     - **Retuning on the circle** — dragging a degree around the pitch circle to make a Custom tuning directly. The frets route (f) covers it for now.
     - **"Make home" on the circle** — a gesture (e.g. Alt+double-click) that changes the root but keeps the same notes: C major's dots with A as home is A natural minor. Recognise a named scale when the rotation is one, else keep it Custom.
-- [ ] **13.21 Prism chords per note in unequal tunings** *(M — first slice S done in this PR)*
+- [ ] **13.21 Prism chords per note in unequal tunings** *(M — first slice S done, PR #97)*
   - Since 13.8 (b), Equal intonation in an unequal tuning (Werckmeister, meantone, just intonation) builds every chord from the root's intervals. So a chord on any other note is the root chord moved, and every key sounds the same.
   - **Add a second option**, e.g. Intonation **Tuning (per note)** beside **Equal (from root)**: the chord uses the tuning's own notes above the base, as a keyboard in that temperament would. E major's third in Werckmeister is wider than C major's.
   - **The rule** (deterministic): find the tuning's note nearest the base, count up the chord's degrees from it (in a 12-note table the semitone counts; otherwise the step counts from 13.8 (b)), and shift the whole chord by the base's offset from that note.
   - **Expect:** well temperaments give each key its colour, as intended. Meantone, Pythagorean and 5-limit just intonation hit their wolf intervals on some chords (D minor in 5-limit has a fifth about 20¢ flat), historically honest but possibly surprising. Equal tunings give the same result either way.
   - **The cost is movement**, not the rule: today a chord's offsets are constant, so harmony voices are parallel copies of the curve. Per note, the shape changes as the base crosses between notes.
-  - [x] **First slice (S):** Prism Draw clicks and performing. The shape is taken at the note's start and held through the glide, so harmony voices never jump mid-note. Projection echoes keep the from-root shapes.
-    - **Done (this PR):**
+  - [x] **First slice (S, PR #97):** Prism Draw clicks and performing. The shape is taken at the note's start and held through the glide, so harmony voices never jump mid-note. Projection echoes keep the from-root shapes.
+    - **Done (PR #97):**
       - Intonation **Per note (tuning name)** beside **Equal (from root)**; not offered in 12-EDO, where it's the same.
       - `noteRootAt` / `prismOffsetsAt` in `tuning.ts`; `prismOffsets` takes the note's degree. Draw clicks, the Draw cursor's chord dots and hold-A audition use the note under the cursor. A performed note holds the degree it started on (`heldNoteRoot` in main.ts) until the press ends, so a chord-spec change mid-note still applies.
       - A 12-note octave table now counts its notes by the semitones (for Equal too): a third is four notes up however far it's tempered (7-limit's 7/6 minor third), rather than whichever step is nearest.
