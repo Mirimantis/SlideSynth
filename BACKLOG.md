@@ -428,7 +428,7 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
     - **Cancel:** released back over the handle, the guide is removed and the snapshot dropped (`history.dropLastSnapshot()`), so it leaves no undo step. Otherwise it's one undo step.
     - Locked guides: the handle does nothing, as + Fret / + Beat are disabled.
     - Tests drive the real interaction with a stub canvas (`canvas/guide-handle.test.ts`).
-- [x] **13.18 Octave frets** *(M)*
+- [x] **13.18 Octave frets** *(M, PR #94)*
   - A **Single / Octaves** toggle in the fret's Selection panel. With Octaves, the fret repeats in every octave across the canvas.
   - Every instance is the same fret: selecting any instance selects it, and dragging any instance moves them all by the same interval.
   - Toggling back to Single keeps only the originally placed fret; the other instances disappear.
@@ -436,7 +436,7 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
   - **Snap:** the one snap-config builder (15.6) expands a repeating fret into its octave targets, so snapping, Gravity and rendering all agree.
   - **Non-octave tunings** (13.8): "Octaves" repeats every period of the tuning, which is the octave except in tunings like Bohlen–Pierce.
   - Octave frets are what 13.8 (f) converts to and from a scale.
-  - **Done (this PR):**
+  - **Done (PR #94):**
     - **`model/frets.ts`:** `fretLines()` gives a fret's lines across the pitch range (one per period for `repeat: 'octave'`, each with `k` periods from the placed pitch). `moveFretLine()` moves line `k` and the rest with it. Snapping (`snap-config`), drawing and hit-testing (`canvas/guides.ts`) all read it.
     - **Selection panel:** an **Octaves** switch on frets (**Every period** in non-octave tunings), with "and every octave (or 3/1) above and below" under the pitch. Each toggle is one undo step. Single keeps only the placed pitch.
     - **Canvas:** every line is drawn, labelled with its own pitch (or the fret's label), and highlighted together when selected. Grabbing any line selects the fret and drags them all; holding A plays the line you're dragging.
