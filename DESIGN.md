@@ -38,7 +38,7 @@ Honored now so future ports stay cheap:
 1. **Frozen cents anchor.** Canonical pitch is cents from C-1 (MIDI 0 ≈ 8.1758 Hz). 100 ¢ = semitone, ¢ ÷ 100 = MIDI note number, A4 = 6900 ¢. The anchor never changes. Concert pitch (Tune A4, stored as `tuningOffsetCents`) rides on top and never rewrites stored curves.
 2. **Musical time in beats**, never seconds.
 3. **Generic lanes.** Every automatable variable is the same lane primitive; the reserved per-lane `gravity` field round-trips verbatim.
-4. **Round-trip rule.** Re-saving a file must preserve unknown sections verbatim so files survive crossing runtimes (top-level envelope gap: BACKLOG 12.3).
+4. **Round-trip rule.** Re-saving a file must preserve unknown sections verbatim so files survive crossing runtimes. *(Closed in 12.3: unknown top-level envelope sections, and unknown keys in `meta`, `tuning` and `snap`, ride along in `Composition.unknownEnvelope`; the composition section, snap settings, guides and lanes already kept theirs by spreading.)*
 5. **The `tuning` + `snap` envelope sections are the portable "gravity map"** — the same payload the hardware protocol and plugin ports will consume.
 6. **Timbre is browser-only.** The shared contract is gesture + gravity map + structure; host-specific settings belong in namespaced advisory blocks.
 7. **Store heard pitch as ground truth.** Curves hold the post-snap pitch that was actually heard, so playback is identical everywhere; snap config drives editing and feel, not reproduction.
