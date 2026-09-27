@@ -85,6 +85,10 @@ export const COMMANDS = [
   { id: 'edit.copyUp', label: 'Copy up by interval', section: 'Edit', keys: ['Alt+Shift+ArrowUp'],
     description: 'a moved copy of the selected curves: a harmony line (or Alt+click an arrow on the transform box)' },
   { id: 'edit.copyDown', label: 'Copy down by interval', section: 'Edit', keys: ['Alt+Shift+ArrowDown'] },
+  { id: 'edit.sendToGuides', label: 'Send to guide track', section: 'Edit',
+    description: 'move the selected curves to a guide track (made if there is none): silent, and they pull like frets' },
+  { id: 'edit.copyToGuides', label: 'Copy to guide track', section: 'Edit',
+    description: 'put a copy of the selected curves on a guide track, and keep the originals' },
   { id: 'edit.smooth', label: 'Smooth Curve', section: 'Edit', keys: ['Shift+S'], description: 'reset handles to the auto-smooth defaults' },
   { id: 'edit.sharpen', label: 'Sharpen Curve', section: 'Edit', keys: ['Alt+S'], description: 'clear all handles for sharp corners' },
 

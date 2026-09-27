@@ -15,7 +15,7 @@ import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuideHandle, renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, findAdaptiveSnap } from './utils/snap';
-import { createInteraction, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './canvas/interaction';
+import { createInteraction, editingCurveIds, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './canvas/interaction';
 import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
 import { createPreviewManager } from './audio/preview';
@@ -1439,8 +1439,12 @@ const trackListActions: TrackListActions = {
     history.snapshot();
     store.mutate(c => {
       const t = c.tracks.find(tt => tt.id === trackId);
-      if (t) t.solo = !t.solo;
+      if (t && !t.guide) t.solo = !t.solo;
     });
+  },
+  toggleGuide(trackId) {
+    history.snapshot();
+    store.setTrackGuide(trackId, !store.getComposition().tracks.find(t => t.id === trackId)?.guide);
   },
   toggleMidiArm(trackId) {
     const current = store.getState().midiArmedTrackId;
@@ -2964,6 +2968,8 @@ function draw() {
   const geometryVersion = store.compositionVersion();
   for (const track of comp.tracks) {
     if (track.muted) continue;
+    // The Snap drawer's Guides switch hides pitch guides with frets (13.10).
+    if (track.guide && !state.guidesVisible) continue;
     const tone = comp.toneLibrary.find(t => t.id === track.toneId);
     if (!tone) continue;
 
@@ -2977,6 +2983,8 @@ function draw() {
       isActiveTrack,
       isActiveTrack ? state.selectedPoints : null,
       geometryVersion,
+      // Guide tracks draw as guides, unless the Guides switch hides them all.
+      !!track.guide,
     );
   }
 
@@ -3048,7 +3056,9 @@ function draw() {
       && state.harmonicPrism.drawMode
       && interaction.cursorWorld
       && toolHoverVisible) {
-    const snap = currentSnapConfig({ zoomX: viewport.state.zoomX, atBeat: interaction.cursorWorld.x });
+    const snap = currentSnapConfig({
+      zoomX: viewport.state.zoomX, atBeat: interaction.cursorWorld.x, excludeCurveIds: editingCurveIds(interaction),
+    });
     const snapped = snapToGrid(interaction.cursorWorld.x, interaction.cursorWorld.y, snap);
     const cursorScreenX = viewport.worldToScreen(snapped.wx, 0).sx;
     renderPrismDrawPreview(
@@ -3312,6 +3322,7 @@ const MENUS: readonly MenuSpec[] = [
       'edit.cut', 'edit.copy', 'edit.paste', 'edit.duplicate', 'edit.continue', 'edit.delete', '-',
       'edit.join', 'edit.group', 'edit.ungroup', '-',
       'edit.moveUp', 'edit.moveDown', 'edit.copyUp', 'edit.copyDown', '-',
+      'edit.sendToGuides', 'edit.copyToGuides', '-',
       'edit.smooth', 'edit.sharpen',
     ],
   },

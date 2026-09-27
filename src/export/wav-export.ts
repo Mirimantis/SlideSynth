@@ -1,6 +1,7 @@
 import type { Composition } from '../types';
 import { sampleCurve, getCurveTimeRange } from '../audio/curve-sampler';
 import { getCompositionLength } from '../model/composition';
+import { trackSounds } from '../model/track';
 
 /**
  * Render a composition to a WAV file using OfflineAudioContext.
@@ -20,12 +21,9 @@ export async function exportWav(composition: Composition): Promise<void> {
   masterGain.gain.value = 0.5;
   masterGain.connect(offline.destination);
 
-  // Determine which tracks to play (solo logic)
-  const hasSolo = composition.tracks.some(t => t.solo);
-
   for (const track of composition.tracks) {
-    if (track.muted) continue;
-    if (hasSolo && !track.solo) continue;
+    // Muted, a guide track (13.10), or not soloed.
+    if (!trackSounds(track, composition.tracks)) continue;
 
     const tone = composition.toneLibrary.find(t => t.id === track.toneId);
     if (!tone) continue;

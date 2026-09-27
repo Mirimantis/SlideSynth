@@ -11,6 +11,9 @@ const HANDLE_RADIUS = 3;
 /** Alpha applied to curves on non-active tracks (BACKLOG 8.23). Pushes them
  *  visually back so the active track stays distinct, while remaining clickable. */
 const INACTIVE_TRACK_ALPHA = 0.45;
+/** A guide track's curves (13.10): scaffolding, in the fret colour. */
+const GUIDE_TRACK_ALPHA = 0.8;
+const GUIDE_DASH: number[] = [6, 5];
 
 /**
  * Each curve's pitch path as a Path2D, kept until the composition changes
@@ -60,15 +63,20 @@ export function renderCurves(
   selectedPoints: PointSelection | null,
   /** store.compositionVersion() — invalidates the cached curve paths. */
   geometryVersion: number,
+  /** A guide track's curves (13.10): thin, dashed, in the fret colour. */
+  asGuide = false,
 ): void {
   const prevAlpha = ctx.globalAlpha;
-  if (!isActiveTrack) ctx.globalAlpha = prevAlpha * INACTIVE_TRACK_ALPHA;
+  let alpha = isActiveTrack ? prevAlpha : prevAlpha * INACTIVE_TRACK_ALPHA;
+  if (asGuide) alpha *= GUIDE_TRACK_ALPHA;
+  ctx.globalAlpha = alpha;
+  const drawTone = asGuide ? { ...tone, color: themeColor('guide'), dashPattern: GUIDE_DASH } : tone;
   for (const curve of curves) {
     const isSelected = selectedCurveIds.has(curve.id);
     const showHandles = isSelected && curve.id === selectedPointCurveId;
-    renderCurve(ctx, vp, curve, tone, isSelected, showHandles, selectedPointIndex, selectedPoints, geometryVersion);
+    renderCurve(ctx, vp, curve, drawTone, isSelected, showHandles, selectedPointIndex, selectedPoints, geometryVersion, asGuide);
   }
-  if (!isActiveTrack) ctx.globalAlpha = prevAlpha;
+  ctx.globalAlpha = prevAlpha;
 }
 
 function renderCurve(
@@ -81,6 +89,7 @@ function renderCurve(
   selectedPointIndex: number | null,
   selectedPoints: PointSelection | null,
   geometryVersion: number,
+  thin = false,
 ): void {
   const points = pitchPoints(curve);
   if (points.length === 0) return;
@@ -93,7 +102,7 @@ function renderCurve(
     const onScreen = new Path2D();
     onScreen.addPath(curvePath(curve, geometryVersion), new DOMMatrix([zoomX, 0, 0, -zoomY, origin.sx, origin.sy]));
     ctx.strokeStyle = tone.color;
-    ctx.lineWidth = isSelected ? 4 : 2;
+    ctx.lineWidth = thin ? (isSelected ? 2.5 : 1.25) : (isSelected ? 4 : 2);
     ctx.setLineDash(tone.dashPattern);
     ctx.stroke(onScreen);
     ctx.setLineDash([]);

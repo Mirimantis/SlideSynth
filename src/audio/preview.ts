@@ -4,6 +4,7 @@ import { createLiveVoice, type LiveVoice } from './live-voice';
 import { getAudioContext, getMasterGain, ensureResumed } from './engine';
 import { evaluateCurveAtBeat } from './curve-sampler';
 import { centsToFrequency } from '../constants';
+import { trackSounds } from '../model/track';
 
 const RAMP_IN = 0.01;   // seconds — fade-in to avoid click
 const RAMP_OUT = 0.015;  // seconds — fade-out to avoid click
@@ -157,11 +158,8 @@ export function createPreviewManager(): PreviewManager {
       ensureResumed();
       const ctx = getAudioContext();
       const dest = getPreviewGain();
-      const hasSolo = composition.tracks.some(t => t.solo);
-
       for (const track of composition.tracks) {
-        if (track.muted) continue;
-        if (hasSolo && !track.solo) continue;
+        if (!trackSounds(track, composition.tracks)) continue;
 
         const tone = composition.toneLibrary.find(t => t.id === track.toneId);
         if (!tone) continue;

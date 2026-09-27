@@ -5,6 +5,7 @@ import { sampleCurve, getCurveTimeRange } from './curve-sampler';
 import { computeVoiceAssignment, assignNewCurves } from './voice-allocation';
 import { SCHEDULER_INTERVAL_MS, SCHEDULER_LOOKAHEAD_S } from '../constants';
 import { getCompositionLength } from '../model/composition';
+import { trackSounds } from '../model/track';
 
 interface TrackPlayback {
   trackId: string;
@@ -176,16 +177,8 @@ export function createPlaybackEngine(
 
     for (const tp of trackPlaybacks) {
       const track = currentComposition.tracks.find(t => t.id === tp.trackId);
-      if (!track || track.muted) {
-        // Muted: silence via track gain
-        tp.trackGain.gain.setValueAtTime(0, now);
-        tp.lastScheduledTime = scheduleUntil;
-        continue;
-      }
-
-      // Check solo logic: if any track has solo, only play solo tracks
-      const hasSolo = currentComposition.tracks.some(t => t.solo);
-      if (hasSolo && !track.solo) {
+      // Muted, a guide track (13.10), or not soloed: silence via track gain.
+      if (!track || !trackSounds(track, currentComposition.tracks)) {
         tp.trackGain.gain.setValueAtTime(0, now);
         tp.lastScheduledTime = scheduleUntil;
         continue;

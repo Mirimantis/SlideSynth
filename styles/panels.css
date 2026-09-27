@@ -41,10 +41,13 @@
 
 /* ── Track Panel Items ────────────────────────────────────────── */
 
+/* Name and tone on the first line, the buttons on a second (13.10: six
+   buttons left the name about 20 px). */
 .track-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   padding: 6px 8px;
   border-radius: 4px;
   cursor: pointer;
@@ -95,6 +98,8 @@
 .track-controls {
   display: flex;
   gap: 3px;
+  flex-basis: 100%;
+  padding-left: 16px; /* under the name, clear of the colour bar */
 }
 
 .track-btn {
@@ -134,6 +139,18 @@
   background: var(--solo);
   color: var(--text-on-bright);
   border-color: var(--solo);
+}
+
+/* Guide track (13.10): the fret colour. */
+.track-guide.active {
+  background: var(--guide);
+  color: var(--text-on-strong);
+  border-color: var(--guide);
+}
+
+.track-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* MIDI input arm button — armed = solid grey, recording = pulsing red. */

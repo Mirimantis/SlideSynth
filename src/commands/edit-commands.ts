@@ -16,7 +16,8 @@ import { showToast } from '../ui/toast';
 export type EditCommandId = Extract<CommandId,
   | 'edit.undo' | 'edit.redo' | 'edit.copy' | 'edit.cut' | 'edit.paste' | 'edit.duplicate' | 'edit.continue'
   | 'edit.delete' | 'edit.join' | 'edit.group' | 'edit.ungroup' | 'edit.smooth' | 'edit.sharpen'
-  | 'edit.moveUp' | 'edit.moveDown' | 'edit.copyUp' | 'edit.copyDown'>;
+  | 'edit.moveUp' | 'edit.moveDown' | 'edit.copyUp' | 'edit.copyDown'
+  | 'edit.sendToGuides' | 'edit.copyToGuides'>;
 
 export interface EditContext {
   interaction: InteractionState;
@@ -60,6 +61,8 @@ export function createEditCommands(ctx: EditContext): Record<EditCommandId, Comm
 
   const hasSelection = () => store.getState().selectedCurveIds.size > 0;
   const canMove = () => !ctx.isPerformLocked() && (hasSelection() || store.getState().selectedPoints.size > 0);
+  // Curves on a sounding track, not while performing.
+  const canSendToGuides = () => !ctx.isPerformLocked() && hasSelection() && !activeTrack()?.guide;
   const canCopyMove = () => !ctx.isPerformLocked() && hasSelection() && store.getState().selectedPoints.size === 0;
   /** Delete has something to act on: a guide, points, or curves. */
   const canDelete = () => {
@@ -212,6 +215,25 @@ export function createEditCommands(ctx: EditContext): Record<EditCommandId, Comm
     'edit.moveDown': { enabled: canMove, run: () => { moveSelectionByInterval(interaction, -1); } },
     'edit.copyUp': { enabled: canCopyMove, run: () => { moveSelectionByInterval(interaction, 1, true); } },
     'edit.copyDown': { enabled: canCopyMove, run: () => { moveSelectionByInterval(interaction, -1, true); } },
+
+    // Guide tracks (13.10). Both are one undo step.
+    'edit.sendToGuides': {
+      enabled: canSendToGuides,
+      run() {
+        history.snapshot();
+        store.sendCurvesToGuideTrack([...store.getState().selectedCurveIds]);
+        interaction.transformBox = null;
+      },
+    },
+    'edit.copyToGuides': {
+      enabled: canSendToGuides,
+      run() {
+        // Selects the copies, and takes the undo snapshot.
+        const copies = duplicateCurves({ inPlace: true });
+        if (copies) store.sendCurvesToGuideTrack(copies);
+        interaction.transformBox = null;
+      },
+    },
 
     'edit.smooth': {
       enabled: hasSelection,

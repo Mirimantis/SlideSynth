@@ -79,6 +79,9 @@ export interface Track {
   muted: boolean;
   solo: boolean;
   volume: number;           // 0–1
+  /** A guide track (13.10): its curves are silent pitch guides that pull like
+   *  frets. Saved with `muted: true` too, so older apps don't play them. */
+  guide?: boolean;
 }
 
 // ── Snap settings ──────────────────────────────────────────────

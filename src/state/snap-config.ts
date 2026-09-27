@@ -4,6 +4,7 @@ import { getAdaptiveSubdivisions } from '../utils/snap';
 import { pitchSetFor, prismOffsets, resolveTuning } from '../tuning/tuning';
 import { fretLines, shownGuides } from '../model/frets';
 import { computeProjectionTargetsAtX } from '../canvas/projection-renderer';
+import { evaluateCurveAtBeat } from '../audio/curve-sampler';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { store } from './store';
 
@@ -24,6 +25,9 @@ export interface SnapQuery {
   atBeat?: number;
   /** A guide being dragged, left out of the targets so it can't snap to itself. */
   excludeGuideId?: string;
+  /** Curves being drawn or edited: a pitch guide among them doesn't pull on
+   *  itself (13.10). */
+  excludeCurveIds?: ReadonlySet<string>;
 }
 
 /** The slice of app state a snap config is built from. */
@@ -60,6 +64,18 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
     if (g.id === q.excludeGuideId) continue;
     if (g.orientation === 'x') xs.push(g.position);
     else for (const line of fretLines(g, period)) ys.push(line.cents);
+  }
+  // Pitch guides (13.10): a guide track's curves pull at their pitch at this
+  // beat, like frets whose pitch moves. Under the same Guides switch.
+  if (st.guidesVisible && q.atBeat !== undefined) {
+    for (const track of st.composition.tracks) {
+      if (!track.guide) continue;
+      for (const curve of track.curves) {
+        if (q.excludeCurveIds?.has(curve.id)) continue;
+        const hit = evaluateCurveAtBeat(curve, q.atBeat);
+        if (hit) ys.push(hit.noteNumber);
+      }
+    }
   }
   if (xs.length > 0) guideXTargets = xs;
   if (ys.length > 0) guideYTargets = ys;

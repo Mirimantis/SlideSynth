@@ -1,7 +1,8 @@
 import type { AppState, BezierCurve, Composition, GuideDefinition, PlanchetteState, SnapSettings, ToolMode, TransportState, ViewportState, HarmonicPrismMode, DynamicsSource } from '../types';
 import { DYNAMICS_SOURCES } from '../types';
 import { createComposition } from '../model/composition';
-import { createTrack } from '../model/track';
+import { createTrack, GUIDE_TRACK_NAME } from '../model/track';
+import { expandSelectionToGroups } from '../model/curve-groups';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 import {
@@ -1037,6 +1038,44 @@ class Store {
       this.setSelectedTrack(targetTrackId);
       this.setSelectedCurves(curveIds);
     });
+  }
+
+  /** Make a track a guide track or a sounding one (13.10). Either way it
+   *  comes out unmuted (Mute means nothing on a guide track), and a guide
+   *  track can't stay soloed. Caller takes the `history.snapshot()`. */
+  setTrackGuide(trackId: string, guide: boolean): void {
+    const t = this.state.composition.tracks.find(tt => tt.id === trackId);
+    if (!t || !!t.guide === guide) return;
+    if (guide) { t.guide = true; t.solo = false; } else delete t.guide;
+    t.muted = false;
+    this.touch('composition');
+  }
+
+  /**
+   * Send curves to a guide track (13.10): the first one, or a new "Guides"
+   * track if there's none. The active track stays where it is, so you keep
+   * working on it; the curves leave the selection. Whole groups go together.
+   * Returns the guide track's id. Caller takes the `history.snapshot()`.
+   */
+  sendCurvesToGuideTrack(curveIds: readonly string[]): string | null {
+    const comp = this.state.composition;
+    const source = comp.tracks.find(t => t.curves.some(c => c.id === curveIds[0]));
+    if (!source || source.guide) return null;
+    const ids = expandSelectionToGroups(new Set(curveIds), source);
+    let target = comp.tracks.find(t => t.guide);
+    if (!target) {
+      target = createTrack(GUIDE_TRACK_NAME, source.toneId);
+      target.guide = true;
+      comp.tracks.push(target);
+    }
+    const moved = source.curves.filter(c => ids.has(c.id));
+    source.curves = source.curves.filter(c => !ids.has(c.id));
+    target.curves.push(...moved);
+    batch(() => {
+      this.touch('composition');
+      this.setSelectedCurves([]);
+    });
+    return target.id;
   }
 
   /**
