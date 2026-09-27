@@ -145,6 +145,8 @@
   --guide: #7a8fa6;
   --guide-selected: #e6c84a;
   --guide-label-bg: rgba(20, 28, 40, 0.85);
+  /* The guide handle at the ruler's left end (13.17). */
+  --guide-handle-bg: #1f2640;
   --loop-in: #4caf50;
   --loop-out: #b71c1c;
   --loop-range: rgba(var(--loop-in-rgb), 0.07);

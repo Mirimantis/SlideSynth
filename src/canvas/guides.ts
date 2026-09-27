@@ -64,6 +64,34 @@ function drawLabel(
   ctx.restore();
 }
 
+/** The guide handle at the ruler's left end (13.17): a small tab with a beat
+ *  guide's vertical line over a fret's horizontal one. Drag it down for a
+ *  fret, right for a beat guide. Dimmed while guides are locked. */
+export function renderGuideHandle(ctx: CanvasRenderingContext2D, width: number, height: number, locked: boolean): void {
+  ctx.save();
+  ctx.fillStyle = themeColor('guide-handle-bg');
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = themeColor('ruler-border');
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(width - 0.5, 0);
+  ctx.lineTo(width - 0.5, height);
+  ctx.stroke();
+
+  ctx.globalAlpha = locked ? 0.35 : 1;
+  ctx.strokeStyle = themeColor('guide');
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([2, 2]);
+  const mid = Math.round(width / 2) - 0.5;
+  ctx.beginPath();
+  ctx.moveTo(mid, 5);                 // a beat guide
+  ctx.lineTo(mid, height / 2 - 2);
+  ctx.moveTo(3, height * 0.72);       // a fret
+  ctx.lineTo(width - 4, height * 0.72);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Default label so an unnamed guide still has something useful to read. */
 function defaultLabel(g: GuideDefinition, fretName: (cents: number) => string): string {
   return g.orientation === 'x' ? `b${g.position.toFixed(2)}` : fretName(g.position);

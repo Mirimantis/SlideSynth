@@ -1,5 +1,9 @@
 import type { Viewport } from './viewport';
-import { RULER_HEIGHT, SECONDS_RULER_HEIGHT, BEAT_RULER_HEIGHT } from './interaction';
+import { RULER_HEIGHT, SECONDS_RULER_HEIGHT, BEAT_RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './interaction';
+
+/** Where a tick's label starts: beside the tick, but clear of the guide
+ *  handle at the ruler's left end (13.17). */
+const labelX = (sx: number, gap: number) => Math.max(sx + gap, GUIDE_HANDLE_WIDTH + gap);
 import { getAdaptiveBeatStep } from '../utils/snap';
 import { themeColor } from '../theme/theme';
 
@@ -109,7 +113,7 @@ function renderSecondsRuler(
     ctx.stroke();
 
     if (sx >= 0 && sx <= width) {
-      ctx.fillText(formatSeconds(s, majorStep), sx + 3, 2);
+      ctx.fillText(formatSeconds(s, majorStep), labelX(sx, 3), 2);
     }
   }
 }
@@ -244,13 +248,13 @@ function renderBeatRuler(
       ctx.fillStyle = themeColor('ruler-measure-label');
       ctx.font = 'bold 10px monospace';
       ctx.textBaseline = 'top';
-      ctx.fillText(String(measureNum), sx + 3, topY + 2);
+      ctx.fillText(String(measureNum), labelX(sx, 3), topY + 2);
     } else if (zx >= 50) {
       const beatInMeasure = (b % measureLen) + 1;
       ctx.fillStyle = themeColor('ruler-beat-label');
       ctx.font = '9px monospace';
       ctx.textBaseline = 'top';
-      ctx.fillText(String(beatInMeasure), sx + 2, topY + 4);
+      ctx.fillText(String(beatInMeasure), labelX(sx, 2), topY + 4);
     }
   }
 }

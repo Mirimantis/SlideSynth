@@ -24,6 +24,12 @@ class UndoHistory {
     this.notify();
   }
 
+  /** Forget the last snapshot without restoring it: for a gesture that
+   *  snapshotted and was then cancelled, leaving the composition as it was. */
+  dropLastSnapshot(): void {
+    if (this.undoStack.pop()) this.notify();
+  }
+
   undo(): void {
     if (this.undoStack.length === 0) return;
     this.redoStack.push(cloneComposition(store.getComposition()));

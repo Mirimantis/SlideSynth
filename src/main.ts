@@ -12,10 +12,10 @@ import { renderMarquee } from './canvas/marquee-renderer';
 import { renderProjection, renderProjectionSourceHighlight, renderPrismDrawPreview } from './canvas/projection-renderer';
 import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
-import { renderGuides } from './canvas/guides';
+import { renderGuideHandle, renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, findAdaptiveSnap } from './utils/snap';
-import { createInteraction, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT } from './canvas/interaction';
+import { createInteraction, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './canvas/interaction';
 import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
 import { createPreviewManager } from './audio/preview';
@@ -3022,6 +3022,8 @@ function draw() {
   if (state.guidesVisible && comp.guides.length > 0) {
     renderGuides(fgCtx, viewport, comp.guides, rect.width, rect.height, state.selectedGuideId, c => pitchLabel(state, c));
   }
+  // The handle frets and beat guides are dragged out of (13.17), over the ruler's left end.
+  renderGuideHandle(fgCtx, GUIDE_HANDLE_WIDTH, RULER_HEIGHT, state.guidesLocked);
 
   // Live recording trail: polyline of in-flight samples per voice. Drawn above
   // committed curves but below the rail/planchette glyph so the planchette
