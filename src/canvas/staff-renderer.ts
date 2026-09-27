@@ -6,6 +6,7 @@ import {
 import type { StaffGrid, StaffLine } from '../tuning/tuning';
 import { getAdaptiveBeatStep } from '../utils/snap';
 import { themeColor } from '../theme/theme';
+import { worldDashOffset } from './dash';
 
 /** Lines outside the scale fade out as neighbouring notes close from 4 px to
  *  1.5 px apart, so a 72-note tuning zoomed out isn't a solid block. */
@@ -205,7 +206,10 @@ function renderReference(
   ctx.save();
   ctx.strokeStyle = themeColor('staff-ref-line');
   ctx.lineWidth = 1;
-  ctx.setLineDash([2, 4]);
+  const dash = [2, 4];
+  ctx.setLineDash(dash);
+  // Pinned to beat 0, so the dashes scroll with the canvas.
+  ctx.lineDashOffset = worldDashOffset(vp.worldToScreen(0, 0).sx, dash);
   ctx.fillStyle = themeColor('staff-ref-label');
   ctx.font = '9px monospace';
   ctx.textAlign = 'right';

@@ -2,6 +2,10 @@ import type { GuideDefinition } from '../types';
 import type { Viewport } from './viewport';
 import { themeColor } from '../theme/theme';
 import { fretLines } from '../model/frets';
+import { worldDashOffset } from './dash';
+
+/** An unselected guide's dashes. */
+const GUIDE_DASH = [4, 4];
 
 const LABEL_FONT = '11px monospace';
 /** How far past the edge to draw the label so it sits in the ruler/staff strip. */
@@ -22,12 +26,16 @@ export function renderGuides(
 ): void {
   if (guides.length === 0) return;
   ctx.save();
+  // The dashes move with the canvas when it scrolls or pans: frets (drawn
+  // across) are pinned to beat 0, beat guides (drawn down) to pitch 0.
+  const origin = vp.worldToScreen(0, 0);
   for (const g of guides) {
     const isSelected = g.id === selectedGuideId;
     const color = isSelected ? themeColor('guide-selected') : themeColor('guide');
     ctx.strokeStyle = color;
     ctx.lineWidth = isSelected ? 1.6 : 1;
-    ctx.setLineDash(isSelected ? [] : [4, 4]);
+    ctx.setLineDash(isSelected ? [] : GUIDE_DASH);
+    ctx.lineDashOffset = worldDashOffset(g.orientation === 'x' ? origin.sy : origin.sx, GUIDE_DASH);
     ctx.beginPath();
     if (g.orientation === 'x') {
       const sx = vp.worldToScreen(g.position, 0).sx;

@@ -442,6 +442,7 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
     - **Canvas:** every line is drawn, labelled with its own pitch (or the fret's label), and highlighted together when selected. Grabbing any line selects the fret and drags them all; holding A plays the line you're dragging.
     - **Edge case:** if dragging a line would take the placed pitch off the pitch range, it's folded back in by whole periods, so the fret stays whole.
     - **Data:** `GuideDefinition.repeat?: 'octave'`, frets only; older files and apps ignore it (no format bump).
+    - **Dashes move with the canvas:** an unselected fret's (and beat guide's) dashes, and the 12-EDO reference lines', are pinned to the world (`canvas/dash.ts`), so with Scroll canvas during playback they travel with everything else instead of standing still.
     - **Fixed along the way:** the Selection panel didn't follow a fret or point being dragged. Guides and points are edited in place, so the child panel's props looked unchanged and `@preact/signals` skipped it; both now subscribe to composition edits.
 - [ ] **13.22 Hide / show all frets** *(S)*
   - One switch that hides every fret at once and brings them back, without touching beat guides.
