@@ -6,22 +6,20 @@ Sizes: XS / S / M / L / XL. Items marked **own planning session** need a design 
 
 ---
 
-## Current direction (2026-09-24)
+## Current direction (updated 2026-09-27)
 
-A full-project review (findings in [DESIGN.md › Current architecture](DESIGN.md#current-architecture-as-of-2026-09-24)) concluded:
+A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architecture](DESIGN.md#current-architecture-as-of-2026-09-24)) paused feature work for three phases: stabilize, consolidate the architecture, simplify the interface. Where that stands:
 
-- The vision and data model are sound, and TypeScript + the web stay.
-- The code is fractured: a ~4,400-line `main.ts`, an implicit perform state machine, and a notify-everything store with hand-synced UI.
-- The interface has too many overlapping modes.
+- **Phase 14 — Stabilize:** done.
+- **Phase 15 — Consolidate the architecture:** the big pieces are done (signals store, transport state machine, input router, command catalog, one snap-config builder, read-only render loop, AudioWorklet voice). Left, as background work: **15.3** break up `main.ts` (3,400 lines; the target is a few hundred), **15.4** the last panels and dialogs onto Preact, **15.8** kernel tests. They make every feature cheaper and are needed before Phase 17.
+- **Phase 16 — Simplify the interface:** the build is done (16.1–16.7). Left: the **16.8 Perform** and **16.9 Visual theme** design sessions.
+- **Phase 17 — Portable core:** not started. Needed only before a port (VST, VCV, hardware).
 
-**New feature work is paused.** Work proceeds in this order:
+**[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Phase 14 — Stabilize.** Confirmed bugs and repo hygiene. Small and immediate.
-2. **Phase 15 — Consolidate the architecture.** Moves the code to the [target architecture](DESIGN.md#target-architecture).
-3. **Phase 16 — Simplify the interface.** Starts with its own design session.
-4. **Phase 17 — Portable core.** Can interleave with 15–16. Must be done before any port begins.
-
-The [queued features](#queued-features-paused) resume after Phase 16. Several of them will be reshaped or absorbed by Phases 15–16; each entry notes where.
+1. **Quick wins:** 13.24 Transform by interval (the first half of the Projection question, 13.25), 12.3 unknown file sections round-trip.
+2. **Planning sessions, roughly by payoff:** 13.10 Curves as pitch guides (the other half of 13.25); 13.26 Area Nudge with 13.11 recording density; 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics); 13.23 Key guides, then 12.1.
+3. **Background, whenever:** 15.8, then 15.3 and 15.4.
 
 ---
 
@@ -137,7 +135,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - Also in this PR, a user request: each drawer is sized to its own controls instead of full height and a shared 240px width. Height is capped at the canvas (then it scrolls); width runs from 200px up to the canvas width.
       - The Prism label column widened so "Voice 1 (root)" no longer runs into its input.
       - The Prism toggles' tooltips come from the command catalog.
-  - **Still to migrate:** the Tuning drawer's contents (Key/Scale toolbar, Tune A4), tone builder/picker and the older dialogs. The Tuning drawer moves with its redesign (13.8). *(16.3 moved the top bar, menus, Settings and the Tempo drawer; 16.4 the tool strip, Snap drawer and Prism panel.)*
+  - **Still to migrate (2026-09-27):** the tone builder and tone picker (`ui/tone-builder.ts`, `ui/tone-picker.ts`), the context menu (`ui/context-menu.ts`), the MIDI-arm and preset-save dialogs, and the Perf HUD, which still build DOM by hand or with `innerHTML`. *(16.3 moved the top bar, menus, Settings and the Tempo drawer; 16.4 the tool strip, Snap drawer and Prism panel; 13.8 the Tuning drawer.)*
 - [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2, PR #76)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.
   - Add an `fgDirty` flag mirroring `bgDirty`, and cache each curve's tessellation as a `Path2D` keyed by curve identity. Idle CPU should then drop to near zero.
@@ -172,6 +170,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - *Not done here:* moving the magnetic integrator onto the audio thread. It still runs per frame on the main thread; the worklet is the place for it.
 - [ ] **15.8 Kernel test coverage** *(M)*
   - Unit tests for snap (`snap.ts`), magnetic physics (`snap-magnetic.ts`), `bezier-math`, `curve-sampler` and the scheduler's timing math, plus 15.2's state machine.
+  - **Status (2026-09-27):** the state machine (`transport.test.ts`) and snap-config are covered, and snap is partly covered through `tuning.test.ts`. Magnetic physics, `bezier-math`, `curve-sampler` and the scheduler still have no tests of their own; only the golden-format test reaches them.
   - These become the cross-runtime conformance suite in Phase 17.
 
 ---
@@ -371,12 +370,13 @@ Required before any VST, VCV or hardware work starts (see [Horizon](#horizon-thi
 
 ---
 
-## Queued features (paused)
+## Queued features
 
-Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
+Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-27)). Grouped by area; roughly easiest-first within a group.
 
 ### Editing & canvas
-- [ ] **13.4 Pitch ruler down the left edge** *(M)*
+- [ ] **13.4 Pitch ruler down the left edge** *(M — may be obsolete, 2026-09-27)*
+  - **Revisit before building:** its main reasons are gone. 13.5 was covered by 13.17's corner handle, and since 13.8 (b) the staff labels its own lines with the tuning's note names, thinned by zoom. Build it only if a separate strip still earns the canvas width it costs; otherwise close it.
   - Note names and octaves with adaptive label density, mirroring `getAdaptiveBeatStep`.
   - Respects Key, including true-None mode, and the Tune A4 setting (`centsToNoteName`).
   - The ruler costs canvas width, so every hit-test that assumes X starts at 0 needs the same treatment `RULER_HEIGHT` gets on the Y side.
@@ -490,7 +490,8 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
 
 Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand `Ctrl+G` groups). There is no group object: a group is just the curves that carry the same id. 13.13 and 13.14 would likely need one — a first-class group entity with an id, and room for its own lanes — which is a data-model change with a composition-version bump and migration.
 
-- [ ] **13.12 Make grouping visible, and ungrouping easy** *(S–M — UI half done in 16.5, PR #84)*
+- [x] **13.12 Make grouping visible, and ungrouping easy** *(S–M — done in 16.5, PR #84)*
+  - **Closed (2026-09-27):** 16.5 built every part below: the shared outline on the canvas, "Group of n curves" in Selection, and Ungroup there and on the transform box. The group *entity* is 13.13's concern.
   - Found in 15.2 testing: Prism draw correctly places two offset curves as a group, but nothing on screen says they're grouped, so it read as a bug.
   - Show grouped status on the canvas, for example a shared outline or bracket when any member is hovered or selected, or a group badge on the selection. Show it in Object Properties too ("Group (3 curves)" exists only for the Move-to-track picker today).
   - Put Ungroup somewhere easier to reach than `Ctrl+Shift+G` and the right-click menu: a button in Object Properties when a group is selected, and on the transform box.
@@ -664,8 +665,9 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
   - Honest about microtonal bases, e.g. "C(+17¢) major".
 - [ ] **8.15 "Lite harmonies" audio mode** *(S)*
   - Sine-only harmony voices for CPU relief.
-- [ ] **8.16 Secondal stacking** *(S)*
+- [x] **8.16 Secondal stacking** *(S — already built)*
   - Cluster chords. Low priority.
+  - **Closed (2026-09-27):** Secondal (2nds) stacking, major and minor, has been in the Prism since Projection mode was first built (April 2026); the entry was logged from the design doc without checking.
 
 ### Dynamics bus
 The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); each input is a thin adapter. Build order: MIDI → pen → gamepad.
