@@ -302,6 +302,10 @@ export interface AppState {
   /** Snap guides (Phase 8.7) — workspace toggle for visibility (and snap participation).
    *  Persisted to localStorage; not in the composition file (it's a viewing pref). */
   guidesVisible: boolean;
+  /** Frets (Y guides) on show, and pulling (13.22). Beat guides don't follow
+   *  it. Under guidesVisible: with that off, no guide shows. Persisted to
+   *  localStorage, like guidesVisible. */
+  fretsVisible: boolean;
   /** When true, existing guides can't be selected, dragged, or deleted via the
    *  canvas / Delete key. Buttons in the Snap section still work (so the user can
    *  unlock and add new guides). Persisted to localStorage. */

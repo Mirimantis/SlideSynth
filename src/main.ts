@@ -64,7 +64,7 @@ import { SnapPanel, type SnapActions } from './ui/snap-panel';
 import { PrismPanel } from './ui/prism-panel';
 import { TuningPanel, type TuningActions } from './ui/tuning-panel';
 import { nearestNote, pitchLabel, pitchName, prismOffsets, resolveTuning, staffGridFor, tuningKey } from './tuning/tuning';
-import { fretLinePitch } from './model/frets';
+import { fretLinePitch, shownGuides } from './model/frets';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
 import { createDrawerRail } from './ui/drawer';
@@ -743,6 +743,7 @@ const tuningActions: TuningActions = {
   },
   setTunedFrom(pc) { history.snapshot(); store.setTunedFrom(pc); },
   setPitchLinesVisible(visible) { history.snapshot(); store.setPitchLinesVisible(visible); },
+  setFretsVisible(visible) { store.setFretsVisible(visible); bgDirty = true; },
   setReferenceLines(visible) { history.snapshot(); store.setReferenceLines(visible); },
   async importScl() {
     let file: { name: string; text: string };
@@ -997,7 +998,8 @@ function addGuideAtViewportCenter(orientation: 'x' | 'y'): void {
   store.addGuide(guide);
   store.setSelectedGuide(guide.id);
   // Force the viewport to re-show the guides if they were hidden.
-  if (!store.getState().guidesVisible) store.setGuidesVisible(true);
+  store.setGuidesVisible(true);
+  if (orientation === 'y') store.setFretsVisible(true);
   bgDirty = true;
 }
 
@@ -1352,6 +1354,10 @@ const commands = createCommandRegistry({
   'view.pitchHud': {
     run: () => store.setPitchHudVisible(!store.getState().pitchHudVisible),
     checked: () => store.getState().pitchHudVisible,
+  },
+  'view.frets': {
+    run() { store.setFretsVisible(!store.getState().fretsVisible); bgDirty = true; },
+    checked: () => store.getState().fretsVisible,
   },
   'view.perfHud': {
     run: () => store.setPerfHudVisible(!store.getState().perfHudVisible),
@@ -3049,10 +3055,12 @@ function draw() {
   }
 
   // Snap guides — between loop markers and the playhead so the playhead always
-  // wins Z-order. Skipped when guidesVisible is off (matches snap participation).
-  if (state.guidesVisible && comp.guides.length > 0) {
+  // wins Z-order. Only those on show, which are the ones that pull (Guides,
+  // and Frets for frets, 13.22).
+  const guidesShown = shownGuides(state);
+  if (guidesShown.length > 0) {
     renderGuides(
-      fgCtx, viewport, comp.guides, rect.width, rect.height, state.selectedGuideId,
+      fgCtx, viewport, guidesShown, rect.width, rect.height, state.selectedGuideId,
       c => pitchLabel(state, c), resolveTuning(state.tuning).period,
     );
   }
@@ -3285,6 +3293,7 @@ const MENUS: readonly MenuSpec[] = [
     label: 'View',
     entries: [
       'view.pitchHud', 'view.perfHud', 'view.scrollDuringPlayback', '-',
+      'view.frets', '-',
       'view.start', 'view.end', 'view.playhead', '-',
       'help.open',
     ],

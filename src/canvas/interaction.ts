@@ -9,7 +9,7 @@ import { snapToGrid } from '../utils/snap';
 import { currentSnapConfig } from '../state/snap-config';
 import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
 import { prismOffsets, resolveTuning } from '../tuning/tuning';
-import { moveFretLine } from '../model/frets';
+import { moveFretLine, shownGuides } from '../model/frets';
 import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/curve-groups';
 import { nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
@@ -262,7 +262,8 @@ export function createInteraction(
         history.snapshot();
         store.addGuide({ ...guide });
         store.setSelectedGuide(guide.id);
-        if (!store.getState().guidesVisible) store.setGuidesVisible(true);
+        store.setGuidesVisible(true);
+        if (orientation === 'y') store.setFretsVisible(true);
         handleOut.guideId = guide.id;
         istate.draggingGuideId = guide.id;
         istate.draggingGuideLine = 0;
@@ -542,16 +543,13 @@ export function createInteraction(
     }
 
     // Snap-guide hit-test (Phase 8.7) — only intercepts clicks in Select mode,
-    // and only when guides are visible AND not locked. Other tools fall through
-    // to their normal behavior (e.g. Draw places a point) so guides don't get
-    // in the way of authoring; users switch to Select to manage guides.
-    if (
-      state.activeTool === 'select'
-      && state.guidesVisible
-      && !state.guidesLocked
-      && state.composition.guides.length > 0
-    ) {
-      const hit = hitTestGuides(vp, sx, sy, state.composition.guides, resolveTuning(state.tuning).period);
+    // and only on guides on show (Guides, and Frets for frets) and not locked.
+    // Other tools fall through to their normal behavior (e.g. Draw places a
+    // point) so guides don't get in the way of authoring; users switch to
+    // Select to manage guides.
+    const pickable = state.activeTool === 'select' && !state.guidesLocked ? shownGuides(state) : [];
+    if (pickable.length > 0) {
+      const hit = hitTestGuides(vp, sx, sy, pickable, resolveTuning(state.tuning).period);
       if (hit) {
         history.snapshot();
         store.setSelectedGuide(hit.id);

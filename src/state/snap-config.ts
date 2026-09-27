@@ -2,7 +2,7 @@ import type { AppState, Composition } from '../types';
 import type { SnapConfig } from '../utils/snap';
 import { getAdaptiveSubdivisions } from '../utils/snap';
 import { pitchSetFor, prismOffsets, resolveTuning } from '../tuning/tuning';
-import { fretLines } from '../model/frets';
+import { fretLines, shownGuides } from '../model/frets';
 import { computeProjectionTargetsAtX } from '../canvas/projection-renderer';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { store } from './store';
@@ -28,7 +28,7 @@ export interface SnapQuery {
 
 /** The slice of app state a snap config is built from. */
 export type SnapSources = Pick<AppState,
-  'snapEnabled' | 'tuning' | 'root' | 'scaleId' | 'customScale' | 'tunedFrom' | 'hidePitchLines' | 'guidesVisible' | 'harmonicPrism'
+  'snapEnabled' | 'tuning' | 'root' | 'scaleId' | 'customScale' | 'tunedFrom' | 'hidePitchLines' | 'guidesVisible' | 'fretsVisible' | 'harmonicPrism'
 > & { composition: Pick<Composition, 'tracks' | 'guides'> };
 
 export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
@@ -49,22 +49,20 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
     }
   }
 
-  // User guides (8.7) snap only while visible.
+  // User guides (8.7) snap only while visible; frets only while Frets is on (13.22).
   let guideXTargets: readonly number[] | undefined;
   let guideYTargets: readonly number[] | undefined;
-  if (st.guidesVisible) {
-    const xs: number[] = [];
-    const ys: number[] = [];
-    // An octave fret pulls at every one of its lines (13.18).
-    const period = resolveTuning(st.tuning).period;
-    for (const g of st.composition.guides) {
-      if (g.id === q.excludeGuideId) continue;
-      if (g.orientation === 'x') xs.push(g.position);
-      else for (const line of fretLines(g, period)) ys.push(line.cents);
-    }
-    if (xs.length > 0) guideXTargets = xs;
-    if (ys.length > 0) guideYTargets = ys;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  // An octave fret pulls at every one of its lines (13.18).
+  const period = resolveTuning(st.tuning).period;
+  for (const g of shownGuides(st)) {
+    if (g.id === q.excludeGuideId) continue;
+    if (g.orientation === 'x') xs.push(g.position);
+    else for (const line of fretLines(g, period)) ys.push(line.cents);
   }
+  if (xs.length > 0) guideXTargets = xs;
+  if (ys.length > 0) guideYTargets = ys;
 
   return {
     enabled: st.snapEnabled,

@@ -334,6 +334,7 @@ The Key and Scale dropdowns mixed two different axes: the **tuning** (which pitc
   - Tuning, Root and Scale;
   - Tune A4 with its cents readout;
   - the Pitch lines switch;
+  - the Frets switch (13.22): hides every fret and stops it pulling, leaving beat guides; also View › Frets;
   - Import .scl… and Export .scl….
 
 #### Frets and the scale
