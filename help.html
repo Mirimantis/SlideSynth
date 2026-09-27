@@ -855,8 +855,6 @@
         <li>Frets and beat guides are saved with the composition. Their visibility and lock
             state are per-browser preferences, so you can hide or unlock them for a while
             without changing the file.</li>
-        <li>Harmonic Prism's projection echoes take over the pitch pull while they're on;
-            frets wait, so Projection stays predictable.</li>
       </ul>
     </div>
   </details>
@@ -1026,9 +1024,8 @@
     <div class="detail-body">
       <ul>
         <li><strong>Pitch lines</strong> (on by default) — turn off for a clean canvas: no
-          pitch lines, and nothing pulls the cursor in pitch except frets and Harmonic
-          Prism projection echoes. Useful when you've set up your own frets and want
-          only those.</li>
+          pitch lines, and nothing pulls the cursor in pitch except frets and pitch
+          guides. Useful when you've set up your own frets and want only those.</li>
         <li><strong>Frets</strong> (on by default) — hide every fret, and stop them pulling,
           without touching beat guides. Also in the View menu. Greyed out while the Snap
           drawer's Guides switch is off.</li>
@@ -1047,18 +1044,17 @@
   <h2 id="prism">Harmonic Prism</h2>
   <p>
     The <strong>Harmonic Prism</strong> turns single-pitch curves into chord
-    gestures. Two modes share one chord-spec engine:
+    gestures:
   </p>
   <ul>
     <li><strong>Draw Mode</strong> (<kbd>H</kbd>) — clicking with the Draw
       tool places <em>N grouped sibling curves</em> at chord-related Y
       offsets. The cursor shows a multi-color preview of where each voice
-      will land.</li>
-    <li><strong>Projection Mode</strong> (<kbd>Ctrl</kbd>+<kbd>H</kbd>) —
-      visual "echoes" of a selected curve are projected up and down the
-      canvas at harmonic intervals. Echoes are silent but snappable — you
-      can draw or perform new curves along them. While projection is
-      active, snap locks to echo pitches only.</li>
+      will land. Performing with Draw on plays the chord.</li>
+    <li>For silent harmony lines to glide against (what Projection mode used to
+      give), copy a curve by an interval (the transform box's arrows, see
+      <em>Transform Box</em>) and send the copy to a guide track (see
+      <em>Pitch guides</em>). Projection mode is set aside for now.</li>
   </ul>
 
   <details open>
@@ -1081,8 +1077,7 @@
           affect all voices.</li>
         <li>Editing one sibling's points (in the Select tool) does
           <em>not</em> cascade — grouping is for placement, deletion, and
-          transforms, not point-level edits. Use Projection mode if you
-          want locked parallelism.</li>
+          transforms, not point-level edits.</li>
       </ol>
     </div>
   </details>
@@ -1114,24 +1109,6 @@
           captured curves commit as a chord cluster (same group id,
           one undo step) onto the active track.</li>
       </ul>
-    </div>
-  </details>
-
-  <details>
-    <summary>Using Projection Mode</summary>
-    <div class="detail-body">
-      <ol>
-        <li>Draw a single curve (the "source").</li>
-        <li>Select it (click with the Select tool).</li>
-        <li>Press <kbd>Ctrl</kbd>+<kbd>H</kbd>. Dashed lavender echoes
-          appear. The staff stays visible so you can read absolute pitch.</li>
-        <li>Tune the chord spec in the <strong>Harmonic Prism</strong>
-          panel (left sidebar).</li>
-        <li>Draw a new curve — the cursor snaps exclusively to echo
-          pitches for the duration of projection.</li>
-        <li>Press <kbd>Ctrl</kbd>+<kbd>H</kbd> or <kbd>Esc</kbd> to clear
-          projection. Normal snap resumes.</li>
-      </ol>
     </div>
   </details>
 
@@ -1191,7 +1168,6 @@
                 <li>Each Draw click is a note, with its own chord. A performed note keeps the
                   chord it started on through its whole glide, so harmony voices never jump
                   mid-note; the next note takes its own.</li>
-                <li>Projection echoes still use the chord from the root.</li>
               </ul>
             </li>
             <li><strong>Just</strong> ignores the tuning.</li>
@@ -1238,18 +1214,6 @@
         <strong>Quintal</strong> stacks 5ths (open, power-chord-like).
         <strong>Secondal</strong> stacks 2nds (cluster chords).
       </p>
-    </div>
-  </details>
-
-  <details>
-    <summary>Snapping to echoes</summary>
-    <div class="detail-body">
-      <ul>
-        <li>While Projection is active, <strong>snap locks exclusively to echo pitches</strong>. Staff lines and scale snapping are suspended so you can land precisely on a JI interval between staff lines.</li>
-        <li>X still snaps to the beat grid as usual.</li>
-        <li>The staff stays visible as a reference — use it to read absolute pitch, but trust the snap to your ear.</li>
-        <li>Turn projection off (<kbd>H</kbd> or <kbd>Esc</kbd>) and normal staff/scale snapping returns.</li>
-      </ul>
     </div>
   </details>
 

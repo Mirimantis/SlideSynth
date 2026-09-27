@@ -95,7 +95,8 @@ export const COMMANDS = [
   // ── Harmonic Prism ──
   { id: 'prism.drawMode', label: 'Prism Draw mode', section: 'Harmonic Prism', keys: ['H'],
     description: 'each Draw click places a chord cluster' },
-  { id: 'prism.projection', label: 'Prism Projection', section: 'Harmonic Prism', keys: ['Ctrl+H'],
+  // No key while Projection is set aside (13.25); it was Ctrl+H.
+  { id: 'prism.projection', label: 'Prism Projection', section: 'Harmonic Prism',
     description: 'project harmonic echoes from the selected curve' },
 
   // ── View ──

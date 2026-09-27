@@ -114,7 +114,7 @@ app.innerHTML = `
         <div id="snap-panel"></div>
       </div>
       <div class="drawer" id="drawer-prism" data-drawer="prism">
-        <div class="drawer-header" title="Harmonic Prism — ${primaryShortcut('prism.drawMode')}: Draw mode; ${primaryShortcut('prism.projection')}: projection from the selected curve">Harmonic Prism</div>
+        <div class="drawer-header" title="Harmonic Prism — ${primaryShortcut('prism.drawMode')}: Draw mode">Harmonic Prism</div>
         <div id="prism-panel"></div>
       </div>
       <div class="drawer" id="drawer-tuning" data-drawer="tuning">

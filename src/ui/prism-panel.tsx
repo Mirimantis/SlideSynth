@@ -22,6 +22,12 @@ import { isTwelveEdo, resolveTuning } from '../tuning/tuning';
  * isn't confused with the Tuning drawer.
  */
 
+/** Projection's controls are set aside while its retirement is tried out
+ *  (13.25, 2026-09-27): guide tracks (13.10) and Move by (13.24) do its job
+ *  explicitly. The back end is intact; true brings the switch and Octaves ±
+ *  back (and restore Ctrl+H in the command catalog). */
+const SHOW_PROJECTION = false;
+
 const STACKINGS: StackingStyle[] = ['tertian', 'quartal', 'quintal', 'secondal'];
 const INTONATIONS: TuningSystem[] = ['12-TET', 'per-note', 'just-intonation'];
 const DIRECTIONS: Direction[] = ['up', 'down', 'symmetric'];
@@ -50,7 +56,7 @@ export function PrismPanel() {
         id="prism-draw-toggle" label="Draw" title={commandTitle('prism.drawMode')} checked={prism.drawMode}
         onChange={on => { store.setPrismDrawMode(on); return true; }}
       />
-      <Switch
+      {SHOW_PROJECTION && <Switch
         id="prism-projection-toggle" label="Projection" title={commandTitle('prism.projection')}
         checked={prism.projectionSourceId !== null}
         onChange={on => {
@@ -61,7 +67,7 @@ export function PrismPanel() {
           store.setPrismProjectionSource(sel);
           return true;
         }}
-      />
+      />}
       <Row id="prism-stacking" label="Stacking" title="Interval used to stack the chord voices">
         <select
           id="prism-stacking" value={spec.stacking}
@@ -109,7 +115,7 @@ export function PrismPanel() {
           <Options values={DIRECTIONS} labels={DIRECTION_LABELS} />
         </select>
       </Row>
-      <Row id="prism-octaves" label="Octaves ±" title="How many octaves above and below the source to echo">
+      {SHOW_PROJECTION && <Row id="prism-octaves" label="Octaves ±" title="How many octaves above and below the source to echo">
         <input
           type="number" id="prism-octaves" min={0} max={3} step={1} value={prism.projectionOctaveRange}
           onInput={e => {
@@ -117,7 +123,7 @@ export function PrismPanel() {
             if (Number.isFinite(n)) store.setPrismOctaveRange(n);
           }}
         />
-      </Row>
+      </Row>}
       <div class="panel-header" style="margin-top:8px">Voicing</div>
       {Array.from({ length: spec.numVoices }, (_, i) => (
         <VoiceOctave key={i} index={i} offsets={spec.voiceOctaveOffsets} />
