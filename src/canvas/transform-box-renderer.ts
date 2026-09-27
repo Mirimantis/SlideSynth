@@ -25,6 +25,8 @@ export function renderTransformBox(
   bbox: BoundingBox,
   activeHandle: TransformHandle | null,
   showUngroup = false,
+  /** The arrows' interval beside them ("P5"), or null for the octave (13.24). */
+  intervalLabel: string | null = null,
 ): void {
   // Convert bbox corners to screen space
   // Note: in world coords, maxY = higher pitch = lower screen Y
@@ -82,6 +84,17 @@ export function renderTransformBox(
 
   drawArrow(ctx, arrowX, upY, ARROW_SIZE, 'up');
   drawArrow(ctx, arrowX, downY, ARROW_SIZE, 'down');
+  if (intervalLabel) {
+    ctx.fillStyle = themeColor('transform-arrow');
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const x = arrowX + ARROW_SIZE / 2 + 4;
+    ctx.fillText(intervalLabel, x, upY);
+    ctx.fillText(intervalLabel, x, downY);
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
+  }
 
   if (showUngroup) {
     const r = ungroupRect(right, top);

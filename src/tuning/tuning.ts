@@ -589,6 +589,68 @@ export function prismOffsetsAt(spec: ChordSpec, s: Pick<PitchSettings, 'tuning' 
   return prismOffsets(spec, s, noteRootAt(s, base));
 }
 
+// ── Moving by an interval (13.24) ───────────────────────────────
+
+/** What the transform box's arrows move by: 1–11 semitones as the tuning
+ *  plays them, 12 for the octave (the tuning's period), 0 for one step of the
+ *  tuning. */
+export type MoveInterval = number;
+export const MOVE_INTERVALS: readonly MoveInterval[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+export const DEFAULT_MOVE_INTERVAL: MoveInterval = 12;
+
+const INTERVAL_NAMES = [
+  'One step', 'Minor 2nd', 'Major 2nd', 'Minor 3rd', 'Major 3rd', 'Perfect 4th', 'Tritone',
+  'Perfect 5th', 'Minor 6th', 'Major 6th', 'Minor 7th', 'Major 7th', 'Octave',
+];
+const INTERVAL_SHORT = ['step', 'm2', 'M2', 'm3', 'M3', 'P4', 'TT', 'P5', 'm6', 'M6', 'm7', 'M7', '8ve'];
+
+/** "Perfect 5th"; the octave is the tuning's period where that isn't 2/1. */
+export function moveIntervalName(interval: MoveInterval, tuning: TuningRef): string {
+  if (interval === 12 && resolveTuning(tuning).period !== CENTS_PER_OCTAVE) {
+    return `Period (${resolveTuning(tuning).periodRatio ?? `${Math.round(resolveTuning(tuning).period)}¢`})`;
+  }
+  return INTERVAL_NAMES[interval] ?? 'Octave';
+}
+
+/** The transform box's label beside its arrows: "P5", "step". */
+export function moveIntervalShort(interval: MoveInterval): string {
+  return INTERVAL_SHORT[interval] ?? '8ve';
+}
+
+/**
+ * How far to move a pitch at `base` by `interval`, up (dir 1) or down (-1),
+ * in cents. The interval counts from the tuning's note nearest `base`, so
+ * something on the tuning's notes lands on them, and something between notes
+ * keeps its offset from the nearest. As the Prism counts (13.8 (b), 13.21): a
+ * 12-note octave table counts its notes by the semitones; other tunings take
+ * the nearest step, at least one. The octave is always the period.
+ */
+export function moveIntervalCents(
+  s: Pick<PitchSettings, 'tuning' | 'tunedFrom'>, base: number, interval: MoveInterval, dir: 1 | -1,
+): number {
+  const t = resolveTuning(s.tuning);
+  const p = t.period;
+  if (interval >= 12) return dir * p;
+  if (isTwelveEdo(s.tuning)) return dir * Math.max(1, interval) * CENTS_PER_SEMITONE;
+  const n = t.degrees.length;
+  const d0 = nearestDegree(t, s.tunedFrom, base);
+  // Cents from note d0 to the note m steps away (m < 0 below).
+  const at = (m: number) => {
+    const i = d0 + m;
+    const q = Math.floor(i / n);
+    return q * p + t.degrees[i - q * n]! - t.degrees[d0]!;
+  };
+  let k = 1;
+  if (interval > 0 && n === 12 && p === CENTS_PER_OCTAVE) {
+    k = interval;
+  } else if (interval > 0) {
+    const target = interval * CENTS_PER_SEMITONE;
+    const dist = (m: number) => Math.abs(dir * at(dir * m) - target);
+    for (let m = 2; dir * at(dir * m) <= target + p; m++) if (dist(m) < dist(k)) k = m;
+  }
+  return at(dir * k);
+}
+
 /** Drop float noise so equal pitches compare equal (0.0001 ¢ is inaudible). */
 function roundCents(c: number): number {
   return Math.round(c * 10000) / 10000;

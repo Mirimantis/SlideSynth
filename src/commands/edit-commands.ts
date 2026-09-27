@@ -5,7 +5,7 @@ import type { CommandHandler } from './registry';
 import { store } from '../state/store';
 import { history } from '../state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves, hasClipboard } from '../state/clipboard';
-import { rebuildTransformBox, type InteractionState } from '../canvas/interaction';
+import { moveSelectionByInterval, rebuildTransformBox, type InteractionState } from '../canvas/interaction';
 import { joinCurves, sharpenCurveHandles, smoothCurveHandles, pitchPoints, deleteSelectedPoints } from '../model/curve';
 import { pointCount } from '../model/point-selection';
 import { assignGroup, dissolveGroup, allShareGroup, anyGrouped } from '../model/curve-groups';
@@ -15,7 +15,8 @@ import { showToast } from '../ui/toast';
  *  delete, join, group, smooth / sharpen. */
 export type EditCommandId = Extract<CommandId,
   | 'edit.undo' | 'edit.redo' | 'edit.copy' | 'edit.cut' | 'edit.paste' | 'edit.duplicate' | 'edit.continue'
-  | 'edit.delete' | 'edit.join' | 'edit.group' | 'edit.ungroup' | 'edit.smooth' | 'edit.sharpen'>;
+  | 'edit.delete' | 'edit.join' | 'edit.group' | 'edit.ungroup' | 'edit.smooth' | 'edit.sharpen'
+  | 'edit.moveUp' | 'edit.moveDown' | 'edit.copyUp' | 'edit.copyDown'>;
 
 export interface EditContext {
   interaction: InteractionState;
@@ -58,6 +59,8 @@ export function createEditCommands(ctx: EditContext): Record<EditCommandId, Comm
   }
 
   const hasSelection = () => store.getState().selectedCurveIds.size > 0;
+  const canMove = () => !ctx.isPerformLocked() && (hasSelection() || store.getState().selectedPoints.size > 0);
+  const canCopyMove = () => !ctx.isPerformLocked() && hasSelection() && store.getState().selectedPoints.size === 0;
   /** Delete has something to act on: a guide, points, or curves. */
   const canDelete = () => {
     const s = store.getState();
@@ -203,6 +206,12 @@ export function createEditCommands(ctx: EditContext): Record<EditCommandId, Comm
         rebuildTransformBox(interaction, sel.track);
       },
     },
+
+    // Move by an interval (13.24): the same as the transform box's arrows.
+    'edit.moveUp': { enabled: canMove, run: () => { moveSelectionByInterval(interaction, 1); } },
+    'edit.moveDown': { enabled: canMove, run: () => { moveSelectionByInterval(interaction, -1); } },
+    'edit.copyUp': { enabled: canCopyMove, run: () => { moveSelectionByInterval(interaction, 1, true); } },
+    'edit.copyDown': { enabled: canCopyMove, run: () => { moveSelectionByInterval(interaction, -1, true); } },
 
     'edit.smooth': {
       enabled: hasSelection,

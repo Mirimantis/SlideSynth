@@ -2,13 +2,14 @@ import type { Vec2, BezierCurve, Lane, LanePoint, Track, TransformBoxState, Tran
 import type { Viewport } from './viewport';
 import { store } from '../state/store';
 import { history } from '../state/history';
-import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, computePointSubsetBBox, deepCopyPoints, applyTransformToCurve, splitCurveAtSegment, splitCurveAtPoint, applyAutoSmoothHandles, reclampHandlesAround, pitchPoints } from '../model/curve';
+import { createCurve, createControlPoint, addPointToCurve, movePoint, setHandle, getSegmentControlPoints, computeMultiCurveBBox, computePointSubsetBBox, deepCopyPoints, applyTransformToCurve, splitCurveAtSegment, splitCurveAtPoint, applyAutoSmoothHandles, reclampHandlesAround, pitchPoints, shiftCurvesByInterval } from '../model/curve';
 import { deepCopyLanes, ensureLane, getLane, pinLaneEndToPitch } from '../model/lane';
 import { pointSelectionOf, pointCount, hasPoint, type PointRef, type PointSelection } from '../model/point-selection';
 import { snapToGrid } from '../utils/snap';
 import { currentSnapConfig } from '../state/snap-config';
-import { MIN_PITCH_CENTS, MAX_PITCH_CENTS, CENTS_PER_OCTAVE } from '../constants';
-import { prismOffsetsAt, resolveTuning } from '../tuning/tuning';
+import { MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
+import { moveIntervalCents, moveIntervalName, prismOffsetsAt, resolveTuning } from '../tuning/tuning';
+import { duplicateCurves } from '../state/clipboard';
 import { moveFretLine, shownGuides } from '../model/frets';
 import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/curve-groups';
 import { nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
@@ -477,8 +478,7 @@ export function createInteraction(
     } else if (istate.transformBox && !istate.dragging) {
       const hit = hitBox(sx, sy, istate.transformBox);
       canvas.style.cursor = hit ? getTransformCursor(hit) : 'default';
-      canvas.title = hit === 'octaveUp' ? '1 Octave Up'
-        : hit === 'octaveDown' ? '1 Octave Down'
+      canvas.title = hit === 'octaveUp' || hit === 'octaveDown' ? moveArrowTitle(hit === 'octaveUp' ? 1 : -1)
         : hit === 'ungroup' ? 'Ungroup'
         : '';
     } else if (!istate.dragging && store.getState().activeTool === 'scissors') {
@@ -588,29 +588,10 @@ export function createInteraction(
             return;
           }
 
-          // Octave arrows are instant actions, not drags
+          // The arrows are instant actions, not drags: move by the Move by
+          // interval (13.24); Alt+click moves a copy instead.
           if (hit === 'octaveUp' || hit === 'octaveDown') {
-            history.snapshot();
-            const shift = hit === 'octaveUp' ? CENTS_PER_OCTAVE : -CENTS_PER_OCTAVE;
-            const subsetMap = tb.pointIndicesPerCurve;
-            store.mutate(() => {
-              for (const curveId of tb.curveIds) {
-                const curve = track.curves.find(c => c.id === curveId);
-                if (!curve) continue;
-                const subset = subsetMap?.get(curveId);
-                if (subset && subset.size > 0) {
-                  for (const idx of subset) {
-                    if (pitchPoints(curve)[idx]) pitchPoints(curve)[idx]!.position.y += shift;
-                  }
-                } else {
-                  for (const pt of pitchPoints(curve)) pt.position.y += shift;
-                }
-              }
-            });
-            const curves = tb.curveIds.map(id => track.curves.find(c => c.id === id)).filter((c): c is BezierCurve => !!c);
-            tb.bbox = subsetMap
-              ? computePointSubsetBBox(curves, subsetMap)
-              : computeMultiCurveBBox(curves);
+            moveSelectionByInterval(istate, hit === 'octaveUp' ? 1 : -1, e.altKey);
             return;
           }
 
@@ -1129,6 +1110,40 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
  *  expansion is skipped (point-level selection is intentionally not
  *  group-aware — selecting one point in a chord-cluster sibling shouldn't
  *  drag the whole cluster's points along). */
+/** The arrows' tooltip: "Up a Perfect 5th (Alt+click: a copy)". */
+function moveArrowTitle(dir: 1 | -1): string {
+  const st = store.getState();
+  const name = moveIntervalName(st.moveInterval, st.tuning);
+  return `${dir > 0 ? 'Up' : 'Down'} ${name === 'Octave' ? 'an octave' : `a ${name}`} (Alt+click: move a copy). Change the interval in the Tool panel.`;
+}
+
+/**
+ * Move the selection up or down by the Move by interval (13.24), each curve
+ * counted from its own note, so curves on the tuning's notes land on them.
+ * With `duplicate`, a copy moves and the original stays (whole curves only;
+ * a point selection just moves). One undo step. Returns whether anything moved.
+ */
+export function moveSelectionByInterval(istate: InteractionState, dir: 1 | -1, duplicate = false): boolean {
+  const track = getSelectedTrack();
+  if (!track) return false;
+  const before = store.getState();
+  const pointMode = before.selectedPoints.size > 0;
+  if (!pointMode && before.selectedCurveIds.size === 0) return false;
+  if (duplicate && !pointMode) {
+    // Selects the copies, and takes the undo snapshot.
+    if (!duplicateCurves({ inPlace: true })) return false;
+  } else {
+    history.snapshot();
+  }
+  const st = store.getState();
+  const subset = pointMode ? st.selectedPoints : null;
+  const ids = subset ? [...subset.keys()] : [...expandSelectionToGroups(st.selectedCurveIds, track)];
+  const curves = ids.map(id => track.curves.find(c => c.id === id)).filter((c): c is BezierCurve => !!c);
+  store.mutate(() => shiftCurvesByInterval(curves, subset, base => moveIntervalCents(st, base, st.moveInterval, dir)));
+  if (istate.transformBox || duplicate) rebuildTransformBox(istate, track);
+  return true;
+}
+
 export function rebuildTransformBox(istate: InteractionState, track: Track): void {
   const state = store.getState();
   const pointMode = state.selectedPoints.size > 0;

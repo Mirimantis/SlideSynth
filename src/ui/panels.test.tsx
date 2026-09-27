@@ -108,6 +108,8 @@ describe('Preact panels (BACKLOG 15.4)', () => {
     store.setTool('draw');
     expect(renderToString(<ToolPropertyPanel />)).toContain('Draw Preview');
     store.setTool('select');
+    expect(renderToString(<ToolPropertyPanel />)).toContain('Move by');   // 13.24
+    store.setTool('scissors');
     expect(renderToString(<ToolPropertyPanel />)).toContain('No settings for this tool');
     store.setTool('draw');
   });
