@@ -492,7 +492,7 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
   - **Spec:** [DESIGN.md › Guide tracks spec](DESIGN.md#guide-tracks-spec-1310-decided-2026-09-27). Decided: a **track role** (a Guide switch per track), guides pull **alongside the scale** like frets, and Mute is split from a new **Hide**.
   - **Build in this order:**
     - [x] **(a) Guide tracks** *(M)*: the Guide switch; guide tracks silent (one shared "does this track sound" rule for playback, WAV, previews and Solo); drawn as guides; pitch-guide snap targets at each beat, with no self-pull and under the Guides switch; **Send to guide track**; the file fields, with `muted: true` written for older apps.
-      - **Done (this PR):**
+      - **Done (PR #100):**
         - **Track row:** a **Guide** toggle (new `guide.svg`, a dashed glide), lit in the fret colour; Mute and Solo grey out on a guide track. The row's buttons moved to a second line under the name and tone: with five (six after (b)) the name had about 20 px.
         - **Silent:** `trackSounds()` / `soloActive()` in `model/track.ts` are the one rule for playback, WAV export and the scrub / Composition + tone previews. A guide track can't be soloed and doesn't count toward Solo.
         - **Drawn** thin (1.25 px), dashed, in the `guide` colour, dimmed; hidden with the Snap drawer's Guides switch, and not pickable then.
@@ -501,7 +501,7 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
         - **Store:** `setTrackGuide` unmutes the track either way and drops its solo.
         - **File:** `Track.guide?: true`, saved with `muted: true` for older apps; loaded as a guide, unmuted. Any value but `true` is dropped. No version bump.
     - [x] **(b) Mute / Hide split** *(S–M)*: Mute becomes silent only (curves drawn dimmed, still pickable); a Hide (eye) button hides a track and stops a guide track pulling.
-      - **Done (this PR):**
+      - **Done (PR #100):**
         - **Mute** is silent only: a muted track's curves are drawn at half strength and can be picked and edited. *(Behaviour change: before, muted tracks were also hidden and unpickable.)*
         - **Hide** (eye / eye-off icons, new): `Track.hidden?: true`, one undo step, saved in the file. A hidden track still plays, isn't drawn or pickable, and a hidden guide track doesn't pull. Hiding the active track lets go of its selected curves and the transform box. A Draw click on a hidden track shows it again (and turns Guides on for a guide track), as adding a fret shows frets.
         - `trackShown()` in `model/track.ts` is the one rule for drawing, canvas picking and pitch-guide pull, beside (a)'s `trackSounds()` for sound.
