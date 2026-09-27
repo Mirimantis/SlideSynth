@@ -9,7 +9,7 @@ import {
   type ImportedTuningRef, type TuningRef,
 } from '../tuning/tuning';
 import { fretsToScale, scaleToFrets, type FretsAsScale } from '../tuning/frets-scale';
-import { repeats } from '../model/frets';
+import { repeats, shownGuides } from '../model/frets';
 import { batch, signal, type Signal } from './reactive';
 import { TRANSPORT_STOPPED } from './transport';
 import { NO_POINTS, addPoints, onlyPoint, togglePoint, withoutCurves, type PointRef, type PointSelection } from '../model/point-selection';
@@ -107,6 +107,7 @@ const PRISM_OCTAVE_RANGE_STORAGE_KEY = 'slidesynth.prismOctaveRange';
 const PRISM_DRAW_MODE_STORAGE_KEY = 'slidesynth.prismDrawMode';
 const GUIDES_VISIBLE_STORAGE_KEY = 'slidesynth.guidesVisible';
 const GUIDES_LOCKED_STORAGE_KEY = 'slidesynth.guidesLocked';
+const FRETS_VISIBLE_STORAGE_KEY = 'slidesynth.fretsVisible';
 const DYNAMICS_SOURCE_STORAGE_KEY = 'slidesynth.dynamicsSource';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
@@ -267,6 +268,7 @@ function createInitialState(): RawState {
     // ── workspace (localStorage) ──
     guidesVisible: loadBoolPref(GUIDES_VISIBLE_STORAGE_KEY, true),
     guidesLocked: loadBoolPref(GUIDES_LOCKED_STORAGE_KEY, false),
+    fretsVisible: loadBoolPref(FRETS_VISIBLE_STORAGE_KEY, true),
     scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, false),
     layerModeEnabled: loadBoolPref(LAYER_MODE_STORAGE_KEY, false),
     pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
@@ -755,6 +757,7 @@ class Store {
     snap.hidePitchLines = true;
     this.touch('composition', 'snap');
     this.setGuidesVisible(true);
+    this.setFretsVisible(true);
     return frets.length;
   }
 
@@ -915,7 +918,24 @@ class Store {
     if (this.state.guidesVisible === visible) return;
     this.state.guidesVisible = visible;
     saveBoolPref(GUIDES_VISIBLE_STORAGE_KEY, visible);
-    this.touch('guidesVisible');
+    this.touch('guidesVisible', ...this.deselectHiddenGuide());
+  }
+
+  /** Show or hide every fret (13.22); beat guides stay as they are. */
+  setFretsVisible(visible: boolean): void {
+    if (this.state.fretsVisible === visible) return;
+    this.state.fretsVisible = visible;
+    saveBoolPref(FRETS_VISIBLE_STORAGE_KEY, visible);
+    this.touch('fretsVisible', ...this.deselectHiddenGuide());
+  }
+
+  /** A hidden guide can't stay selected: Delete would remove something you
+   *  can't see. Returns the channels to notify. */
+  private deselectHiddenGuide(): readonly Channel[] {
+    const id = this.state.selectedGuideId;
+    if (id === null || shownGuides(this.state).some(g => g.id === id)) return [];
+    this.state.selectedGuideId = null;
+    return SELECTION;
   }
 
   setGuidesLocked(locked: boolean): void {

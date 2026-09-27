@@ -444,12 +444,18 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
     - **Data:** `GuideDefinition.repeat?: 'octave'`, frets only; older files and apps ignore it (no format bump).
     - **Dashes move with the canvas:** an unselected fret's (and beat guide's) dashes, and the 12-EDO reference lines', are pinned to the world (`canvas/dash.ts`), so with Scroll canvas during playback they travel with everything else instead of standing still.
     - **Fixed along the way:** the Selection panel didn't follow a fret or point being dragged. Guides and points are edited in place, so the child panel's props looked unchanged and `@preact/signals` skipped it; both now subscribe to composition edits.
-- [ ] **13.22 Hide / show all frets** *(S)*
+- [x] **13.22 Hide / show all frets** *(S)*
   - One switch that hides every fret at once and brings them back, without touching beat guides.
   - Today the Snap drawer's guide visibility covers both kinds, and hiding also stops them pulling (why 16.3 kept it out of the View menu).
   - **Decide when building:**
     - Where it lives. The Tuning drawer, beside Pitch lines, if hidden frets also stop pulling (the same meaning as Pitch lines: hidden = no lines, no pull). The View menu if it's display only and hidden frets still pull.
     - A command-catalog entry either way, so it can take a shortcut and appear in the menus.
+  - **Done (this PR):**
+    - **Hidden frets stop pulling**, the same meaning as Pitch lines and the Guides switch. `shownGuides` (`model/frets.ts`) is the one list that drawing, snapping and canvas picking all read: nothing with Guides off, no frets with Frets off.
+    - **Where:** a **Frets** switch in the Tuning drawer under Pitch lines (greyed out while Guides is off), and a **View › Frets** command (`view.frets`, no default key yet). It says in its description that hidden frets don't pull.
+    - A view setting, like Guides: kept in localStorage, not the file, and not an undo step.
+    - Hiding frets (or all guides) lets go of a selected hidden guide, so Delete can't remove something you can't see.
+    - Adding a fret (+ Fret, the handle, Scale → frets) turns Frets back on, as adding any guide already turned Guides on.
 - [ ] **13.19 Per-fret gravity** *(M–L, own planning session)*
   - Feasibility of letting a fret carry its own snap parameters. New frets follow the universal Snap settings; a per-fret toggle enables custom settings: Gravity on/off, Force, Spring, Damping and an **effect distance** (reach).
   - Within its reach, a custom fret takes precedence over the canvas's scale lines.

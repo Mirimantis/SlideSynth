@@ -28,6 +28,7 @@ function sources(over: Partial<SnapSources> = {}): SnapSources {
     tunedFrom: 0,
     hidePitchLines: false,
     guidesVisible: true,
+    fretsVisible: true,
     harmonicPrism: {
       chordSpec: DEFAULT_CHORD_SPEC,
       projectionOctaveRange: 0,
@@ -61,6 +62,13 @@ describe('snapConfigFor (BACKLOG 15.6)', () => {
     const hidden = snapConfigFor(sources({ composition, guidesVisible: false }));
     expect(hidden.guideXTargets).toBeUndefined();
     expect(hidden.guideYTargets).toBeUndefined();
+  });
+
+  it('frets hidden (13.22) don’t pull; beat guides still do', () => {
+    const composition = { tracks: [], guides: [guide('g1', 'x', 4), guide('g2', 'y', 6000)] };
+    const cfg = snapConfigFor(sources({ composition, fretsVisible: false }));
+    expect(cfg.guideXTargets).toEqual([4]);
+    expect(cfg.guideYTargets).toBeUndefined();
   });
 
   it('samples Prism projection echoes at the given beat, and only when one is given', () => {

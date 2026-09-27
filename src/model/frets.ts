@@ -19,6 +19,16 @@ export interface FretLine {
 
 export const repeats = (g: GuideDefinition): boolean => g.orientation === 'y' && g.repeat === 'octave';
 
+/** The guides on show, which are also the ones that pull and can be picked:
+ *  none with Guides off (the Snap drawer), and no frets with Frets off (the
+ *  Tuning drawer, 13.22). Beat guides don't follow Frets. */
+export function shownGuides(st: {
+  guidesVisible: boolean; fretsVisible: boolean; composition: { guides: readonly GuideDefinition[] };
+}): readonly GuideDefinition[] {
+  if (!st.guidesVisible) return [];
+  return st.fretsVisible ? st.composition.guides : st.composition.guides.filter(g => g.orientation === 'x');
+}
+
 /** A fret's lines within the pitch range: just its pitch, or with Octaves
  *  every period above and below it. */
 export function fretLines(g: GuideDefinition, period: number): FretLine[] {

@@ -24,6 +24,8 @@ export interface TuningActions extends PitchCircleActions {
   setScale(scaleId: string): void;
   setTunedFrom(pitchClass: number): void;
   setPitchLinesVisible(visible: boolean): void;
+  /** Show or hide every fret (13.22). A view setting, so not an undo step. */
+  setFretsVisible(visible: boolean): void;
   setReferenceLines(visible: boolean): void;
   setReferenceHz(hz: number): void;
   /** Pick a .scl file and use it (13.8 (d)); main.ts reports a bad file. */
@@ -158,6 +160,16 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
         title="Show the pitch lines, and snap to them. Off: no lines, and pitch floats free (frets and Prism echoes still pull)"
         checked={!st.hidePitchLines}
         onChange={actions.setPitchLinesVisible}
+      />
+      <Switch
+        id="frets-toggle"
+        label="Frets"
+        title={st.guidesVisible
+          ? 'Show the frets, and snap to them. Off: every fret is hidden and doesn\'t pull (beat guides stay)'
+          : 'Guides are off (Snap drawer), so no fret shows'}
+        checked={st.fretsVisible}
+        disabled={!st.guidesVisible}
+        onChange={actions.setFretsVisible}
       />
       {!isTwelveEdo(ref) && (
         <Switch
