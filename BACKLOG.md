@@ -424,7 +424,7 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
   - **Beat guides too (decided 2026-09-27):** the same handle gives a beat guide when dragged right. That covers 13.5.
   - **Done (this PR):**
     - **The handle:** a 14 px tab over the ruler's left end (`GUIDE_HANDLE_WIDTH`, `overGuideHandle` in `canvas/interaction.ts`). It shows a beat guide's vertical line over a fret's horizontal one, is dimmed while guides are locked, and has a grab cursor and tooltip. It's drawn on the foreground layer, under the playhead. The rulers' first labels start clear of it.
-    - **The drag:** nothing happens until the pointer has moved 8 px with one direction at least 1.5× the other. Then down makes a fret and right a beat guide, with a row- or col-resize cursor. From there the existing guide drag moves it: self-excluding snap, hold A to hear a fret, selected at once, guides shown if hidden.
+    - **The drag:** nothing happens until the pointer has moved 25 px in one direction, at least 1.5× the other. (8 px picked the wrong one too often in testing.) Then down makes a fret and right a beat guide, with a row- or col-resize cursor. From there the existing guide drag moves it: self-excluding snap, hold A to hear a fret, selected at once, guides shown if hidden.
     - **Cancel:** released back over the handle, the guide is removed and the snapshot dropped (`history.dropLastSnapshot()`), so it leaves no undo step. Otherwise it's one undo step.
     - Locked guides: the handle does nothing, as + Fret / + Beat are disabled.
     - Tests drive the real interaction with a stub canvas (`canvas/guide-handle.test.ts`).

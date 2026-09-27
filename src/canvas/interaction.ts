@@ -21,9 +21,10 @@ export const RULER_HEIGHT = SECONDS_RULER_HEIGHT + BEAT_RULER_HEIGHT;
 /** The guide handle (13.17): the ruler's left end, where frets and beat guides
  *  are dragged out of. */
 export const GUIDE_HANDLE_WIDTH = 14;
-/** How far the pointer moves before the handle picks a fret or a beat guide,
- *  and by how much one direction must lead the other. */
-const HANDLE_DECIDE_PX = 8;
+/** How far the pointer moves (in one direction) before the handle picks a
+ *  fret or a beat guide, and by how much that direction must lead the other.
+ *  25 px: shorter picked the wrong one too often in testing. */
+const HANDLE_DECIDE_PX = 25;
 const HANDLE_DECIDE_LEAD = 1.5;
 
 /** Is a canvas point on the guide handle? */

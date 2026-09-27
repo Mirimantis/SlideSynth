@@ -49,9 +49,13 @@ describe('the guide handle (BACKLOG 13.17)', () => {
     expect(guides()).toHaveLength(1);
   });
 
-  it('waits for one direction to lead clearly', () => {
-    drag([6, 20], [14, 28], [16, 30]);
+  it('waits for 25 px of movement, and for one direction to lead clearly', () => {
+    drag([6, 20], [7, 40], [8, 44]);          // 24 px down: not yet
     expect(guides()).toHaveLength(0);
+    drag([6, 20], [50, 60], [60, 70]);        // far, but no clear lead
+    expect(guides()).toHaveLength(0);
+    drag([6, 20], [7, 45], [8, 50]);          // 25 px down: a fret
+    expect(guides().map(g => g.orientation)).toEqual(['y']);
   });
 
   it('released back on the handle, the guide is gone and leaves no undo step', () => {
