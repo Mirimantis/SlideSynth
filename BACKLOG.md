@@ -721,10 +721,10 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
   - Revisit only if setting loop points mid-jam proves necessary; dragging the ruler markers covers it for now.
 
 ### Files & formats
-- [x] **12.3 Round-trip unknown top-level envelope sections** *(S)*
+- [x] **12.3 Round-trip unknown top-level envelope sections** *(S, PR #99)*
   - `serializeComposition` rebuilds the envelope from a fixed key set, so a future `hostSettings` section would be dropped on load→save. Carry unknown keys through verbatim.
   - Cheap, and core to the round-trip guardrail. It can be pulled forward into Phase 17 at any time.
-  - **Done (this PR):**
+  - **Done (PR #99):**
     - On load, unknown top-level sections and unknown keys inside `meta`, `tuning` and `snap` go into `Composition.unknownEnvelope` (never read by the app). On save they go back out verbatim: unknown sections after the app's own, extra keys inside their sections. What the app writes wins on a clash (a stale `savedAt` is replaced). A `composition` section can't plant the field itself.
     - The rest already round-tripped by spreading: unknown keys in the composition section, snap settings, guides and lanes (tested since the envelope landed).
     - It lives on the composition, so it survives undo and redo (history clones compositions as JSON). A new composition or a MIDI import starts without one.
