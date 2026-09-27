@@ -868,9 +868,11 @@
           toggle on a track row). It makes no sound, and it pulls like a fret whose pitch moves:
           wherever the curve is at a beat, that's a target there. Glide along a guide in Perform,
           or draw and drag points onto it.</li>
-        <li>It pulls alongside the scale, the way frets do: within about 50¢ it wins over the
-          scale's note when closer, and Gravity treats it as one more target nearby. Where the
-          guide curve doesn't reach, it doesn't pull.</li>
+        <li>Within a semitone (100¢) of a pitch guide, the guide is the <em>only</em> pitch
+          target: the scale's lines and frets don't pull there, so gliding along a guide doesn't
+          drop onto a staff line where the two cross. Further away the scale is back, and the
+          guide counts as one more target. Where the guide curve doesn't reach, it doesn't
+          pull.</li>
         <li><strong>Send to guide track</strong> (Selection panel, or the Edit menu) moves the
           selected curves onto a guide track, making one called "Guides" if there isn't one.
           <strong>Copy to guide track</strong> (Edit menu) leaves the originals where they are.

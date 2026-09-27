@@ -390,7 +390,8 @@ A curve can be a **pitch guide**: silent, drawn as scaffolding, and pulling like
 - **A track role, not a new object.** A track has a **Guide** switch (an icon on its row). A guide track's curves:
   - make no sound: playback, WAV export, the scrub and Composition + tone previews skip them, and Solo ignores guide tracks (a guide track can't be soloed, and doesn't count when others are);
   - are drawn as guides: thin, dashed, dimmed, in the fret colour;
-  - pull like frets: at each beat, a guide curve that spans that beat is a pitch target at the curve's pitch there. Within 50 ¢ it wins over the scale's note when closer, and Gravity treats it as another target nearby, alongside the scale (additive, like frets; Projection's echoes still replace everything while on, until 13.25 decides Projection's future).
+  - pull like frets: at each beat, a guide curve that spans that beat is a pitch target at the curve's pitch there, alongside the scale (additive, like frets; Projection's echoes still replace everything while on, until 13.25 decides Projection's future).
+  - **take priority close up** (added in testing): within 100 ¢ of a pitch guide it's the only pitch target, for drawing and Gravity alike, so gliding along a guide isn't pulled onto a staff line where they cross (the nearest-target rule otherwise let a line a few cents nearer win). Beyond that it's one more target among the scale's. A per-guide reach belongs to 13.19.
   - are ordinary curves otherwise: select, edit, transform, copy, record onto. Turning Guide off gives a sounding track back.
 - **No self-pull:** a curve being drawn or dragged doesn't pull on itself.
 - **The Snap drawer's Guides switch** covers pitch guides with frets and beat guides: off, none pull or show as guides.

@@ -505,6 +505,7 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
         - **Mute** is silent only: a muted track's curves are drawn at half strength and can be picked and edited. *(Behaviour change: before, muted tracks were also hidden and unpickable.)*
         - **Hide** (eye / eye-off icons, new): `Track.hidden?: true`, one undo step, saved in the file. A hidden track still plays, isn't drawn or pickable, and a hidden guide track doesn't pull. Hiding the active track lets go of its selected curves and the transform box. A Draw click on a hidden track shows it again (and turns Guides on for a guide track), as adding a fret shows frets.
         - `trackShown()` in `model/track.ts` is the one rule for drawing, canvas picking and pitch-guide pull, beside (a)'s `trackSounds()` for sound.
+    - **Found in testing:** gliding along a guide, the planchette dropped onto staff lines where they crossed: Gravity pulls to the target nearest the cursor, and a line a few cents nearer won. **Pitch guides now take priority within 100 ¢** (`PITCH_GUIDE_PRIORITY_CENTS`, `SnapConfig.priorityYTargets`): inside it they're the only Y targets for `snapToGrid` and `findAdaptiveSnap`; beyond it they're additive as before. Frets are unchanged. A per-guide reach is 13.19's.
   - Related to 12.1 (a curve is another gravity source), 13.19 (per-guide gravity) and 13.25 (with 13.24, this is what could replace Projection).
 
 ### Groups

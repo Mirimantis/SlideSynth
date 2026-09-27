@@ -67,7 +67,9 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
     else for (const line of fretLines(g, period)) ys.push(line.cents);
   }
   // Pitch guides (13.10): a guide track's curves pull at their pitch at this
-  // beat, like frets whose pitch moves. Under the same Guides switch.
+  // beat, like frets whose pitch moves, and near one they're the only target.
+  // Under the same Guides switch.
+  const priority: number[] = [];
   if (q.atBeat !== undefined) {
     for (const track of st.composition.tracks) {
       // Hidden guide tracks, and all of them with Guides off, don't pull.
@@ -75,7 +77,7 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
       for (const curve of track.curves) {
         if (q.excludeCurveIds?.has(curve.id)) continue;
         const hit = evaluateCurveAtBeat(curve, q.atBeat);
-        if (hit) ys.push(hit.noteNumber);
+        if (hit) { ys.push(hit.noteNumber); priority.push(hit.noteNumber); }
       }
     }
   }
@@ -89,6 +91,7 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
     projectionTargets,
     guideXTargets,
     guideYTargets,
+    ...(priority.length > 0 ? { priorityYTargets: priority } : {}),
   };
 }
 

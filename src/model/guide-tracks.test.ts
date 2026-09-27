@@ -4,6 +4,7 @@ import { createCurve, createControlPoint, addPointToCurve } from './curve';
 import { createComposition } from './composition';
 import { store } from '../state/store';
 import { snapConfigFor } from '../state/snap-config';
+import { findAdaptiveSnap, snapToGrid, PITCH_GUIDE_PRIORITY_CENTS, type SnapConfig } from '../utils/snap';
 import { serializeComposition, deserializeComposition } from '../export/json-export';
 import type { Track } from '../types';
 
@@ -52,6 +53,8 @@ describe('pitch guides pull at each beat', () => {
     const at0 = snapConfigFor(sources(), { atBeat: 0 }).guideYTargets!;
     expect(at0).toHaveLength(1);
     expect(at0[0]).toBeCloseTo(6000, 3);
+    // Pitch guides take priority near them; frets don't.
+    expect(snapConfigFor(sources(), { atBeat: 0 }).priorityYTargets).toEqual(at0);
     const mid = snapConfigFor(sources(), { atBeat: 2 }).guideYTargets![0]!;
     expect(mid).toBeGreaterThan(6000);
     expect(mid).toBeLessThan(6400);
@@ -63,6 +66,33 @@ describe('pitch guides pull at each beat', () => {
     expect(snapConfigFor(sources()).guideYTargets).toBeUndefined();
     expect(snapConfigFor(sources({ guidesVisible: false }), { atBeat: 1 }).guideYTargets).toBeUndefined();
     expect(snapConfigFor(sources(), { atBeat: 1, excludeCurveIds: new Set(['g']) }).guideYTargets).toBeUndefined();
+  });
+});
+
+describe('near a pitch guide, it’s the only target', () => {
+  // A guide at 6040 ¢ crossing the staff's C4 (6000 ¢).
+  const cfg: SnapConfig = {
+    enabled: true, subdivisionsPerBeat: 4, pitchTargets: [5900, 6000, 6100, 6200],
+    guideYTargets: [6040], priorityYTargets: [6040],
+  };
+
+  it('the staff line nearer the cursor doesn’t take over, for drawing or Gravity', () => {
+    expect(snapToGrid(0, 6010, cfg).wy).toBe(6040);
+    expect(findAdaptiveSnap(6010, cfg).target).toBe(6040);
+    // Without the priority, C4 wins.
+    const plain = { ...cfg, priorityYTargets: undefined };
+    expect(snapToGrid(0, 6010, plain).wy).toBe(6000);
+    expect(findAdaptiveSnap(6010, plain).target).toBe(6000);
+  });
+
+  it('beyond its reach the scale is back', () => {
+    const far = 6040 + PITCH_GUIDE_PRIORITY_CENTS + 60;
+    expect(snapToGrid(0, far, cfg).wy).toBe(6200);
+    expect(findAdaptiveSnap(far, cfg).target).toBe(6200);
+  });
+
+  it('Prism projection still takes everything while on', () => {
+    expect(snapToGrid(0, 6010, { ...cfg, projectionTargets: [6300] }).wy).toBe(6300);
   });
 });
 

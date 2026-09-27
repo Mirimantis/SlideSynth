@@ -19,6 +19,20 @@ export interface SnapConfig {
   guideXTargets?: readonly number[];
   /** User-placed Y-guide pitch positions (cents). Snap pulls within GUIDE_Y_SNAP_RADIUS_CENTS. */
   guideYTargets?: readonly number[];
+  /** Pitch guides (13.10): also in guideYTargets, but within
+   *  PITCH_GUIDE_PRIORITY_CENTS of one, it's the only Y target, so gliding
+   *  along a guide isn't pulled off onto a staff line where they cross. */
+  priorityYTargets?: readonly number[];
+}
+
+/** How close to a pitch guide (13.10) it takes over from every other Y target. */
+export const PITCH_GUIDE_PRIORITY_CENTS = 100;
+
+/** The nearest pitch guide within its priority reach, or null. */
+function priorityTarget(wy: number, config: SnapConfig): number | null {
+  if (!config.priorityYTargets || config.priorityYTargets.length === 0) return null;
+  if (config.projectionTargets && config.projectionTargets.length > 0) return null;
+  return nearestWithinRadius(wy, config.priorityYTargets, PITCH_GUIDE_PRIORITY_CENTS);
 }
 
 /**
@@ -94,6 +108,10 @@ export function snapToGrid(
     }
   }
 
+  // A pitch guide within its reach takes over (13.10).
+  const priority = priorityTarget(wy, config);
+  if (priority !== null) snappedY = priority;
+
   return { wx: Math.max(0, snappedX), wy: snappedY };
 }
 
@@ -121,6 +139,14 @@ export interface AdaptiveSnapResult {
  *  returns the full local target list so the caller can pick neighbors. */
 function collectSnapTargets(wy: number, config: SnapConfig, range: number): number[] {
   const targets: number[] = [];
+
+  // Near a pitch guide, the guides are the only targets (13.10), so Gravity
+  // follows the guide across a staff line instead of dropping onto it.
+  if (priorityTarget(wy, config) !== null) {
+    for (const t of config.priorityYTargets!) if (Math.abs(t - wy) <= range) targets.push(t);
+    targets.sort((a, b) => a - b);
+    return targets;
+  }
 
   if (config.projectionTargets && config.projectionTargets.length > 0) {
     for (const t of config.projectionTargets) {
