@@ -11,6 +11,8 @@ const HANDLE_RADIUS = 3;
 /** Alpha applied to curves on non-active tracks (BACKLOG 8.23). Pushes them
  *  visually back so the active track stays distinct, while remaining clickable. */
 const INACTIVE_TRACK_ALPHA = 0.45;
+/** A muted track's curves (13.10 (b)): still there, and editable, but quiet. */
+const MUTED_TRACK_ALPHA = 0.5;
 /** A guide track's curves (13.10): scaffolding, in the fret colour. */
 const GUIDE_TRACK_ALPHA = 0.8;
 const GUIDE_DASH: number[] = [6, 5];
@@ -65,10 +67,13 @@ export function renderCurves(
   geometryVersion: number,
   /** A guide track's curves (13.10): thin, dashed, in the fret colour. */
   asGuide = false,
+  /** A muted track's curves: dimmed. */
+  muted = false,
 ): void {
   const prevAlpha = ctx.globalAlpha;
   let alpha = isActiveTrack ? prevAlpha : prevAlpha * INACTIVE_TRACK_ALPHA;
   if (asGuide) alpha *= GUIDE_TRACK_ALPHA;
+  else if (muted) alpha *= MUTED_TRACK_ALPHA;
   ctx.globalAlpha = alpha;
   const drawTone = asGuide ? { ...tone, color: themeColor('guide'), dashPattern: GUIDE_DASH } : tone;
   for (const curve of curves) {

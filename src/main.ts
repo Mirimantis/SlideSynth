@@ -51,7 +51,7 @@ import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
 import { history } from './state/history';
-import { createTrack } from './model/track';
+import { createTrack, trackShown } from './model/track';
 import { getCompositionLength, measureLengthInBeats } from './model/composition';
 import { computeMultiCurveBBox, pitchPoints } from './model/curve';
 import { createGroupId } from './model/curve-groups';
@@ -1441,6 +1441,13 @@ const trackListActions: TrackListActions = {
       const t = c.tracks.find(tt => tt.id === trackId);
       if (t && !t.guide) t.solo = !t.solo;
     });
+  },
+  toggleHidden(trackId) {
+    history.snapshot();
+    const t = store.getComposition().tracks.find(tt => tt.id === trackId);
+    store.setTrackHidden(trackId, !t?.hidden);
+    // A hidden track's curves can't stay selected under a transform box.
+    if (store.getState().selectedTrackId === trackId && t?.hidden) interaction.transformBox = null;
   },
   toggleGuide(trackId) {
     history.snapshot();
@@ -2967,9 +2974,9 @@ function draw() {
   // Render curves for all tracks
   const geometryVersion = store.compositionVersion();
   for (const track of comp.tracks) {
-    if (track.muted) continue;
-    // The Snap drawer's Guides switch hides pitch guides with frets (13.10).
-    if (track.guide && !state.guidesVisible) continue;
+    // Hidden tracks, and guide tracks with the Guides switch off, aren't drawn;
+    // muted ones are, dimmed (13.10 (b)).
+    if (!trackShown(track, state.guidesVisible)) continue;
     const tone = comp.toneLibrary.find(t => t.id === track.toneId);
     if (!tone) continue;
 
@@ -2985,6 +2992,7 @@ function draw() {
       geometryVersion,
       // Guide tracks draw as guides, unless the Guides switch hides them all.
       !!track.guide,
+      track.muted,
     );
   }
 

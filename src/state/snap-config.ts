@@ -5,6 +5,7 @@ import { pitchSetFor, prismOffsets, resolveTuning } from '../tuning/tuning';
 import { fretLines, shownGuides } from '../model/frets';
 import { computeProjectionTargetsAtX } from '../canvas/projection-renderer';
 import { evaluateCurveAtBeat } from '../audio/curve-sampler';
+import { trackShown } from '../model/track';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { store } from './store';
 
@@ -67,9 +68,10 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
   }
   // Pitch guides (13.10): a guide track's curves pull at their pitch at this
   // beat, like frets whose pitch moves. Under the same Guides switch.
-  if (st.guidesVisible && q.atBeat !== undefined) {
+  if (q.atBeat !== undefined) {
     for (const track of st.composition.tracks) {
-      if (!track.guide) continue;
+      // Hidden guide tracks, and all of them with Guides off, don't pull.
+      if (!track.guide || !trackShown(track, st.guidesVisible)) continue;
       for (const curve of track.curves) {
         if (q.excludeCurveIds?.has(curve.id)) continue;
         const hit = evaluateCurveAtBeat(curve, q.atBeat);

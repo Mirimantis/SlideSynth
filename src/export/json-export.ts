@@ -119,6 +119,7 @@ function compositionFromEnvelope(env: GlissEnvelope): Composition {
   // A guide track was saved muted for older apps; here it's a guide, unmuted.
   for (const t of comp.tracks) {
     if (t.guide === true) { t.muted = false; t.solo = false; } else delete t.guide;
+    if (t.hidden !== true) delete t.hidden;
   }
   // Only the envelope sets this; a composition section can't smuggle one in.
   delete comp.unknownEnvelope;

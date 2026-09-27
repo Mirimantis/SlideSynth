@@ -500,7 +500,11 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
         - **Send to guide track / Copy to guide track** (`store.sendCurvesToGuideTrack`; Edit menu, and a Send button in Selection): moves or copies whole groups to the first guide track, making "Guides" if there's none; you stay on your track. One undo step.
         - **Store:** `setTrackGuide` unmutes the track either way and drops its solo.
         - **File:** `Track.guide?: true`, saved with `muted: true` for older apps; loaded as a guide, unmuted. Any value but `true` is dropped. No version bump.
-    - [ ] **(b) Mute / Hide split** *(S–M)*: Mute becomes silent only (curves drawn dimmed, still pickable); a Hide (eye) button hides a track and stops a guide track pulling.
+    - [x] **(b) Mute / Hide split** *(S–M)*: Mute becomes silent only (curves drawn dimmed, still pickable); a Hide (eye) button hides a track and stops a guide track pulling.
+      - **Done (this PR):**
+        - **Mute** is silent only: a muted track's curves are drawn at half strength and can be picked and edited. *(Behaviour change: before, muted tracks were also hidden and unpickable.)*
+        - **Hide** (eye / eye-off icons, new): `Track.hidden?: true`, one undo step, saved in the file. A hidden track still plays, isn't drawn or pickable, and a hidden guide track doesn't pull. Hiding the active track lets go of its selected curves and the transform box. A Draw click on a hidden track shows it again (and turns Guides on for a guide track), as adding a fret shows frets.
+        - `trackShown()` in `model/track.ts` is the one rule for drawing, canvas picking and pitch-guide pull, beside (a)'s `trackSounds()` for sound.
   - Related to 12.1 (a curve is another gravity source), 13.19 (per-guide gravity) and 13.25 (with 13.24, this is what could replace Projection).
 
 ### Groups

@@ -11,6 +11,7 @@ import { MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
 import { moveIntervalCents, moveIntervalName, prismOffsetsAt, resolveTuning } from '../tuning/tuning';
 import { duplicateCurves } from '../state/clipboard';
 import { moveFretLine, shownGuides } from '../model/frets';
+import { trackShown } from '../model/track';
 import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/curve-groups';
 import { nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
@@ -829,6 +830,10 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
   const state = store.getState();
   const track = getSelectedTrack();
   if (!track) return;
+  // Drawing on a track you can't see shows it (13.10 (b)), as adding a fret
+  // shows frets; a guide track needs the Guides switch on too.
+  if (track.hidden) store.setTrackHidden(track.id, false);
+  if (track.guide) store.setGuidesVisible(true);
 
   // Harmonic Prism Draw mode: dispatch to chord-cluster placement.
   if (state.harmonicPrism.drawMode) {
@@ -965,7 +970,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
   const comp = store.getComposition();
   const candidateTracks: Track[] = shiftKey
     ? [activeTrack]
-    : comp.tracks.filter(t => !t.muted && !(t.guide && !store.getState().guidesVisible));
+    : comp.tracks.filter(t => trackShown(t, store.getState().guidesVisible));
 
   // Phase 1: anchor points. Anchors override handles when overlapping.
   for (const t of candidateTracks) {

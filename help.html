@@ -588,7 +588,11 @@
         <li>Click <strong>+ Track</strong> to add a new track.</li>
         <li>Click a track to make it active and select all of its curves. Your tool stays as it is: in Draw, <kbd>Delete</kbd> removes them and you can keep drawing; press <kbd>V</kbd> (or pick Select) to get a transform box around them.</li>
         <li>Click <strong>+ Tone</strong> to open the tone builder and design a custom synth voice.</li>
-        <li>Each track row has icon toggles under its name — <strong>Mute</strong> (speaker), <strong>Solo</strong> (headphones), <strong>Guide</strong> (a dashed glide) and <strong>MIDI arm</strong> (MIDI socket) — and a <strong>⋯</strong> menu with <strong>Edit tone…</strong> and <strong>Delete track</strong> (undoable). Click the tone name under the track name to pick a different tone.</li>
+        <li>Each track row has icon toggles under its name — <strong>Mute</strong> (speaker), <strong>Solo</strong> (headphones), <strong>Hide</strong> (eye), <strong>Guide</strong> (a dashed glide) and <strong>MIDI arm</strong> (MIDI socket) — and a <strong>⋯</strong> menu with <strong>Edit tone…</strong> and <strong>Delete track</strong> (undoable). Click the tone name under the track name to pick a different tone.</li>
+        <li><strong>Mute</strong> silences a track and nothing else: its curves stay on the canvas,
+          dimmed, and you can still select and edit them. <strong>Hide</strong> is the other way
+          round: the track still plays, but its curves aren't drawn and can't be picked. Drawing on a
+          hidden track shows it again. Both are saved with the composition and can be undone.</li>
         <li><strong>Guide</strong> makes a track a <strong>guide track</strong>: its curves go
           silent, are drawn thin and dashed in the fret colour, and pull like frets whose pitch
           moves (see <em>Pitch guides</em> under Snap &amp; Grid). Mute and Solo don't apply to
@@ -877,7 +881,8 @@
         <li>Guide curves are ordinary curves otherwise: select, edit, transform, copy and record
           onto them. A curve you're drawing or dragging doesn't pull on itself.</li>
         <li>The Snap drawer's <strong>Guides</strong> switch covers pitch guides too: off, they
-          aren't drawn and don't pull.</li>
+          aren't drawn and don't pull. To put away just one guide track, <strong>Hide</strong> it:
+          a hidden guide track doesn't pull either.</li>
         <li>A file with a guide track opens in an older version of the app as a muted track, so
           it doesn't suddenly play your guides.</li>
       </ul>

@@ -14,6 +14,13 @@ export function trackSounds(track: Track, tracks: readonly Track[]): boolean {
   return !soloActive(tracks) || track.solo;
 }
 
+/** Whether a track's curves are drawn, can be picked, and (a guide track)
+ *  pull (13.10 (b)): not hidden, and for a guide track the Snap drawer's
+ *  Guides switch on. Muted tracks are shown (dimmed). */
+export function trackShown(track: Track, guidesVisible: boolean): boolean {
+  return !track.hidden && !(track.guide && !guidesVisible);
+}
+
 /** The name a new guide track gets from Send to guide track. */
 export const GUIDE_TRACK_NAME = 'Guides';
 

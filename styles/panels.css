@@ -141,6 +141,16 @@
   border-color: var(--solo);
 }
 
+/* Hidden track (13.10 (b)): the eye crossed out, on a muted background. */
+.track-hide.active {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+.track-item.hidden .track-info {
+  opacity: 0.5;
+}
+
 /* Guide track (13.10): the fret colour. */
 .track-guide.active {
   background: var(--guide);

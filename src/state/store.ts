@@ -1051,6 +1051,21 @@ class Store {
     this.touch('composition');
   }
 
+  /** Hide or show a track (13.10 (b)). Hiding lets go of its selected curves,
+   *  which you couldn't see. Caller takes the `history.snapshot()`. */
+  setTrackHidden(trackId: string, hidden: boolean): void {
+    const t = this.state.composition.tracks.find(tt => tt.id === trackId);
+    if (!t || !!t.hidden === hidden) return;
+    if (hidden) t.hidden = true; else delete t.hidden;
+    batch(() => {
+      this.touch('composition');
+      if (hidden && this.state.selectedTrackId === trackId) {
+        this.setSelectedCurves([]);
+        this.setSelectedPoint(null);
+      }
+    });
+  }
+
   /**
    * Send curves to a guide track (13.10): the first one, or a new "Guides"
    * track if there's none. The active track stays where it is, so you keep

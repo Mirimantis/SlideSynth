@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { soloActive, trackSounds, createTrack } from './track';
+import { soloActive, trackShown, trackSounds, createTrack } from './track';
 import { createCurve, createControlPoint, addPointToCurve } from './curve';
 import { createComposition } from './composition';
 import { store } from '../state/store';
@@ -63,6 +63,41 @@ describe('pitch guides pull at each beat', () => {
     expect(snapConfigFor(sources()).guideYTargets).toBeUndefined();
     expect(snapConfigFor(sources({ guidesVisible: false }), { atBeat: 1 }).guideYTargets).toBeUndefined();
     expect(snapConfigFor(sources(), { atBeat: 1, excludeCurveIds: new Set(['g']) }).guideYTargets).toBeUndefined();
+  });
+});
+
+describe('Mute, Hide and Guide are separate (13.10 (b))', () => {
+  it('muted tracks are shown; hidden ones aren’t; guide tracks follow the Guides switch', () => {
+    expect(trackShown(track({ muted: true }), true)).toBe(true);
+    expect(trackShown(track({ hidden: true }), true)).toBe(false);
+    expect(trackShown(track({ guide: true }), true)).toBe(true);
+    expect(trackShown(track({ guide: true }), false)).toBe(false);
+    // A hidden track still sounds: Hide is about seeing, Mute about hearing.
+    const hidden = track({ hidden: true });
+    expect(trackSounds(hidden, [hidden])).toBe(true);
+  });
+
+  it('a hidden guide track doesn’t pull', () => {
+    const g = curveAt([0, 6000], [4, 6000]);
+    const st = {
+      ...store.getState(), guidesVisible: true, fretsVisible: true,
+      composition: { guides: [], tracks: [track({ guide: true, hidden: true, curves: [g] })] },
+    };
+    expect(snapConfigFor(st, { atBeat: 1 }).guideYTargets).toBeUndefined();
+  });
+
+  it('hiding the active track lets go of its selection; the file keeps it', () => {
+    store.loadComposition(createComposition());
+    const t = store.getComposition().tracks[0]!;
+    const c = curveAt([0, 6000], [1, 6000]);
+    store.mutate(() => t.curves.push(c));
+    store.setSelectedCurves([c.id]);
+    store.setTrackHidden(t.id, true);
+    expect(store.getState().selectedCurveIds.size).toBe(0);
+    const again = deserializeComposition(serializeComposition(store.getComposition()));
+    expect(again.tracks[0]!.hidden).toBe(true);
+    store.setTrackHidden(t.id, false);
+    expect(t.hidden).toBeUndefined();
   });
 });
 

@@ -7,6 +7,8 @@ import iconMute from '../assets/icons/mute.svg?raw';
 import iconSolo from '../assets/icons/solo.svg?raw';
 import iconMidi from '../assets/icons/midi.svg?raw';
 import iconGuide from '../assets/icons/guide.svg?raw';
+import iconEye from '../assets/icons/eye.svg?raw';
+import iconEyeOff from '../assets/icons/eye-off.svg?raw';
 
 /**
  * The track list (BACKLOG 15.4). Each row: colour, name and tone (click for
@@ -23,6 +25,8 @@ export interface TrackListActions {
   toggleSolo(trackId: string): void;
   /** A guide track's curves are silent pitch guides (13.10). */
   toggleGuide(trackId: string): void;
+  /** Hidden: not drawn or pickable, and a hidden guide doesn't pull. */
+  toggleHidden(trackId: string): void;
   toggleMidiArm(trackId: string): void;
   editTone(trackId: string): void;
   pickTone(trackId: string, anchor: HTMLElement): void;
@@ -76,7 +80,7 @@ function TrackRow({ track, color, toneName, selected, midiArm, actions }: TrackR
   };
   return (
     <div
-      class={`track-item${selected ? ' selected' : ''}${track.muted ? ' muted' : ''}${track.guide ? ' guide' : ''}`}
+      class={`track-item${selected ? ' selected' : ''}${track.muted ? ' muted' : ''}${track.guide ? ' guide' : ''}${track.hidden ? ' hidden' : ''}`}
       data-track-id={id}
       onClick={() => actions.select(id)}
     >
@@ -95,7 +99,7 @@ function TrackRow({ track, color, toneName, selected, midiArm, actions }: TrackR
       <div class="track-controls" onClick={e => e.stopPropagation()}>
         <button
           class={`track-btn track-mute${track.muted ? ' active' : ''}`}
-          title={track.guide ? 'A guide track is always silent' : track.muted ? 'Unmute' : 'Mute'}
+          title={track.guide ? 'A guide track is always silent' : track.muted ? 'Unmute' : 'Mute: silent, but still shown (dimmed) and editable'}
           aria-label="Mute"
           aria-pressed={track.muted}
           disabled={!!track.guide}
@@ -112,6 +116,17 @@ function TrackRow({ track, color, toneName, selected, midiArm, actions }: TrackR
           onClick={control(() => actions.toggleSolo(id))}
         >
           <Icon svg={iconSolo} />
+        </button>
+        <button
+          class={`track-btn track-hide${track.hidden ? ' active' : ''}`}
+          title={track.hidden
+            ? 'Show this track'
+            : track.guide ? 'Hide this track: its guides aren\'t drawn and don\'t pull' : 'Hide this track: its curves aren\'t drawn or pickable (it still plays)'}
+          aria-label="Hide"
+          aria-pressed={!!track.hidden}
+          onClick={control(() => actions.toggleHidden(id))}
+        >
+          <Icon svg={track.hidden ? iconEyeOff : iconEye} />
         </button>
         <button
           class={`track-btn track-guide${track.guide ? ' active' : ''}`}
