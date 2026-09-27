@@ -486,7 +486,7 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
     - how it combines with octave frets (13.18) and curve pitch guides (13.10);
     - UI in the Selection panel, and whether presets (13.2) can hold per-fret feel;
     - the snap-target composition work (12.1) and the device protocol's target map (Horizon), which would carry per-target feel to hardware.
-- [ ] **13.10 Curves as pitch guides** *(M — planning session held 2026-09-27)*
+- [x] **13.10 Curves as pitch guides** *(M — planning session held 2026-09-27; PR #100)*
   - Turn any pitch curve into a **pitch guide**: it keeps its shape, snaps like a fret (a target that moves over time), and makes no sound.
   - **Not a fret** (2026-09-26): a fret is one pitch, and a curve guide isn't, so it's called a pitch guide. For the same reason it can't join a scale or the staff (13.8 (f) converts octave frets only).
   - **Spec:** [DESIGN.md › Guide tracks spec](DESIGN.md#guide-tracks-spec-1310-decided-2026-09-27). Decided: a **track role** (a Guide switch per track), guides pull **alongside the scale** like frets, and Mute is split from a new **Hide**.
