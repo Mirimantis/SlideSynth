@@ -574,10 +574,10 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
           - 192 notes: 1,729 lines, 2.6 ms, 1.5 ms.
           - The 1,200-note limit: 10,801 lines, 16 ms, 7 ms. The staff only redraws when it changes.
         - **Staff labels (found while checking):** a tuning named by numbers now shows labels other than the root's only once at least every other one fits, so a 192-note tuning zoomed out isn't a column of scattered numbers.
-    - [x] **(f) Frets ↔ scale** *(M — after 13.18 and (c))*
+    - [x] **(f) Frets ↔ scale** *(M, PR #95)*
       - Scale → octave frets.
       - Octave frets → a Custom scale, or a Custom tuning if any fret is off the tuning's degrees. Single frets stay as they are.
-      - **Done (this PR):**
+      - **Done (PR #95):**
         - **`tuning/frets-scale.ts`:**
           - `scaleToFrets` puts an octave fret on each scale note (every note with All notes) in the octave from C4, skipping notes an octave fret already covers. It refuses scales over 72 notes.
           - `fretsToScale` reads the octave frets' pitch classes. If all are on the tuning's notes, the result is that scale: by name if it's one of the tuning's scales (a round trip gives D major back), else Custom, or All notes. If any fret is off the notes, the result is a tuning **"From frets"** (an imported-kind tuning) with the frets' exact pitches and All notes.
