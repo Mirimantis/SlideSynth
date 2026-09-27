@@ -63,7 +63,7 @@ import { ToolStrip } from './ui/tool-strip';
 import { SnapPanel, type SnapActions } from './ui/snap-panel';
 import { PrismPanel } from './ui/prism-panel';
 import { TuningPanel, type TuningActions } from './ui/tuning-panel';
-import { nearestNote, pitchLabel, pitchName, prismOffsets, resolveTuning, staffGridFor, tuningKey } from './tuning/tuning';
+import { nearestNote, noteRootAt, pitchLabel, pitchName, prismOffsets, prismOffsetsAt, resolveTuning, staffGridFor, tuningKey } from './tuning/tuning';
 import { fretLinePitch, shownGuides } from './model/frets';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
@@ -1688,6 +1688,24 @@ function clearPlanchettePitches() {
   lastComposeSy = null;
 }
 
+/**
+ * Per note (13.21): the degree the performed note's chord counts from, taken
+ * where the note starts and held through its glide, so harmony voices never
+ * jump mid-note. Null between notes, when the chord follows the cursor's
+ * note. The degree is held rather than the offsets, so a chord-spec change
+ * mid-note still applies at once.
+ */
+let heldNoteRoot: number | null = null;
+
+/** The Prism chord's offsets for a base pitch: the held note's chord while a
+ *  note sounds, else the chord on `base` (the root's without one). */
+function chordOffsetsFor(base: number | null): number[] {
+  const st = store.getState();
+  const spec = st.harmonicPrism.chordSpec;
+  if (heldNoteRoot !== null) return prismOffsets(spec, st, heldNoteRoot);
+  return base === null ? prismOffsets(spec, st) : prismOffsetsAt(spec, st, base);
+}
+
 /** Harmony voiceId for chord index i (1..N-1, since 0 = primary). */
 function harmonyVoiceId(harmonyIndex: number): string {
   return `harmony-${harmonyIndex}`;
@@ -1699,7 +1717,7 @@ function updateHarmonyVoices(snappedBaseY: number) {
   const st = store.getState();
   const planchettes = st.performance.planchettes;
   if (planchettes.length <= 1) return; // only primary present — no harmonies active
-  const offsets = prismOffsets(st.harmonicPrism.chordSpec, st);
+  const offsets = chordOffsetsFor(snappedBaseY);
   for (let i = 1; i < offsets.length; i++) {
     const voiceId = harmonyVoiceId(i - 1);
     const planchette = planchettes.find(p => p.voiceId === voiceId);
@@ -1785,7 +1803,9 @@ function startComposePerformSounding(snappedBaseY: number) {
   // (which runs every frame and tracks drawMode + playback/record state).
   // Just spin up a synth for each currently-active voice.
   const st = store.getState();
-  const offsets = prismOffsets(st.harmonicPrism.chordSpec, st);
+  // The note's chord is fixed where it starts (Per note, 13.21).
+  heldNoteRoot = noteRootAt(st, snappedBaseY);
+  const offsets = chordOffsetsFor(snappedBaseY);
   for (const p of st.performance.planchettes) {
     const y = voiceYFromBase(p.voiceId, snappedBaseY, offsets);
     if (y == null) continue;
@@ -1799,7 +1819,7 @@ function updateComposePerformPitch(snappedBaseY: number) {
   // Primary's pitch update; harmony pitch updates are driven by
   // composeUpdatePlanchette → updateHarmonyVoices.
   if (preview.isDrawPreviewActive('primary')) {
-    preview.updateDrawPitch(snappedBaseY + primaryChordOffset(), 'primary');
+    preview.updateDrawPitch(snappedBaseY + primaryChordOffset(snappedBaseY), 'primary');
   }
 }
 
@@ -1815,16 +1835,14 @@ function updateComposePerformPitch(snappedBaseY: number) {
  * the snap pulse and the Pitch HUD follow the cursor — so everything that
  * sounds, records or draws the primary voice adds this. 0 with Prism Draw off.
  */
-function primaryChordOffset(): number {
-  const st = store.getState();
-  const prism = st.harmonicPrism;
-  return prism.drawMode ? (prismOffsets(prism.chordSpec, st)[0] ?? 0) : 0;
+function primaryChordOffset(base: number | null): number {
+  return store.getState().harmonicPrism.drawMode ? (chordOffsetsFor(base)[0] ?? 0) : 0;
 }
 
 /** The planchettes at the pitches they sound: the primary moved by
  *  primaryChordOffset(), the rest as stored. For capture and the rail. */
 function planchettesAsSounding(planchettes: PlanchetteState[]): PlanchetteState[] {
-  const off = primaryChordOffset();
+  const off = primaryChordOffset(planchettes.find(p => p.voiceId === 'primary')?.snappedWorldY ?? null);
   if (off === 0) return planchettes;
   const shift = (y: number | null) => (y == null ? null : y + off);
   return planchettes.map(p => (p.voiceId === 'primary'
@@ -1839,6 +1857,7 @@ function stopComposePerformSounding() {
   const planchettes = store.getState().performance.planchettes;
   for (const p of planchettes) preview.stopDrawPreview(p.voiceId);
   store.setPerformLmbSounding(false);
+  heldNoteRoot = null;
 }
 
 /** Compute the world Y a voice should sit at, given the primary's snapped Y
@@ -1847,7 +1866,7 @@ function stopComposePerformSounding() {
 function voiceYFromBase(voiceId: string, snappedBaseY: number, offsets: readonly number[]): number | null {
   let y: number;
   if (voiceId === 'primary') {
-    y = snappedBaseY + primaryChordOffset();
+    y = snappedBaseY + primaryChordOffset(snappedBaseY);
   } else {
     const harmonyIdx = parseHarmonyIndex(voiceId);
     if (harmonyIdx == null) return null;
@@ -1884,7 +1903,8 @@ function syncHarmonyPlanchettes() {
     return;
   }
 
-  const offsets = prismOffsets(st.harmonicPrism.chordSpec, st);
+  const primary = st.performance.planchettes.find(pp => pp.voiceId === 'primary');
+  const offsets = chordOffsetsFor(primary?.snappedWorldY ?? null);
   const desiredHarmonyIds = new Set<string>();
   for (let i = 1; i < offsets.length; i++) desiredHarmonyIds.add(harmonyVoiceId(i - 1));
 
@@ -1902,7 +1922,6 @@ function syncHarmonyPlanchettes() {
   // Add voices not yet present (numVoices increased or first time entering).
   // Seed each new harmony's Y from the primary so the rail shows it immediately
   // (otherwise the planchette has null Y until the next mousemove tick).
-  const primary = st.performance.planchettes.find(pp => pp.voiceId === 'primary');
   for (let i = 1; i < offsets.length; i++) {
     const voiceId = harmonyVoiceId(i - 1);
     if (st.performance.planchettes.some(p => p.voiceId === voiceId)) continue;
@@ -1933,10 +1952,10 @@ function syncHarmonyPlanchettes() {
  *  but uses the audition path (no recording, no planchettes added —
  *  the active draw-mode preview dots already show the cursor cluster). */
 function startPrismDrawPreview(tone: import('./types').ToneDefinition, snappedBaseY: number) {
-  preview.startDrawPreview(tone, snappedBaseY + primaryChordOffset(), 'primary');
+  preview.startDrawPreview(tone, snappedBaseY + primaryChordOffset(snappedBaseY), 'primary');
   const st = store.getState();
   if (!st.harmonicPrism.drawMode) return;
-  const offsets = prismOffsets(st.harmonicPrism.chordSpec, st);
+  const offsets = chordOffsetsFor(snappedBaseY);
   for (let i = 1; i < offsets.length; i++) {
     const voiceId = harmonyVoiceId(i - 1);
     const y = snappedBaseY + offsets[i]!;
@@ -1947,10 +1966,10 @@ function startPrismDrawPreview(tone: import('./types').ToneDefinition, snappedBa
 
 /** Re-tune all currently-active idle preview voices from the primary's Y. */
 function updatePrismDrawPreview(snappedBaseY: number) {
-  preview.updateDrawPitch(snappedBaseY + primaryChordOffset(), 'primary');
+  preview.updateDrawPitch(snappedBaseY + primaryChordOffset(snappedBaseY), 'primary');
   const st = store.getState();
   if (!st.harmonicPrism.drawMode) return;
-  const offsets = prismOffsets(st.harmonicPrism.chordSpec, st);
+  const offsets = chordOffsetsFor(snappedBaseY);
   for (let i = 1; i < offsets.length; i++) {
     const voiceId = harmonyVoiceId(i - 1);
     if (!preview.isDrawPreviewActive(voiceId)) continue;
@@ -3031,7 +3050,7 @@ function draw() {
       viewport,
       cursorScreenX,
       snapped.wy,
-      prismOffsets(state.harmonicPrism.chordSpec, state),
+      prismOffsetsAt(state.harmonicPrism.chordSpec, state, snapped.wy),
       rect.height,
       RULER_HEIGHT,
     );

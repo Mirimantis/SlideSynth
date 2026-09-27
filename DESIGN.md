@@ -366,6 +366,7 @@ The scale is the pitch grid; frets (13.16) are exceptions and additions on top o
 #### Consequences elsewhere
 
 - **Harmonic Prism:** Intonation's "Equal" means the current tuning's equal steps (12-EDO steps only when the tuning is 12-EDO). *(Built in 13.8 (b): each voice takes the tuning's step nearest its 12-TET interval, counted from the root. For unequal tables that's the table's own intervals from the root, since a chord's offsets must stay constant along a curve.)*
+  - **Per note** (13.21, first slice) is a second Equal: the chord counts up from the tuning's note nearest the base (`noteRootAt`) instead of from the root, and moves with the base's offset from that note. A 12-note octave table counts its notes by the semitones (a third is always four notes up); other tunings take the nearest steps as Equal does. Draw clicks take each click's note; a performed note holds the note it started on (`heldNoteRoot` in main.ts) until it ends; projection echoes stay from the root.
 - **Octave frets (13.18):** "Octaves" repeats every period of the tuning, which is the octave except in non-octave tunings.
 - **Files:** `scaleRoot` (0–11) becomes a degree index into the tuning. The composition version goes up, with a migration:
 

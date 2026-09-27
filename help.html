@@ -1116,11 +1116,30 @@
         <li><strong>Stacking</strong> — the interval used to stack voices. Tertian (3rds) for conventional harmony, Quartal (4ths) for modal/jazz, Quintal (5ths) for open sound, Secondal (2nds) for clusters.</li>
         <li><strong>Quality</strong> — major / minor / dominant / diminished / augmented / sus2 / sus4. Fully applies to tertian; limited options for other stackings.</li>
         <li><strong>Voices</strong> — 2 (dyad) through 5 (pentad). More voices extend the chord: triad → 7th → 9th.</li>
-        <li><strong>Intonation</strong> — Equal or Just (pure acoustic ratios). Equal builds the
-          chord in the Tuning drawer's steps: 12-TET semitones in 12-EDO, the nearest steps in
-          another equal division (a major third is 6 steps of 19-EDO), and in an unequal tuning
-          such as Werckmeister its own intervals counted from the root, so a chord on the root
-          lands on the staff's lines. Just ignores the tuning.</li>
+        <li><strong>Intonation</strong> — Equal, Per note or Just (pure acoustic ratios).
+          <ul>
+            <li><strong>Equal (from root)</strong> builds the chord in the Tuning drawer's
+              steps: 12-TET semitones in 12-EDO, the nearest steps in another equal division (a
+              major third is 6 steps of 19-EDO), and in an unequal tuning such as Werckmeister
+              its own intervals counted from the root. A chord on any other note is the root's
+              chord moved, so every key sounds alike.</li>
+            <li><strong>Per note</strong> (in any tuning but 12-EDO, where it's the same as
+              Equal) builds the chord from the tuning's own notes above the note it's on, as a
+              keyboard in that temperament plays it. In Werckmeister III E major's third is
+              wider than C major's, so each key has its own colour. Meantone, Pythagorean and
+              just tunings keep their wolf intervals too: in 5-limit just intonation D minor's
+              fifth is about 20¢ flat. That's historically honest, but can surprise.
+              <ul>
+                <li>A base between notes takes the nearest note's chord, moved with it.</li>
+                <li>Each Draw click is a note, with its own chord. A performed note keeps the
+                  chord it started on through its whole glide, so harmony voices never jump
+                  mid-note; the next note takes its own.</li>
+                <li>Projection echoes still use the chord from the root.</li>
+              </ul>
+            </li>
+            <li><strong>Just</strong> ignores the tuning.</li>
+          </ul>
+        </li>
         <li><strong>Direction</strong> — voices sit above the base, below, or around it.</li>
         <li><strong>Octaves ±</strong> — how many octaves above and below the source to echo (0–3).</li>
       </ul>

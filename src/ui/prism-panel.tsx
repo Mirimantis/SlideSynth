@@ -23,7 +23,7 @@ import { isTwelveEdo, resolveTuning } from '../tuning/tuning';
  */
 
 const STACKINGS: StackingStyle[] = ['tertian', 'quartal', 'quintal', 'secondal'];
-const INTONATIONS: TuningSystem[] = ['12-TET', 'just-intonation'];
+const INTONATIONS: TuningSystem[] = ['12-TET', 'per-note', 'just-intonation'];
 const DIRECTIONS: Direction[] = ['up', 'down', 'symmetric'];
 const VOICE_COUNTS: NumVoices[] = [2, 3, 4, 5];
 
@@ -35,11 +35,15 @@ export function PrismPanel() {
   const prism = store.getState().harmonicPrism;
   const spec = prism.chordSpec;
   const qualities = (RELEVANT_QUALITIES[spec.stacking] ?? ['major']) as ChordQuality[];
-  // "Equal" counts in the current tuning's steps (13.8 (b)).
+  // "Equal" counts in the current tuning's steps from the root (13.8 (b));
+  // "Per note" from the note the chord is on (13.21). In 12-EDO they're the
+  // same, so Per note is offered only if it's already chosen.
   const tuningRef = store.getState().tuning;
-  const intonationLabels = isTwelveEdo(tuningRef)
+  const twelve = isTwelveEdo(tuningRef);
+  const intonations = twelve && spec.tuning !== 'per-note' ? INTONATIONS.filter(t => t !== 'per-note') : INTONATIONS;
+  const intonationLabels = twelve
     ? INTONATION_LABELS
-    : { ...INTONATION_LABELS, '12-TET': `Equal (${resolveTuning(tuningRef).name})` };
+    : { ...INTONATION_LABELS, '12-TET': 'Equal (from root)', 'per-note': `Per note (${resolveTuning(tuningRef).name})` };
   return (
     <>
       <Switch
@@ -89,12 +93,12 @@ export function PrismPanel() {
           <Options values={VOICE_COUNTS} />
         </select>
       </Row>
-      <Row id="prism-intonation" label="Intonation" title="Equal: the chord in the tuning's steps, counted from the root (12-TET semitones in 12-EDO). Just: pure acoustic ratios (e.g. 5/4 for M3, 7/4 for harmonic 7th)">
+      <Row id="prism-intonation" label="Intonation" title="Equal: the chord in the tuning's steps, counted from the root, so a chord on any note has the root chord's shape (12-TET semitones in 12-EDO). Per note: the tuning's own notes above the note the chord is on, as a keyboard in that temperament plays it, so each key has its own colour (and a meantone or just tuning its wolf intervals). Draw clicks and performing only; projection echoes stay from the root. Just: pure acoustic ratios (e.g. 5/4 for M3, 7/4 for harmonic 7th)">
         <select
           id="prism-intonation" value={spec.tuning}
           onChange={e => { store.setPrismChordSpec({ tuning: selectValue(e) as TuningSystem }); blur(e); }}
         >
-          <Options values={INTONATIONS} labels={intonationLabels} />
+          <Options values={intonations} labels={intonationLabels} />
         </select>
       </Row>
       <Row id="prism-direction" label="Direction" title="Where harmony voices sit relative to the base pitch">

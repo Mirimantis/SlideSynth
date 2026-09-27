@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   ALL_NOTES, TWELVE_EDO, chordStepsFor, clampDivisions, degreeName, nearestDegree, nearestNote, pitchName, pitchSetFor,
-  prismOffsets, resolveTuning, rootCents, scalesFor, staffGridFor,
+  noteRootAt, prismOffsets, prismOffsetsAt, resolveTuning, rootCents, scalesFor, staffGridFor,
   type PitchSettings, type TuningRef,
 } from './tuning';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
@@ -187,6 +187,55 @@ describe('the Prism’s Equal counts in the tuning’s steps (BACKLOG 13.8 (b))'
   it('Just stays pure in any tuning', () => {
     const out = offsets({ kind: 'edo', divisions: 19, equave: 'octave' }, { tuning: 'just-intonation' });
     expect(out[1]).toBeCloseTo(1200 * Math.log2(5 / 4), 6);
+  });
+
+  it('a 12-note table counts its notes, however far they’re tempered', () => {
+    // 7-limit: the minor third is 7/6 (267¢), a third of a semitone flat, and still the third.
+    const ji7 = resolveTuning({ kind: 'table', id: 'ji-7-limit' });
+    expect(offsets({ kind: 'table', id: 'ji-7-limit' }, { quality: 'minor' })[1]).toBeCloseTo(ji7.degrees[3]!, 6);
+  });
+});
+
+describe('Prism chords per note (BACKLOG 13.21)', () => {
+  const chord = (over: Partial<ChordSpec> = {}): ChordSpec => ({ ...DEFAULT_CHORD_SPEC, voiceOctaveOffsets: [], ...over });
+  const WERCK: TuningRef = { kind: 'table', id: 'werckmeister-3' };
+  const werck = resolveTuning(WERCK);
+  const at = (tuning: TuningRef, base: number, over: Partial<ChordSpec> = {}, root = 0) =>
+    prismOffsetsAt(chord({ tuning: 'per-note', ...over }), { tuning, root, tunedFrom: 0 }, base);
+  const E4 = 6400;
+
+  it('a chord on E is E’s chord in the temperament, not C’s moved', () => {
+    const out = at(WERCK, E4);
+    expect(out[1]).toBeCloseTo(werck.degrees[8]! - werck.degrees[4]!, 6);    // E → G#
+    expect(out[2]).toBeCloseTo(werck.degrees[11]! - werck.degrees[4]!, 6);   // E → B
+    // Equal (from root) gives C major’s shape on E.
+    const fromRoot = prismOffsetsAt(chord(), { tuning: WERCK, root: 0, tunedFrom: 0 }, E4);
+    expect(fromRoot[1]).toBeCloseTo(werck.degrees[4]!, 6);
+    expect(out[1]).toBeGreaterThan(fromRoot[1]! + 5);   // E major’s third is wider
+  });
+
+  it('a base between notes takes the nearest note’s chord, moved with it', () => {
+    expect(at(WERCK, E4 + 17)).toEqual(at(WERCK, E4));
+    expect(noteRootAt({ tuning: WERCK, tunedFrom: 0 }, E4 + 17)).toBe(4);
+  });
+
+  it('5-limit just intonation has its wolf: D minor’s fifth is about 20¢ flat', () => {
+    const out = at({ kind: 'table', id: 'ji-5-limit' }, 6200, { quality: 'minor' });
+    expect(out[2]).toBeCloseTo(1200 * Math.log2((5 / 3) / (9 / 8)), 6);   // 680¢
+    expect(702 - out[2]!).toBeGreaterThan(20);
+  });
+
+  it('equal tunings give the same chord either way', () => {
+    const edo19: TuningRef = { kind: 'edo', divisions: 19, equave: 'octave' };
+    const equal = prismOffsetsAt(chord(), { tuning: edo19, root: 3, tunedFrom: 0 }, 6463);
+    at(edo19, 6463, {}, 3).forEach((o, i) => expect(o).toBeCloseTo(equal[i]!, 6));
+    expect(at(TWELVE_EDO, 6400)).toEqual([0, 400, 700]);
+  });
+
+  it('only Per note uses the note; without one (projection) it counts from the root', () => {
+    const spec = chord({ tuning: 'per-note' });
+    expect(prismOffsets(spec, { tuning: WERCK, root: 0 })).toEqual(prismOffsets(chord(), { tuning: WERCK, root: 0 }));
+    expect(prismOffsets(chord(), { tuning: WERCK, root: 0 }, 4)).toEqual(prismOffsets(chord(), { tuning: WERCK, root: 0 }));
   });
 });
 

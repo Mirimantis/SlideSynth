@@ -9,6 +9,8 @@
 //   • 12-TET ("Equal"): additive semitone steps from a compact interval
 //     pattern. In a tuning other than 12-EDO (13.8 (b)) each voice moves to
 //     the tuning's nearest step, counted from the root: `ChordSteps`.
+//     "Per note" (13.21) is the same path counted from the tuning's note
+//     nearest the base instead of from the root; tuning.ts picks the steps.
 //   • Just Intonation: prescribed frequency-ratio chains per
 //     (stacking, quality, numVoices). Ratios stay as ratios until a single
 //     final log2 conversion — never sum steps of individual intervals for
@@ -25,7 +27,10 @@ export type ChordQuality =
   | 'sus2'
   | 'sus4'
   | 'perfect';
-export type TuningSystem = '12-TET' | 'just-intonation';
+/** The chord's intonation. '12-TET' is "Equal": the tuning's steps counted
+ *  from the root. 'per-note' counts them from the note the chord is on
+ *  (13.21). The id '12-TET' predates tunings and is kept for saved specs. */
+export type TuningSystem = '12-TET' | 'per-note' | 'just-intonation';
 export type Direction = 'up' | 'down' | 'symmetric';
 export type NumVoices = 2 | 3 | 4 | 5;
 
@@ -191,10 +196,15 @@ function chordOffsets12TET(spec: ChordSpec): number[] {
 
 /** 12-TET offsets moved onto a tuning's steps: each voice takes the step
  *  nearest its 12-TET interval, and stays above the voice below it so no two
- *  voices merge in a coarse tuning. */
+ *  voices merge in a coarse tuning. In a 12-note octave table (a well
+ *  temperament, meantone, 5-limit JI) the semitones count the table's notes
+ *  instead, so a third is always four notes up however far it's tempered. */
 function onSteps(offsets: number[], steps: ChordSteps): number[] {
   const n = steps.intervals.length;
   const at = (m: number) => Math.floor(m / n) * steps.period + steps.intervals[m % n]!;
+  if (n === 12 && steps.period === CENTS_PER_OCTAVE) {
+    return offsets.map(target => at(Math.round(target / CENTS_PER_SEMITONE)));
+  }
   let prev = -1;
   return offsets.map(target => {
     let best = prev + 1;
@@ -246,9 +256,9 @@ function applyDirection(offsets: number[], direction: Direction): number[] {
  * (12-EDO) keeps the semitone tables.
  */
 export function chordOffsets(spec: ChordSpec, steps: ChordSteps | null = null): number[] {
-  const base = spec.tuning === '12-TET'
-    ? (steps ? onSteps(chordOffsets12TET(spec), steps) : chordOffsets12TET(spec))
-    : chordOffsetsJI(spec);
+  const base = spec.tuning === 'just-intonation'
+    ? chordOffsetsJI(spec)
+    : (steps ? onSteps(chordOffsets12TET(spec), steps) : chordOffsets12TET(spec));
   const directed = applyDirection(base, spec.direction);
   // 8.13: per-voice octave offsets. Apply after direction so "voice N up an
   // octave" reads consistently regardless of up/down/symmetric direction.
@@ -279,6 +289,7 @@ export const QUALITY_LABELS: Record<ChordQuality, string> = {
 
 export const INTONATION_LABELS: Record<TuningSystem, string> = {
   '12-TET': 'Equal (12-TET)',
+  'per-note': 'Per note',
   'just-intonation': 'Just',
 };
 
