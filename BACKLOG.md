@@ -486,12 +486,14 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
     - how it combines with octave frets (13.18) and curve pitch guides (13.10);
     - UI in the Selection panel, and whether presets (13.2) can hold per-fret feel;
     - the snap-target composition work (12.1) and the device protocol's target map (Horizon), which would carry per-target feel to hardware.
-- [ ] **13.10 Curves as pitch guides** *(M, own planning session)*
+- [ ] **13.10 Curves as pitch guides** *(M — planning session held 2026-09-27)*
   - Turn any pitch curve into a **pitch guide**: it keeps its shape, snaps like a fret (a target that moves over time), and makes no sound.
   - **Not a fret** (2026-09-26): a fret is one pitch, and a curve guide isn't, so it's called a pitch guide. For the same reason it can't join a scale or the staff (13.8 (f) converts octave frets only).
-  - **A mute mode, perhaps, rather than a conversion:** a muted track's curves could render dimmed and stay snappable, as pitch guides. Then "make this curve a guide" is "move it to a guide track", with no new kind of object, and unmuting brings it back as sound. The session decides whether that's a per-track choice (mute silent / mute as guide) or what every mute does.
-  - A per-track hide button, distinct from mute.
-  - Related to 12.1 (a curve is another gravity source) and 13.19 (whether a pitch guide can carry its own gravity).
+  - **Spec:** [DESIGN.md › Guide tracks spec](DESIGN.md#guide-tracks-spec-1310-decided-2026-09-27). Decided: a **track role** (a Guide switch per track), guides pull **alongside the scale** like frets, and Mute is split from a new **Hide**.
+  - **Build in this order:**
+    - [ ] **(a) Guide tracks** *(M)*: the Guide switch; guide tracks silent (one shared "does this track sound" rule for playback, WAV, previews and Solo); drawn as guides; pitch-guide snap targets at each beat, with no self-pull and under the Guides switch; **Send to guide track**; the file fields, with `muted: true` written for older apps.
+    - [ ] **(b) Mute / Hide split** *(S–M)*: Mute becomes silent only (curves drawn dimmed, still pickable); a Hide (eye) button hides a track and stops a guide track pulling.
+  - Related to 12.1 (a curve is another gravity source), 13.19 (per-guide gravity) and 13.25 (with 13.24, this is what could replace Projection).
 
 ### Groups
 
