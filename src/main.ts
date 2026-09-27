@@ -46,6 +46,7 @@ import { liveVoiceMode } from './audio/live-voice';
 import { getActiveSynthCount, getActiveOscillatorCount } from './audio/tone-synth';
 import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile, openTextFile, FileTooLargeError } from './export/json-export';
 import { MAX_SCL_BYTES, SclError, parseScl, toScl } from './tuning/scl';
+import { MAX_SCALE_FRETS } from './tuning/frets-scale';
 import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
@@ -764,6 +765,33 @@ const tuningActions: TuningActions = {
   exportScl() {
     const { text, fileName } = toScl(store.getState());
     downloadFile(text, fileName, 'text/plain');
+  },
+  scaleToFrets() {
+    history.snapshot();
+    const added = store.addScaleFrets();
+    if (added === null) {
+      history.dropLastSnapshot();
+      showToast(`That's too many notes for frets (${MAX_SCALE_FRETS} at most). Choose a scale first.`, 4000);
+    } else if (added === 0) {
+      history.dropLastSnapshot();
+      showToast('Every note of the scale already has an octave fret.');
+    } else {
+      showToast(`${added} octave frets added, and pitch lines turned off: the frets are the grid now. Drag them to tune by ear (hold A to hear).`, 5000);
+    }
+    bgDirty = true;
+  },
+  fretsToScale() {
+    history.snapshot();
+    const result = store.applyFretsAsScale();
+    if (!result) {
+      history.dropLastSnapshot();
+      showToast('There are no octave frets to make a scale from.');
+      return;
+    }
+    showToast(result.kind === 'tuning'
+      ? `The octave frets are now a tuning of their own, "From frets": not all of them were on the tuning's notes.`
+      : 'The octave frets are now the scale.', 5000);
+    bgDirty = true;
   },
   setReferenceHz(hz) {
     const cents = referenceAHzToCents(hz);

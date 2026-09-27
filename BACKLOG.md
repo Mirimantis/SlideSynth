@@ -492,7 +492,7 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - reuses 8.23's non-active dimming for the fade.
 
 ### Snap, harmony & tuning
-- [ ] **13.8 Tuning / key / scale model rework** *(L — planning session held 2026-09-26)*
+- [x] **13.8 Tuning / key / scale model rework** *(L — planning session held 2026-09-26; (a)–(d) and (f) done, (e) deferred)*
   - **Spec:** [DESIGN.md › Tuning spec](DESIGN.md#tuning-spec-138-decided-2026-09-26). In short:
     - **Tuning / Root / Scale** replace Key + Scale; Tune A4 stays separate; "None" becomes a Pitch lines switch.
     - The staff follows the tuning.
@@ -574,9 +574,20 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
           - 192 notes: 1,729 lines, 2.6 ms, 1.5 ms.
           - The 1,200-note limit: 10,801 lines, 16 ms, 7 ms. The staff only redraws when it changes.
         - **Staff labels (found while checking):** a tuning named by numbers now shows labels other than the root's only once at least every other one fits, so a 192-note tuning zoomed out isn't a column of scattered numbers.
-    - [ ] **(f) Frets ↔ scale** *(M — after 13.18 and (c))*
+    - [x] **(f) Frets ↔ scale** *(M — after 13.18 and (c))*
       - Scale → octave frets.
       - Octave frets → a Custom scale, or a Custom tuning if any fret is off the tuning's degrees. Single frets stay as they are.
+      - **Done (this PR):**
+        - **`tuning/frets-scale.ts`:**
+          - `scaleToFrets` puts an octave fret on each scale note (every note with All notes) in the octave from C4, skipping notes an octave fret already covers. It refuses scales over 72 notes.
+          - `fretsToScale` reads the octave frets' pitch classes. If all are on the tuning's notes, the result is that scale: by name if it's one of the tuning's scales (a round trip gives D major back), else Custom, or All notes. If any fret is off the notes, the result is a tuning **"From frets"** (an imported-kind tuning) with the frets' exact pitches and All notes.
+          - The root stays if a fret is on it, else moves to the nearest fret; a "From frets" tuning starts on the root fret.
+        - **Store:**
+          - `addScaleFrets` also turns pitch lines off, so the frets are the grid to nudge by ear.
+          - `applyFretsAsScale` uses up the octave frets (single frets stay) and turns pitch lines back on.
+          - Each is one undo step; a no-op drops its snapshot.
+        - **Tuned from can sit between standard notes:** a "From frets" tuning's first note is the root fret's exact pitch, so `tunedFrom` may be fractional (D +17¢). The Tuned from menu shows that value as an extra option, and letter names use the nearest note.
+        - **Drawer:** **Scale → frets** and **Frets → scale** buttons (the latter needs octave frets), with a toast saying what happened. The Tuning menu's group is now "Imported and from frets"; the last one made stays on offer, like an import.
   - **Deferred:**
     - **(e) Scale generator for other equal divisions** — MOS: large and small step counts plus mode rotation; the MIT `moment-of-symmetry` library covers the maths. A second editor, so its own item.
     - **Retuning on the circle** — dragging a degree around the pitch circle to make a Custom tuning directly. The frets route (f) covers it for now.

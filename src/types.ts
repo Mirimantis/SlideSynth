@@ -102,8 +102,9 @@ export interface SnapSettings {
   /** The scale built on the pitch circle (13.8 (c)); null until one is made.
    *  Kept while another scale is chosen, so it can be chosen again. */
   customScale: CustomScale | null;
-  /** Which of the 12 standard notes the tuning's degree 0 sits on (0 = C).
-   *  Always 0 for 12-EDO, where it would only rotate the root. */
+  /** Where the tuning's degree 0 sits, in semitones above C: one of the 12
+   *  standard notes (0 = C), or between them for a tuning made from frets
+   *  (13.8 (f)). Always 0 for 12-EDO, where it would only rotate the root. */
   tunedFrom: number;
   /** Pitch lines hidden (8.19's "None"): the staff draws no lines and Y has
    *  no grid to snap to. Frets and Prism echoes still pull. */

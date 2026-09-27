@@ -346,6 +346,10 @@ The scale is the pitch grid; frets (13.16) are exceptions and additions on top o
   - If not, it's a **Custom tuning** with All notes. Frets are exact pitches, so the tuning / scale split stays honest.
   - Single (non-repeating) frets are one-off pitches and stay behind as frets.
 - Round trip: explode a scale, tune it by ear, promote it back.
+- *(Built in 13.8 (f).)*
+  - Scale → frets turns pitch lines off, so the frets are the grid while you tune; Frets → scale uses the octave frets up and turns pitch lines back on.
+  - A scale of frets that matches one of the tuning's named scales comes back by name.
+  - A Custom tuning ("From frets") starts on the root fret's exact pitch, so Tuned from can sit between the standard notes (D +17¢).
 
 #### .scl files
 
