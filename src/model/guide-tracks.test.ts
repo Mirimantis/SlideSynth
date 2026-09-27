@@ -1,0 +1,178 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { soloActive, trackShown, trackSounds, createTrack } from './track';
+import { createCurve, createControlPoint, addPointToCurve } from './curve';
+import { createComposition } from './composition';
+import { store } from '../state/store';
+import { snapConfigFor } from '../state/snap-config';
+import { findAdaptiveSnap, snapToGrid, PITCH_GUIDE_PRIORITY_CENTS, type SnapConfig } from '../utils/snap';
+import { serializeComposition, deserializeComposition } from '../export/json-export';
+import type { Track } from '../types';
+
+/** Guide tracks (BACKLOG 13.10 (a)). */
+
+function curveAt(...pts: Array<[number, number]>) {
+  const c = createCurve();
+  for (const [x, y] of pts) addPointToCurve(c, createControlPoint(x, y));
+  return c;
+}
+const track = (over: Partial<Track> = {}): Track => ({ ...createTrack('T', 'tone'), ...over });
+
+describe('which tracks sound', () => {
+  it('a guide track never does; muted ones don’t; Solo picks the soloed ones', () => {
+    const plain = track();
+    const guide = track({ guide: true });
+    const muted = track({ muted: true });
+    expect(trackSounds(plain, [plain, guide, muted])).toBe(true);
+    expect(trackSounds(guide, [plain, guide])).toBe(false);
+    expect(trackSounds(muted, [muted])).toBe(false);
+    const soloed = track({ solo: true });
+    expect(trackSounds(plain, [plain, soloed])).toBe(false);
+    expect(trackSounds(soloed, [plain, soloed])).toBe(true);
+  });
+
+  it('a soloed guide track doesn’t silence the others', () => {
+    const plain = track();
+    const guide = track({ guide: true, solo: true });
+    expect(soloActive([plain, guide])).toBe(false);
+    expect(trackSounds(plain, [plain, guide])).toBe(true);
+  });
+});
+
+describe('pitch guides pull at each beat', () => {
+  const guideCurve = curveAt([0, 6000], [4, 6400]);
+  guideCurve.id = 'g';
+  const sounding = curveAt([0, 7000], [4, 7000]);
+  const sources = (over: { guidesVisible?: boolean } = {}) => ({
+    ...store.getState(),
+    guidesVisible: over.guidesVisible ?? true,
+    fretsVisible: true,
+    composition: { guides: [], tracks: [track({ curves: [sounding] }), track({ guide: true, curves: [guideCurve] })] },
+  });
+
+  it('a guide curve is a target at its pitch at that beat; sounding curves aren’t', () => {
+    const at0 = snapConfigFor(sources(), { atBeat: 0 }).guideYTargets!;
+    expect(at0).toHaveLength(1);
+    expect(at0[0]).toBeCloseTo(6000, 3);
+    // Pitch guides take priority near them; frets don't.
+    expect(snapConfigFor(sources(), { atBeat: 0 }).priorityYTargets).toEqual(at0);
+    const mid = snapConfigFor(sources(), { atBeat: 2 }).guideYTargets![0]!;
+    expect(mid).toBeGreaterThan(6000);
+    expect(mid).toBeLessThan(6400);
+    // Off the curve's span, nothing.
+    expect(snapConfigFor(sources(), { atBeat: 9 }).guideYTargets).toBeUndefined();
+  });
+
+  it('not without a beat, not with Guides off, and not on itself', () => {
+    expect(snapConfigFor(sources()).guideYTargets).toBeUndefined();
+    expect(snapConfigFor(sources({ guidesVisible: false }), { atBeat: 1 }).guideYTargets).toBeUndefined();
+    expect(snapConfigFor(sources(), { atBeat: 1, excludeCurveIds: new Set(['g']) }).guideYTargets).toBeUndefined();
+  });
+});
+
+describe('near a pitch guide, it’s the only target', () => {
+  // A guide at 6040 ¢ crossing the staff's C4 (6000 ¢).
+  const cfg: SnapConfig = {
+    enabled: true, subdivisionsPerBeat: 4, pitchTargets: [5900, 6000, 6100, 6200],
+    guideYTargets: [6040], priorityYTargets: [6040],
+  };
+
+  it('the staff line nearer the cursor doesn’t take over, for drawing or Gravity', () => {
+    expect(snapToGrid(0, 6010, cfg).wy).toBe(6040);
+    expect(findAdaptiveSnap(6010, cfg).target).toBe(6040);
+    // Without the priority, C4 wins.
+    const plain = { ...cfg, priorityYTargets: undefined };
+    expect(snapToGrid(0, 6010, plain).wy).toBe(6000);
+    expect(findAdaptiveSnap(6010, plain).target).toBe(6000);
+  });
+
+  it('beyond its reach the scale is back', () => {
+    const far = 6040 + PITCH_GUIDE_PRIORITY_CENTS + 60;
+    expect(snapToGrid(0, far, cfg).wy).toBe(6200);
+    expect(findAdaptiveSnap(far, cfg).target).toBe(6200);
+  });
+
+  it('Prism projection still takes everything while on', () => {
+    expect(snapToGrid(0, 6010, { ...cfg, projectionTargets: [6300] }).wy).toBe(6300);
+  });
+});
+
+describe('Mute, Hide and Guide are separate (13.10 (b))', () => {
+  it('muted tracks are shown; hidden ones aren’t; guide tracks follow the Guides switch', () => {
+    expect(trackShown(track({ muted: true }), true)).toBe(true);
+    expect(trackShown(track({ hidden: true }), true)).toBe(false);
+    expect(trackShown(track({ guide: true }), true)).toBe(true);
+    expect(trackShown(track({ guide: true }), false)).toBe(false);
+    // A hidden track still sounds: Hide is about seeing, Mute about hearing.
+    const hidden = track({ hidden: true });
+    expect(trackSounds(hidden, [hidden])).toBe(true);
+  });
+
+  it('a hidden guide track doesn’t pull', () => {
+    const g = curveAt([0, 6000], [4, 6000]);
+    const st = {
+      ...store.getState(), guidesVisible: true, fretsVisible: true,
+      composition: { guides: [], tracks: [track({ guide: true, hidden: true, curves: [g] })] },
+    };
+    expect(snapConfigFor(st, { atBeat: 1 }).guideYTargets).toBeUndefined();
+  });
+
+  it('hiding the active track lets go of its selection; the file keeps it', () => {
+    store.loadComposition(createComposition());
+    const t = store.getComposition().tracks[0]!;
+    const c = curveAt([0, 6000], [1, 6000]);
+    store.mutate(() => t.curves.push(c));
+    store.setSelectedCurves([c.id]);
+    store.setTrackHidden(t.id, true);
+    expect(store.getState().selectedCurveIds.size).toBe(0);
+    const again = deserializeComposition(serializeComposition(store.getComposition()));
+    expect(again.tracks[0]!.hidden).toBe(true);
+    store.setTrackHidden(t.id, false);
+    expect(t.hidden).toBeUndefined();
+  });
+});
+
+describe('the store and the file', () => {
+  beforeEach(() => store.loadComposition(createComposition()));
+
+  it('making a track a guide unmutes it and drops its solo; back again leaves it unmuted', () => {
+    const t = store.getComposition().tracks[0]!;
+    t.muted = true;
+    t.solo = true;
+    store.setTrackGuide(t.id, true);
+    expect(t).toMatchObject({ guide: true, muted: false, solo: false });
+    t.muted = true;
+    store.setTrackGuide(t.id, false);
+    expect(t.guide).toBeUndefined();
+    expect(t.muted).toBe(false);
+  });
+
+  it('Send to guide track makes a Guides track once, moves whole groups, and keeps you where you were', () => {
+    const t = store.getComposition().tracks[0]!;
+    const a = curveAt([0, 6000], [1, 6000]);
+    const b = curveAt([0, 6400], [1, 6400]);
+    a.groupId = b.groupId = 'grp';
+    const c = curveAt([2, 6000], [3, 6000]);
+    store.mutate(() => t.curves.push(a, b, c));
+    store.setSelectedTrack(t.id);
+    const guideId = store.sendCurvesToGuideTrack([a.id])!;
+    const guides = store.getComposition().tracks.find(tt => tt.id === guideId)!;
+    expect(guides).toMatchObject({ name: 'Guides', guide: true });
+    expect(guides.curves.map(x => x.id).sort()).toEqual([a.id, b.id].sort());
+    expect(t.curves.map(x => x.id)).toEqual([c.id]);
+    expect(store.getState().selectedTrackId).toBe(t.id);
+    expect(store.sendCurvesToGuideTrack([c.id])).toBe(guideId);
+    expect(store.getComposition().tracks.filter(tt => tt.guide)).toHaveLength(1);
+  });
+
+  it('a guide track is saved muted for older apps, and loads as a guide, unmuted', () => {
+    const comp = createComposition();
+    comp.tracks[0]!.guide = true;
+    const saved = JSON.parse(serializeComposition(comp));
+    expect(saved.composition.tracks[0]).toMatchObject({ guide: true, muted: true });
+    const again = deserializeComposition(JSON.stringify(saved));
+    expect(again.tracks[0]).toMatchObject({ guide: true, muted: false });
+    // Anything but true isn't a guide.
+    saved.composition.tracks[0].guide = 'yes';
+    expect(deserializeComposition(JSON.stringify(saved)).tracks[0]!.guide).toBeUndefined();
+  });
+});

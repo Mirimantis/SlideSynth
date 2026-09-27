@@ -76,7 +76,9 @@ export function serializeComposition(comp: Composition): string {
     meta: { ...extraMeta, name, savedAt: new Date().toISOString() },
     tuning: { ...extraTuning, referenceOffsetCents: tuningOffsetCents },
     snap: { ...extraSnap, settings: snap, guides },
-    composition: { ...core, version: COMPOSITION_VERSION },
+    // A guide track (13.10) is saved muted too, so an older app shows a muted
+    // track instead of playing its guides.
+    composition: { ...core, tracks: core.tracks.map(t => (t.guide ? { ...t, muted: true } : t)), version: COMPOSITION_VERSION },
   };
   // Unknown sections after the known ones, so the file still reads app-first.
   const envelope = { ...known, ...Object.fromEntries(Object.entries(extraSections).filter(([k]) => !ENVELOPE_KEYS.has(k))) };
@@ -114,6 +116,11 @@ function compositionFromEnvelope(env: GlissEnvelope): Composition {
     tuningOffsetCents: env.tuning?.referenceOffsetCents ?? 0,
   };
   comp.version = COMPOSITION_VERSION;
+  // A guide track was saved muted for older apps; here it's a guide, unmuted.
+  for (const t of comp.tracks) {
+    if (t.guide === true) { t.muted = false; t.solo = false; } else delete t.guide;
+    if (t.hidden !== true) delete t.hidden;
+  }
   // Only the envelope sets this; a composition section can't smuggle one in.
   delete comp.unknownEnvelope;
   const unknown = unknownEnvelopeOf(env as unknown as Record<string, unknown>);

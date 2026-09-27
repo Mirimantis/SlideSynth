@@ -11,6 +11,7 @@ import { MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
 import { moveIntervalCents, moveIntervalName, prismOffsetsAt, resolveTuning } from '../tuning/tuning';
 import { duplicateCurves } from '../state/clipboard';
 import { moveFretLine, shownGuides } from '../model/frets';
+import { trackShown } from '../model/track';
 import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/curve-groups';
 import { nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
@@ -305,7 +306,9 @@ export function createInteraction(
       return;
     }
 
-    const snapped = snapToGrid(world.wx, world.wy, currentSnapConfig({ zoomX: vp.state.zoomX, atBeat: world.wx }));
+    const snapped = snapToGrid(world.wx, world.wy, currentSnapConfig({
+      zoomX: vp.state.zoomX, atBeat: world.wx, excludeCurveIds: editingCurveIds(istate),
+    }));
 
     // Determine effective coordinates:
     // - Handles: raw (no snap) to allow smooth curve shaping
@@ -509,7 +512,9 @@ export function createInteraction(
     const sy = e.clientY - rect.top;
     const world = vp.screenToWorld(sx, sy);
     const rawPt: Vec2 = { x: world.wx, y: world.wy };
-    const snapped = snapToGrid(world.wx, world.wy, currentSnapConfig({ zoomX: vp.state.zoomX, atBeat: world.wx }));
+    const snapped = snapToGrid(world.wx, world.wy, currentSnapConfig({
+      zoomX: vp.state.zoomX, atBeat: world.wx, excludeCurveIds: editingCurveIds(istate),
+    }));
     const snappedPt: Vec2 = { x: snapped.wx, y: snapped.wy };
 
     // The guide handle, at the ruler's left end (13.17). Locked guides can't
@@ -825,6 +830,10 @@ function handleDrawClick(istate: InteractionState, worldPt: Vec2, vp: Viewport):
   const state = store.getState();
   const track = getSelectedTrack();
   if (!track) return;
+  // Drawing on a track you can't see shows it (13.10 (b)), as adding a fret
+  // shows frets; a guide track needs the Guides switch on too.
+  if (track.hidden) store.setTrackHidden(track.id, false);
+  if (track.guide) store.setGuidesVisible(true);
 
   // Harmonic Prism Draw mode: dispatch to chord-cluster placement.
   if (state.harmonicPrism.drawMode) {
@@ -961,7 +970,7 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
   const comp = store.getComposition();
   const candidateTracks: Track[] = shiftKey
     ? [activeTrack]
-    : comp.tracks.filter(t => !t.muted);
+    : comp.tracks.filter(t => trackShown(t, store.getState().guidesVisible));
 
   // Phase 1: anchor points. Anchors override handles when overlapping.
   for (const t of candidateTracks) {
@@ -1110,6 +1119,17 @@ function handleSelectClick(istate: InteractionState, worldPt: Vec2, vp: Viewport
  *  expansion is skipped (point-level selection is intentionally not
  *  group-aware — selecting one point in a chord-cluster sibling shouldn't
  *  drag the whole cluster's points along). */
+/** The curves being drawn, dragged or transformed, which a pitch guide among
+ *  them mustn't pull on (13.10). */
+export function editingCurveIds(istate: InteractionState): ReadonlySet<string> {
+  const ids = new Set<string>();
+  if (istate.drawingCurve) ids.add(istate.drawingCurve.id);
+  if (istate.dragCurveId) ids.add(istate.dragCurveId);
+  if (istate.transformBox?.activeHandle) for (const id of istate.transformBox.curveIds) ids.add(id);
+  for (const id of istate.pointGroupDrag?.originalPositions.keys() ?? []) ids.add(id);
+  return ids;
+}
+
 /** The arrows' tooltip: "Up a Perfect 5th (Alt+click: a copy)". */
 function moveArrowTitle(dir: 1 | -1): string {
   const st = store.getState();

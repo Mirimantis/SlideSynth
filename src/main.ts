@@ -15,7 +15,7 @@ import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuideHandle, renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, findAdaptiveSnap } from './utils/snap';
-import { createInteraction, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './canvas/interaction';
+import { createInteraction, editingCurveIds, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './canvas/interaction';
 import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
 import { createPreviewManager } from './audio/preview';
@@ -51,7 +51,7 @@ import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
 import { history } from './state/history';
-import { createTrack } from './model/track';
+import { createTrack, trackShown } from './model/track';
 import { getCompositionLength, measureLengthInBeats } from './model/composition';
 import { computeMultiCurveBBox, pitchPoints } from './model/curve';
 import { createGroupId } from './model/curve-groups';
@@ -1439,8 +1439,19 @@ const trackListActions: TrackListActions = {
     history.snapshot();
     store.mutate(c => {
       const t = c.tracks.find(tt => tt.id === trackId);
-      if (t) t.solo = !t.solo;
+      if (t && !t.guide) t.solo = !t.solo;
     });
+  },
+  toggleHidden(trackId) {
+    history.snapshot();
+    const t = store.getComposition().tracks.find(tt => tt.id === trackId);
+    store.setTrackHidden(trackId, !t?.hidden);
+    // A hidden track's curves can't stay selected under a transform box.
+    if (store.getState().selectedTrackId === trackId && t?.hidden) interaction.transformBox = null;
+  },
+  toggleGuide(trackId) {
+    history.snapshot();
+    store.setTrackGuide(trackId, !store.getComposition().tracks.find(t => t.id === trackId)?.guide);
   },
   toggleMidiArm(trackId) {
     const current = store.getState().midiArmedTrackId;
@@ -2963,7 +2974,9 @@ function draw() {
   // Render curves for all tracks
   const geometryVersion = store.compositionVersion();
   for (const track of comp.tracks) {
-    if (track.muted) continue;
+    // Hidden tracks, and guide tracks with the Guides switch off, aren't drawn;
+    // muted ones are, dimmed (13.10 (b)).
+    if (!trackShown(track, state.guidesVisible)) continue;
     const tone = comp.toneLibrary.find(t => t.id === track.toneId);
     if (!tone) continue;
 
@@ -2977,6 +2990,9 @@ function draw() {
       isActiveTrack,
       isActiveTrack ? state.selectedPoints : null,
       geometryVersion,
+      // Guide tracks draw as guides, unless the Guides switch hides them all.
+      !!track.guide,
+      track.muted,
     );
   }
 
@@ -3048,7 +3064,9 @@ function draw() {
       && state.harmonicPrism.drawMode
       && interaction.cursorWorld
       && toolHoverVisible) {
-    const snap = currentSnapConfig({ zoomX: viewport.state.zoomX, atBeat: interaction.cursorWorld.x });
+    const snap = currentSnapConfig({
+      zoomX: viewport.state.zoomX, atBeat: interaction.cursorWorld.x, excludeCurveIds: editingCurveIds(interaction),
+    });
     const snapped = snapToGrid(interaction.cursorWorld.x, interaction.cursorWorld.y, snap);
     const cursorScreenX = viewport.worldToScreen(snapped.wx, 0).sx;
     renderPrismDrawPreview(
@@ -3312,6 +3330,7 @@ const MENUS: readonly MenuSpec[] = [
       'edit.cut', 'edit.copy', 'edit.paste', 'edit.duplicate', 'edit.continue', 'edit.delete', '-',
       'edit.join', 'edit.group', 'edit.ungroup', '-',
       'edit.moveUp', 'edit.moveDown', 'edit.copyUp', 'edit.copyDown', '-',
+      'edit.sendToGuides', 'edit.copyToGuides', '-',
       'edit.smooth', 'edit.sharpen',
     ],
   },

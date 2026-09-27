@@ -383,6 +383,26 @@ The scale is the pitch grid; frets (13.16) are exceptions and additions on top o
 
   The golden-format test gets a compatibility shim.
 
+### Guide tracks spec (13.10, decided 2026-09-27)
+
+A curve can be a **pitch guide**: silent, drawn as scaffolding, and pulling like a fret whose pitch moves over time. It isn't a fret (a fret is one pitch), so it can't join a scale or the staff.
+
+- **A track role, not a new object.** A track has a **Guide** switch (an icon on its row). A guide track's curves:
+  - make no sound: playback, WAV export, the scrub and Composition + tone previews skip them, and Solo ignores guide tracks (a guide track can't be soloed, and doesn't count when others are);
+  - are drawn as guides: thin, dashed, dimmed, in the fret colour;
+  - pull like frets: at each beat, a guide curve that spans that beat is a pitch target at the curve's pitch there, alongside the scale (additive, like frets; Projection's echoes still replace everything while on, until 13.25 decides Projection's future).
+  - **take priority close up** (added in testing): within 100 ¢ of a pitch guide it's the only pitch target, for drawing and Gravity alike, so gliding along a guide isn't pulled onto a staff line where they cross (the nearest-target rule otherwise let a line a few cents nearer win). Beyond that it's one more target among the scale's. A per-guide reach belongs to 13.19.
+  - are ordinary curves otherwise: select, edit, transform, copy, record onto. Turning Guide off gives a sounding track back.
+- **No self-pull:** a curve being drawn or dragged doesn't pull on itself.
+- **The Snap drawer's Guides switch** covers pitch guides with frets and beat guides: off, none pull or show as guides.
+- **Send to guide track** (Selection panel and Edit menu) moves the selected curves to a guide track, creating one ("Guides") if there's none. With 13.24's Alt+click copy, that's Projection made explicit: copy a curve up a fifth, send the copy to the guide track, glide against it.
+- **Mute, Hide and Guide are separate** (changes what Mute did):
+  - **Mute:** silent only. Its curves still show, dimmed, and can be picked and edited. (Before 13.10, muted tracks were also hidden and unpickable.)
+  - **Hide** (an eye icon): not drawn and not pickable. A hidden guide track doesn't pull either — hidden means no lines and no pull, as with Pitch lines and Frets.
+  - **Guide:** silent, drawn as a guide, pulls. Mute has no meaning on a guide track; turning Guide off leaves the track unmuted.
+- **File:** `Track.guide?: true` and `Track.hidden?: true`, optional, so no version bump. A guide track is also written `muted: true`, so an older app shows it as a muted track (silent and hidden there) instead of playing it; this app reads `guide` first and loads the track unmuted.
+- **Later:** octave repeats of a pitch guide (like octave frets), per-guide gravity (13.19), guides that follow a sounding curve live (what Projection does and this doesn't).
+
 ---
 
 ## Data model
@@ -390,7 +410,7 @@ The scale is the pitch grid; frets (13.16) are exceptions and additions on top o
 - **ToneDefinition** — one or more oscillator layers (sine/square/sawtooth/triangle, gain, detune), optional waveshaper distortion, plus a colour and dash pattern for drawing. Four presets ship.
 - **Lane / LanePoint** — the universal automation primitive: `type` (`pitch` | `volume`, more reserved), `unit`, `range`, ordered `points`, optional `gravity` (round-trips verbatim). A point is a position `(beats, value)` plus relative in/out handles; consecutive points form cubic Bezier segments.
 - **BezierCurve** — `lanes[]` with `lanes[0]` always pitch (constructor-enforced), optional `groupId` (chord clusters and freehand groups) and `voiceIndex` (Harmonic Prism voice).
-- **Track** — tone reference, curves, mute, solo, volume. Loop layers are tracks; Layer mode stops opening new layers once the composition has 16 tracks.
+- **Track** — tone reference, curves, mute, solo, volume, and optionally `hidden` and `guide` (13.10: a guide track's curves are silent pitch guides). Loop layers are tracks; Layer mode stops opening new layers once the composition has 16 tracks.
 - **Composition** — name, BPM, time signature, tracks, tone library, loop range, snap settings, guides, `tuningOffsetCents`.
 - **Pitch range** C0–C9 (1,200–12,000 ¢).
 

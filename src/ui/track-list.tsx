@@ -6,6 +6,9 @@ import { ActionMenuButton } from './menu';
 import iconMute from '../assets/icons/mute.svg?raw';
 import iconSolo from '../assets/icons/solo.svg?raw';
 import iconMidi from '../assets/icons/midi.svg?raw';
+import iconGuide from '../assets/icons/guide.svg?raw';
+import iconEye from '../assets/icons/eye.svg?raw';
+import iconEyeOff from '../assets/icons/eye-off.svg?raw';
 
 /**
  * The track list (BACKLOG 15.4). Each row: colour, name and tone (click for
@@ -20,6 +23,10 @@ export interface TrackListActions {
   select(trackId: string): void;
   toggleMute(trackId: string): void;
   toggleSolo(trackId: string): void;
+  /** A guide track's curves are silent pitch guides (13.10). */
+  toggleGuide(trackId: string): void;
+  /** Hidden: not drawn or pickable, and a hidden guide doesn't pull. */
+  toggleHidden(trackId: string): void;
   toggleMidiArm(trackId: string): void;
   editTone(trackId: string): void;
   pickTone(trackId: string, anchor: HTMLElement): void;
@@ -73,7 +80,7 @@ function TrackRow({ track, color, toneName, selected, midiArm, actions }: TrackR
   };
   return (
     <div
-      class={`track-item${selected ? ' selected' : ''}${track.muted ? ' muted' : ''}`}
+      class={`track-item${selected ? ' selected' : ''}${track.muted ? ' muted' : ''}${track.guide ? ' guide' : ''}${track.hidden ? ' hidden' : ''}`}
       data-track-id={id}
       onClick={() => actions.select(id)}
     >
@@ -92,21 +99,45 @@ function TrackRow({ track, color, toneName, selected, midiArm, actions }: TrackR
       <div class="track-controls" onClick={e => e.stopPropagation()}>
         <button
           class={`track-btn track-mute${track.muted ? ' active' : ''}`}
-          title={track.muted ? 'Unmute' : 'Mute'}
+          title={track.guide ? 'A guide track is always silent' : track.muted ? 'Unmute' : 'Mute: silent, but still shown (dimmed) and editable'}
           aria-label="Mute"
           aria-pressed={track.muted}
+          disabled={!!track.guide}
           onClick={control(() => actions.toggleMute(id))}
         >
           <Icon svg={iconMute} />
         </button>
         <button
           class={`track-btn track-solo${track.solo ? ' active' : ''}`}
-          title={track.solo ? 'Unsolo' : 'Solo'}
+          title={track.guide ? 'A guide track is always silent' : track.solo ? 'Unsolo' : 'Solo'}
           aria-label="Solo"
           aria-pressed={track.solo}
+          disabled={!!track.guide}
           onClick={control(() => actions.toggleSolo(id))}
         >
           <Icon svg={iconSolo} />
+        </button>
+        <button
+          class={`track-btn track-hide${track.hidden ? ' active' : ''}`}
+          title={track.hidden
+            ? 'Show this track'
+            : track.guide ? 'Hide this track: its guides aren\'t drawn and don\'t pull' : 'Hide this track: its curves aren\'t drawn or pickable (it still plays)'}
+          aria-label="Hide"
+          aria-pressed={!!track.hidden}
+          onClick={control(() => actions.toggleHidden(id))}
+        >
+          <Icon svg={track.hidden ? iconEyeOff : iconEye} />
+        </button>
+        <button
+          class={`track-btn track-guide${track.guide ? ' active' : ''}`}
+          title={track.guide
+            ? 'Guide track: its curves are silent pitch guides that pull like frets. Click to make it sound again'
+            : 'Make this a guide track: its curves go silent and pull like frets whose pitch moves (Snap drawer › Guides shows or hides them)'}
+          aria-label="Guide track"
+          aria-pressed={!!track.guide}
+          onClick={control(() => actions.toggleGuide(id))}
+        >
+          <Icon svg={iconGuide} />
         </button>
         <button
           class={`track-btn track-midi-arm${midiArm ? ` ${midiArm}` : ''}`}

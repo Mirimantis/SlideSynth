@@ -1,6 +1,29 @@
 import type { Track } from '../types';
 import { generateId } from './tone';
 
+/** Solo is on when any track that can sound is soloed. A guide track can't
+ *  be soloed (13.10), so it doesn't count. */
+export function soloActive(tracks: readonly Track[]): boolean {
+  return tracks.some(t => t.solo && !t.guide);
+}
+
+/** Whether a track is heard (13.10): not a guide track, not muted, and
+ *  soloed if Solo is on. Playback, WAV export and the previews all ask this. */
+export function trackSounds(track: Track, tracks: readonly Track[]): boolean {
+  if (track.guide || track.muted) return false;
+  return !soloActive(tracks) || track.solo;
+}
+
+/** Whether a track's curves are drawn, can be picked, and (a guide track)
+ *  pull (13.10 (b)): not hidden, and for a guide track the Snap drawer's
+ *  Guides switch on. Muted tracks are shown (dimmed). */
+export function trackShown(track: Track, guidesVisible: boolean): boolean {
+  return !track.hidden && !(track.guide && !guidesVisible);
+}
+
+/** The name a new guide track gets from Send to guide track. */
+export const GUIDE_TRACK_NAME = 'Guides';
+
 export function createTrack(name: string, toneId: string): Track {
   return {
     id: generateId('track'),

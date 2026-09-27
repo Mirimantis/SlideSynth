@@ -4,6 +4,8 @@ import { getAdaptiveSubdivisions } from '../utils/snap';
 import { pitchSetFor, prismOffsets, resolveTuning } from '../tuning/tuning';
 import { fretLines, shownGuides } from '../model/frets';
 import { computeProjectionTargetsAtX } from '../canvas/projection-renderer';
+import { evaluateCurveAtBeat } from '../audio/curve-sampler';
+import { trackShown } from '../model/track';
 import { SUBDIVISIONS_PER_BEAT } from '../constants';
 import { store } from './store';
 
@@ -24,6 +26,9 @@ export interface SnapQuery {
   atBeat?: number;
   /** A guide being dragged, left out of the targets so it can't snap to itself. */
   excludeGuideId?: string;
+  /** Curves being drawn or edited: a pitch guide among them doesn't pull on
+   *  itself (13.10). */
+  excludeCurveIds?: ReadonlySet<string>;
 }
 
 /** The slice of app state a snap config is built from. */
@@ -61,6 +66,21 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
     if (g.orientation === 'x') xs.push(g.position);
     else for (const line of fretLines(g, period)) ys.push(line.cents);
   }
+  // Pitch guides (13.10): a guide track's curves pull at their pitch at this
+  // beat, like frets whose pitch moves, and near one they're the only target.
+  // Under the same Guides switch.
+  const priority: number[] = [];
+  if (q.atBeat !== undefined) {
+    for (const track of st.composition.tracks) {
+      // Hidden guide tracks, and all of them with Guides off, don't pull.
+      if (!track.guide || !trackShown(track, st.guidesVisible)) continue;
+      for (const curve of track.curves) {
+        if (q.excludeCurveIds?.has(curve.id)) continue;
+        const hit = evaluateCurveAtBeat(curve, q.atBeat);
+        if (hit) { ys.push(hit.noteNumber); priority.push(hit.noteNumber); }
+      }
+    }
+  }
   if (xs.length > 0) guideXTargets = xs;
   if (ys.length > 0) guideYTargets = ys;
 
@@ -71,6 +91,7 @@ export function snapConfigFor(st: SnapSources, q: SnapQuery = {}): SnapConfig {
     projectionTargets,
     guideXTargets,
     guideYTargets,
+    ...(priority.length > 0 ? { priorityYTargets: priority } : {}),
   };
 }
 

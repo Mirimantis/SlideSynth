@@ -209,12 +209,19 @@ function TrackProps({ track, commands }: { track: Track; commands: CommandRegist
               onChange={e => moveTo((e.currentTarget as HTMLSelectElement).value)}
             >
               <option value="" disabled>-- Select --</option>
-              {otherTracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {otherTracks.map(t => <option key={t.id} value={t.id}>{t.guide ? `${t.name} (guide)` : t.name}</option>)}
               {otherTracks.length > 0 && <option disabled>──────────</option>}
               <option value={NEW_TRACK_VALUE}>+ New track</option>
             </select>
           </div>
         </>
+      )}
+      {selected.length > 0 && !track.guide && (
+        <div class="prop-section">
+          <CommandButton id="edit.sendToGuides" commands={commands} class="snap-preset-btn">
+            Send to guide track
+          </CommandButton>
+        </div>
       )}
       {selected.length > 0 && <div class="panel-header" style={{ marginTop: '8px' }}>Track</div>}
       <div class="prop-section">

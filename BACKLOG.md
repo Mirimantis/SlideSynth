@@ -486,12 +486,27 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
     - how it combines with octave frets (13.18) and curve pitch guides (13.10);
     - UI in the Selection panel, and whether presets (13.2) can hold per-fret feel;
     - the snap-target composition work (12.1) and the device protocol's target map (Horizon), which would carry per-target feel to hardware.
-- [ ] **13.10 Curves as pitch guides** *(M, own planning session)*
+- [x] **13.10 Curves as pitch guides** *(M — planning session held 2026-09-27; PR #100)*
   - Turn any pitch curve into a **pitch guide**: it keeps its shape, snaps like a fret (a target that moves over time), and makes no sound.
   - **Not a fret** (2026-09-26): a fret is one pitch, and a curve guide isn't, so it's called a pitch guide. For the same reason it can't join a scale or the staff (13.8 (f) converts octave frets only).
-  - **A mute mode, perhaps, rather than a conversion:** a muted track's curves could render dimmed and stay snappable, as pitch guides. Then "make this curve a guide" is "move it to a guide track", with no new kind of object, and unmuting brings it back as sound. The session decides whether that's a per-track choice (mute silent / mute as guide) or what every mute does.
-  - A per-track hide button, distinct from mute.
-  - Related to 12.1 (a curve is another gravity source) and 13.19 (whether a pitch guide can carry its own gravity).
+  - **Spec:** [DESIGN.md › Guide tracks spec](DESIGN.md#guide-tracks-spec-1310-decided-2026-09-27). Decided: a **track role** (a Guide switch per track), guides pull **alongside the scale** like frets, and Mute is split from a new **Hide**.
+  - **Build in this order:**
+    - [x] **(a) Guide tracks** *(M)*: the Guide switch; guide tracks silent (one shared "does this track sound" rule for playback, WAV, previews and Solo); drawn as guides; pitch-guide snap targets at each beat, with no self-pull and under the Guides switch; **Send to guide track**; the file fields, with `muted: true` written for older apps.
+      - **Done (PR #100):**
+        - **Track row:** a **Guide** toggle (new `guide.svg`, a dashed glide), lit in the fret colour; Mute and Solo grey out on a guide track. The row's buttons moved to a second line under the name and tone: with five (six after (b)) the name had about 20 px.
+        - **Silent:** `trackSounds()` / `soloActive()` in `model/track.ts` are the one rule for playback, WAV export and the scrub / Composition + tone previews. A guide track can't be soloed and doesn't count toward Solo.
+        - **Drawn** thin (1.25 px), dashed, in the `guide` colour, dimmed; hidden with the Snap drawer's Guides switch, and not pickable then.
+        - **Snapping:** `snapConfigFor` adds each guide curve's pitch at the query's beat (`evaluateCurveAtBeat`) to the fret targets, so it pulls alongside the scale within 50 ¢, and Gravity sees it. `excludeCurveIds` (from `editingCurveIds()` in `interaction.ts`: the curve being drawn, dragged, transformed or point-dragged) keeps a curve from pulling on itself.
+        - **Send to guide track / Copy to guide track** (`store.sendCurvesToGuideTrack`; Edit menu, and a Send button in Selection): moves or copies whole groups to the first guide track, making "Guides" if there's none; you stay on your track. One undo step.
+        - **Store:** `setTrackGuide` unmutes the track either way and drops its solo.
+        - **File:** `Track.guide?: true`, saved with `muted: true` for older apps; loaded as a guide, unmuted. Any value but `true` is dropped. No version bump.
+    - [x] **(b) Mute / Hide split** *(S–M)*: Mute becomes silent only (curves drawn dimmed, still pickable); a Hide (eye) button hides a track and stops a guide track pulling.
+      - **Done (PR #100):**
+        - **Mute** is silent only: a muted track's curves are drawn at half strength and can be picked and edited. *(Behaviour change: before, muted tracks were also hidden and unpickable.)*
+        - **Hide** (eye / eye-off icons, new): `Track.hidden?: true`, one undo step, saved in the file. A hidden track still plays, isn't drawn or pickable, and a hidden guide track doesn't pull. Hiding the active track lets go of its selected curves and the transform box. A Draw click on a hidden track shows it again (and turns Guides on for a guide track), as adding a fret shows frets.
+        - `trackShown()` in `model/track.ts` is the one rule for drawing, canvas picking and pitch-guide pull, beside (a)'s `trackSounds()` for sound.
+    - **Found in testing:** gliding along a guide, the planchette dropped onto staff lines where they crossed: Gravity pulls to the target nearest the cursor, and a line a few cents nearer won. **Pitch guides now take priority within 100 ¢** (`PITCH_GUIDE_PRIORITY_CENTS`, `SnapConfig.priorityYTargets`): inside it they're the only Y targets for `snapToGrid` and `findAdaptiveSnap`; beyond it they're additive as before. Frets are unchanged. A per-guide reach is 13.19's.
+  - Related to 12.1 (a curve is another gravity source), 13.19 (per-guide gravity) and 13.25 (with 13.24, this is what could replace Projection).
 
 ### Groups
 
