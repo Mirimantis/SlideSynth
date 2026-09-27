@@ -396,11 +396,11 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
 - [ ] **13.11 Recording simplification density** *(S–M)*
   - A setting to keep all recorded points, or 1/2, 1/4, 1/8, instead of today's fixed RDP fit.
   - Option to run simplification later on a kept curve (relates to 12.4 raw takes).
-- [x] **13.24 Transform by interval** *(S)*
+- [x] **13.24 Transform by interval** *(S, PR #98)*
   - The transform box moves a selection up or down an octave. Offer other intervals too: a third, fourth, fifth, and the Prism chord's own intervals, in the current tuning's steps (as the Prism counts them, 13.8 (b)).
   - With Alt+drag duplicate, that makes a harmony copy you can hear and edit, the explicit version of a projection echo (13.25).
   - **Decide when building:** where the choices live (a menu on the octave buttons, or a stepper beside them), and whether an interval move of several curves counts from each curve's own note (Per note, 13.21) or moves them all by the same cents.
-  - **Done (this PR):**
+  - **Done (PR #98):**
     - **Move by** (Tool panel, while Select is active): One step, Minor 2nd … Major 7th, Octave (the period in non-octave tunings, "Period (3/1)"). A workspace pref (`moveInterval`), octave by default. The transform box's arrows move by it, with its short name beside them ("P5") when it isn't the octave.
     - **Each curve counts from its own note** (`moveIntervalCents` in `tuning.ts`): the interval from the tuning's note nearest the curve's first point (first selected point for a point selection), as the Prism counts: a 12-note octave table by its notes, other tunings the nearest step. So curves on the tuning's notes land on them; one between notes keeps its offset.
     - **Alt+click an arrow** moves a copy (`duplicateCurves({ inPlace })`) and selects it, so the next click stacks another voice. One undo step either way. Point selections just move.
