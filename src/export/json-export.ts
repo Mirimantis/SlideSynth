@@ -1,4 +1,4 @@
-import type { Composition, Lane, LanePoint, SnapSettings, ToneDefinition } from '../types';
+import type { Composition, Lane, LanePoint, SnapSettings, ToneDefinition, UnknownEnvelope } from '../types';
 import { createDefaultSnapSettings } from '../model/composition';
 import { LANE_SPECS } from '../model/lane';
 import { ALL_NOTES, TWELVE_EDO, getScale, type TuningRef } from '../tuning/tuning';
@@ -32,20 +32,54 @@ interface GlissEnvelope {
   composition: Omit<Composition, 'name' | 'snap' | 'guides' | 'tuningOffsetCents'>;
 }
 
+// The envelope's own keys, and those of the sections it rebuilds on save.
+// Anything else is kept verbatim (12.3). `composition` and `snap.settings`
+// round-trip unknown keys by themselves (they're spread), so they aren't
+// listed here.
+const ENVELOPE_KEYS = new Set(['app', 'formatVersion', 'kind', 'meta', 'tuning', 'snap', 'composition']);
+const SECTION_KEYS: Readonly<Record<'meta' | 'tuning' | 'snap', ReadonlySet<string>>> = {
+  meta: new Set(['name', 'savedAt']),
+  tuning: new Set(['referenceOffsetCents']),
+  snap: new Set(['settings', 'guides']),
+};
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** What an envelope holds that this app doesn't know, or undefined. */
+function unknownEnvelopeOf(env: Record<string, unknown>): UnknownEnvelope | undefined {
+  const out: UnknownEnvelope = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (!ENVELOPE_KEYS.has(key)) out[key] = value;
+  }
+  for (const section of ['meta', 'tuning', 'snap'] as const) {
+    const value = env[section];
+    if (!isPlainObject(value)) continue;
+    const extra = Object.fromEntries(Object.entries(value).filter(([k]) => !SECTION_KEYS[section].has(k)));
+    if (Object.keys(extra).length > 0) out[section] = extra;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /**
- * Serialize a composition to a .gliss envelope JSON string.
+ * Serialize a composition to a .gliss envelope JSON string. Sections and keys
+ * this app didn't understand when it loaded the file go back out as they came
+ * in (12.3); what the app writes itself wins on a clash.
  */
 export function serializeComposition(comp: Composition): string {
-  const { name, snap, guides, tuningOffsetCents, ...core } = comp;
-  const envelope: GlissEnvelope = {
+  const { name, snap, guides, tuningOffsetCents, unknownEnvelope, ...core } = comp;
+  const { meta: extraMeta, tuning: extraTuning, snap: extraSnap, ...extraSections } = unknownEnvelope ?? {};
+  const known: GlissEnvelope = {
     app: GLISS_APP_ID,
     formatVersion: GLISS_FORMAT_VERSION,
     kind: 'composition',
-    meta: { name, savedAt: new Date().toISOString() },
-    tuning: { referenceOffsetCents: tuningOffsetCents },
-    snap: { settings: snap, guides },
+    meta: { ...extraMeta, name, savedAt: new Date().toISOString() },
+    tuning: { ...extraTuning, referenceOffsetCents: tuningOffsetCents },
+    snap: { ...extraSnap, settings: snap, guides },
     composition: { ...core, version: COMPOSITION_VERSION },
   };
+  // Unknown sections after the known ones, so the file still reads app-first.
+  const envelope = { ...known, ...Object.fromEntries(Object.entries(extraSections).filter(([k]) => !ENVELOPE_KEYS.has(k))) };
   return JSON.stringify(envelope, null, 2);
 }
 
@@ -80,6 +114,10 @@ function compositionFromEnvelope(env: GlissEnvelope): Composition {
     tuningOffsetCents: env.tuning?.referenceOffsetCents ?? 0,
   };
   comp.version = COMPOSITION_VERSION;
+  // Only the envelope sets this; a composition section can't smuggle one in.
+  delete comp.unknownEnvelope;
+  const unknown = unknownEnvelopeOf(env as unknown as Record<string, unknown>);
+  if (unknown) comp.unknownEnvelope = unknown;
   return comp;
 }
 

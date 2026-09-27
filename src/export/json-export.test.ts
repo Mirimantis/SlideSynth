@@ -131,6 +131,40 @@ describe('.gliss envelope', () => {
     expect((againCurve.lanes as Array<{ type: string }>).some(l => l.type === 'wobble')).toBe(true);
   });
 
+  it('keeps unknown sections, and unknown keys in meta / tuning / snap, through load → save (12.3)', () => {
+    const env = JSON.parse(serializeComposition(loadFixture()));
+    // What a newer app or another tool might have written.
+    env.hostSettings = { plugin: 'vst', params: [1, 2, 3] };
+    env.gallery = 'featured';
+    env.meta.author = 'A. Composer';
+    env.tuning.kbm = { map: [0, 1, 2] };
+    env.snap.hotBar = [{ key: '1', root: 2 }];
+    env.composition.futureField = { x: 1 };
+    const out = JSON.parse(serializeComposition(deserializeComposition(JSON.stringify(env))));
+    expect(out.hostSettings).toEqual({ plugin: 'vst', params: [1, 2, 3] });
+    expect(out.gallery).toBe('featured');
+    expect(out.meta.author).toBe('A. Composer');
+    expect(out.tuning.kbm).toEqual({ map: [0, 1, 2] });
+    expect(out.snap.hotBar).toEqual([{ key: '1', root: 2 }]);
+    expect(out.composition.futureField).toEqual({ x: 1 });
+    // The app's own sections are rebuilt as usual, and the kept parts don't leak into the composition.
+    expect(out.meta.name).toBe('Fixture v3');
+    expect(out.snap.settings.scaleId).toBe('dorian');
+    expect(out.composition.unknownEnvelope).toBeUndefined();
+    expect(Object.keys(out).slice(0, 3)).toEqual(['app', 'formatVersion', 'kind']);
+  });
+
+  it('what the app writes wins over a kept key of the same name; nothing kept means nothing added (12.3)', () => {
+    const env = JSON.parse(serializeComposition(loadFixture()));
+    env.meta.savedAt = 'stale';
+    const comp = deserializeComposition(JSON.stringify(env));
+    expect(comp.unknownEnvelope).toBeUndefined();
+    expect(JSON.parse(serializeComposition(comp)).meta.savedAt).not.toBe('stale');
+    // A composition section can't plant one.
+    env.composition.unknownEnvelope = { evil: true };
+    expect(deserializeComposition(JSON.stringify(env)).unknownEnvelope).toBeUndefined();
+  });
+
   it('opens a formatVersion 1 file, migrating its Key + Scale (13.8)', () => {
     const env = JSON.parse(serializeComposition(loadFixture()));
     env.formatVersion = 1;

@@ -150,7 +150,20 @@ export interface Composition {
   snap: SnapSettings;                // v2: per-composition snap config (was global)
   guides: GuideDefinition[];         // v2: user-placed snap guides (Phase 8.7)
   tuningOffsetCents: number;         // v2-additive: A4 reference offset in cents (0 = A=440); BACKLOG 8.27
+  /** Parts of the .gliss envelope this app doesn't know (BACKLOG 12.3):
+   *  unknown top-level sections, and unknown keys inside `meta`, `tuning` and
+   *  `snap`, kept verbatim so a save doesn't drop what a newer app or another
+   *  tool wrote. Never read by the app; absent when there are none. */
+  unknownEnvelope?: UnknownEnvelope;
 }
+
+/** See `Composition.unknownEnvelope`. Keys are top-level section names; the
+ *  known sections that can hold unknown keys map to just those keys. */
+export type UnknownEnvelope = Record<string, unknown> & {
+  meta?: Record<string, unknown>;
+  tuning?: Record<string, unknown>;
+  snap?: Record<string, unknown>;
+};
 
 // ── Viewport ────────────────────────────────────────────────────
 
