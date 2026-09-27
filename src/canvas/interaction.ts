@@ -18,6 +18,18 @@ import { hitTestGuides } from './guides';
 export const SECONDS_RULER_HEIGHT = 16;
 export const BEAT_RULER_HEIGHT = 24;
 export const RULER_HEIGHT = SECONDS_RULER_HEIGHT + BEAT_RULER_HEIGHT;
+/** The guide handle (13.17): the ruler's left end, where frets and beat guides
+ *  are dragged out of. */
+export const GUIDE_HANDLE_WIDTH = 14;
+/** How far the pointer moves before the handle picks a fret or a beat guide,
+ *  and by how much one direction must lead the other. */
+const HANDLE_DECIDE_PX = 8;
+const HANDLE_DECIDE_LEAD = 1.5;
+
+/** Is a canvas point on the guide handle? */
+export function overGuideHandle(sx: number, sy: number): boolean {
+  return sx >= 0 && sx < GUIDE_HANDLE_WIDTH && sy >= 0 && sy < RULER_HEIGHT;
+}
 
 /** A curve's lanes other than the mandatory pitch lane (e.g. volume) —
  *  the transform box keeps these time-locked with the pitch lane. */
@@ -79,6 +91,10 @@ export interface InteractionState {
   draggingLoopMarker: 'start' | 'end' | null;
   /** ID of the guide currently being dragged. */
   draggingGuideId: string | null;
+  /** A drag out of the guide handle (13.17): where it started, and the new
+   *  guide once the direction has picked one (down: a fret, right: a beat
+   *  guide). Releasing back over the handle cancels. */
+  guideHandleDrag: { startSx: number; startSy: number; guideId: string | null; lastSx: number; lastSy: number } | null;
   /** Screen Y of cursor (for ruler zone detection). */
   cursorScreenY: number;
   /** Whether the cursor is currently over the canvas element. */
@@ -146,6 +162,7 @@ export function createInteraction(
     scrubbing: false,
     draggingLoopMarker: null,
     draggingGuideId: null,
+    guideHandleDrag: null,
     cursorScreenY: 0,
     cursorInCanvas: false,
     scissorsPreview: null,
@@ -216,6 +233,35 @@ export function createInteraction(
       const beat = snapBeatForMarker(raw.wx);
       callbacks.onLoopMarkerDrag?.(istate.draggingLoopMarker, beat, 'move');
       return;
+    }
+
+    // Dragging out of the guide handle (13.17): nothing until the pointer has
+    // moved far enough, one way clearly more than the other. Then the new
+    // guide exists and the guide drag below moves it.
+    const handleOut = istate.guideHandleDrag;
+    if (handleOut) {
+      handleOut.lastSx = sx;
+      handleOut.lastSy = sy;
+      if (!handleOut.guideId) {
+        const ax = Math.abs(sx - handleOut.startSx);
+        const ay = Math.abs(sy - handleOut.startSy);
+        if (Math.max(ax, ay) < HANDLE_DECIDE_PX || (ax < ay * HANDLE_DECIDE_LEAD && ay < ax * HANDLE_DECIDE_LEAD)) return;
+        const orientation = ay > ax ? 'y' : 'x';
+        const guide = {
+          id: `guide-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          orientation,
+          position: orientation === 'x' ? Math.max(0, raw.wx) : Math.max(MIN_PITCH_CENTS, Math.min(MAX_PITCH_CENTS, raw.wy)),
+          label: '',
+        } as const;
+        history.snapshot();
+        store.addGuide({ ...guide });
+        store.setSelectedGuide(guide.id);
+        if (!store.getState().guidesVisible) store.setGuidesVisible(true);
+        handleOut.guideId = guide.id;
+        istate.draggingGuideId = guide.id;
+        canvas.style.cursor = orientation === 'y' ? 'row-resize' : 'col-resize';
+        canvas.title = '';
+      }
     }
 
     // Guide drag — move the guide along its perpendicular axis with the same
@@ -404,8 +450,14 @@ export function createInteraction(
       return;
     }
 
-    // Cursor: ruler zone, transform box, or default
-    if (!istate.dragging && sy < RULER_HEIGHT) {
+    // Cursor: guide handle, ruler zone, transform box, or default
+    if (!istate.dragging && overGuideHandle(sx, sy)) {
+      const locked = store.getState().guidesLocked;
+      canvas.style.cursor = locked ? 'not-allowed' : 'grab';
+      canvas.title = locked
+        ? 'Frets and beat guides are locked (Snap drawer)'
+        : 'Drag down for a fret, or right for a beat guide';
+    } else if (!istate.dragging && sy < RULER_HEIGHT) {
       canvas.style.cursor = 'col-resize';
       canvas.title = 'Click to position playhead';
     } else if (istate.transformBox && !istate.dragging) {
@@ -445,6 +497,13 @@ export function createInteraction(
     const rawPt: Vec2 = { x: world.wx, y: world.wy };
     const snapped = snapToGrid(world.wx, world.wy, currentSnapConfig({ zoomX: vp.state.zoomX, atBeat: world.wx }));
     const snappedPt: Vec2 = { x: snapped.wx, y: snapped.wy };
+
+    // The guide handle, at the ruler's left end (13.17). Locked guides can't
+    // be added to, as with + Fret / + Beat.
+    if (overGuideHandle(sx, sy) && !e.altKey) {
+      if (!state.guidesLocked) istate.guideHandleDrag = { startSx: sx, startSy: sy, guideId: null, lastSx: sx, lastSy: sy };
+      return;
+    }
 
     // Ruler zone: first try loop-marker drag (if Loop is on), then fall through
     // to playhead scrub.
@@ -672,6 +731,19 @@ export function createInteraction(
     if (istate.scrubbing) {
       istate.scrubbing = false;
       callbacks.onPlayheadScrub?.(store.getState().playback.positionBeats, 'end');
+      return;
+    }
+    // End a drag out of the guide handle: released back over the handle, the
+    // new guide is taken away again and leaves no undo step.
+    const handleOut = istate.guideHandleDrag;
+    if (handleOut) {
+      istate.guideHandleDrag = null;
+      istate.draggingGuideId = null;
+      if (handleOut.guideId && overGuideHandle(handleOut.lastSx, handleOut.lastSy)) {
+        store.removeGuide(handleOut.guideId);
+        history.dropLastSnapshot();
+      }
+      canvas.style.cursor = 'default';
       return;
     }
     // End guide drag — snapshot was taken on mousedown, so just release.

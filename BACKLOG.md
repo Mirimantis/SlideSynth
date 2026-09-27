@@ -381,11 +381,12 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
   - Respects Key, including true-None mode, and the Tune A4 setting (`centsToNoteName`).
   - The ruler costs canvas width, so every hit-test that assumes X starts at 0 needs the same treatment `RULER_HEIGHT` gets on the Y side.
   - Prerequisite for the Y half of 13.5.
-- [ ] **13.5 Create guides by dragging out of the rulers** *(M)*
+- [x] **13.5 Create guides by dragging out of the rulers** *(M — done by 13.17's handle)*
   - Drag down from the top ruler to create an X guide; drag out of the pitch ruler (13.4) to create a Y guide. Release back over the ruler to cancel.
   - Reuse the existing guide-drag path, including self-excluding snap.
   - A click without a drag still scrubs the playhead. The Add buttons stay as the keyboard-reachable path.
   - **Revisit (2026-09-26):** the ruler is now also the scrub strip (audible by default, 16.3), so a drag out of it is ambiguous. Frets (Y guides) get a dedicated handle instead (13.17). The X half can use the same kind of handle, if a ruler drag still conflicts when this is built.
+  - **Covered (2026-09-27):** 13.17's one handle gives both: drag down for a fret, right for a beat guide.
 - [x] **13.6 Audition a Y guide's pitch while dragging** *(S — done in 16.6, PR #85)*
   - Sounds the snapped pitch on the current track's tone. Sequence after 13.5.
   - **Absorbed by 16.6** (2026-09-24): the key is hold A, not Space. Y guides can already be dragged, so this doesn't need to wait for 13.5.
@@ -415,11 +416,18 @@ Y guides become **frets**: a music word for "a pitch you can land on", instead o
     - **+ Fret** places the new fret on the tuning's nearest note, not the nearest 12-EDO line.
     - Command descriptions (hold A, Delete) and the help ("Frets and beat guides") updated. There were no toasts about guides.
     - Code keeps `GuideDefinition` and its `orientation`, and the element ids, so files and tests don't change.
-- [ ] **13.17 Drag a fret out of a corner handle** *(S–M)*
+- [x] **13.17 Drag a fret out of a corner handle** *(S–M)*
   - A small handle where the rulers meet the staff's left edge (top-left corner of the canvas). Drag from it onto the canvas to place a new fret at the pitch you drop it on; release back over the handle to cancel.
   - Dragging out of the ruler itself would fight the playhead scrub (see 13.5), so the handle is separate.
   - Reuse the guide-drag path: self-excluding snap, the audition while A is held (16.6), and select-on-drop.
   - **+ Fret** in the Snap drawer stays as the non-drag path.
+  - **Beat guides too (decided 2026-09-27):** the same handle gives a beat guide when dragged right. That covers 13.5.
+  - **Done (this PR):**
+    - **The handle:** a 14 px tab over the ruler's left end (`GUIDE_HANDLE_WIDTH`, `overGuideHandle` in `canvas/interaction.ts`). It shows a beat guide's vertical line over a fret's horizontal one, is dimmed while guides are locked, and has a grab cursor and tooltip. It's drawn on the foreground layer, under the playhead. The rulers' first labels start clear of it.
+    - **The drag:** nothing happens until the pointer has moved 8 px with one direction at least 1.5× the other. Then down makes a fret and right a beat guide, with a row- or col-resize cursor. From there the existing guide drag moves it: self-excluding snap, hold A to hear a fret, selected at once, guides shown if hidden.
+    - **Cancel:** released back over the handle, the guide is removed and the snapshot dropped (`history.dropLastSnapshot()`), so it leaves no undo step. Otherwise it's one undo step.
+    - Locked guides: the handle does nothing, as + Fret / + Beat are disabled.
+    - Tests drive the real interaction with a stub canvas (`canvas/guide-handle.test.ts`).
 - [ ] **13.18 Octave frets** *(M)*
   - A **Single / Octaves** toggle in the fret's Selection panel. With Octaves, the fret repeats in every octave across the canvas.
   - Every instance is the same fret: selecting any instance selects it, and dragging any instance moves them all by the same interval.
