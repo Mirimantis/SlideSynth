@@ -256,7 +256,7 @@
     in the centre, and a <strong>properties panel</strong> on the right. The top of the rail
     holds the drawer icons; each opens a <strong>drawer</strong> that slides out over the
     canvas edge — <strong>Tempo</strong> (BPM, time signature, metronome),
-    <strong>Snap</strong> (presets, Gravity, guides), <strong>Harmonic Prism</strong>, and
+    <strong>Snap</strong> (presets, Gravity, frets and beat guides), <strong>Harmonic Prism</strong>, and
     <strong>Tuning</strong> (pitch circle, tuning, root, scale, reference pitch). One drawer is open at a time;
     <kbd>Escape</kbd> or a click on the canvas closes it. Below a divider sits the
     <strong>tool strip</strong>, always visible: <strong>Draw</strong>, <strong>Select</strong>,
@@ -265,7 +265,7 @@
     <strong>Draw</strong> mode is on, Draw and Perform carry a small rainbow
     <strong>chord badge</strong> showing how many voices will sound. The
     right-hand panel stacks <strong>Tool</strong> (settings for the active tool, or Perform's),
-    <strong>Selection</strong> (what's selected: a group, curves, a point, a guide, and the
+    <strong>Selection</strong> (what's selected: a group, curves, a point, a fret or beat guide, and the
     active track), and
     <strong>Tracks</strong>.
   </p>
@@ -600,9 +600,9 @@
                   audition the new pitch against the rest of the composition.</li>
             </ul>
         </li>
-        <li><strong>Guide pitch</strong> — while dragging a horizontal (pitch) guide in the
-            Select tool, hold <kbd>A</kbd> to hear the guide's pitch on the current track's
-            tone as it moves. Snap applies, so you hear exactly where it will land.</li>
+        <li><strong>Fret pitch</strong> — while dragging a fret in the Select tool, hold
+            <kbd>A</kbd> to hear its pitch on the current track's tone as it moves. Snap
+            applies, so you hear exactly where it will land.</li>
         <li><strong>Scrubbing</strong> the ruler needs no key: it plays what's under the
             playhead as you drag. Turn <strong>Audible scrub</strong> off in Settings for
             silent scrubbing.</li>
@@ -764,40 +764,39 @@
   </details>
 
   <details>
-    <summary>Snap guides</summary>
+    <summary>Frets and beat guides</summary>
     <div class="detail-body">
       <p>
-        Snap guides are user-placed lines that act as additional snap targets,
-        on top of the regular grid / scale. Use the <strong>+ X</strong> and
-        <strong>+ Y</strong> buttons in the Snap section to drop a vertical
-        (beat) or horizontal (pitch) guide at the centre of the viewport.
+        <strong>Frets</strong> (pitch guides) are pitches you can land on: lines across the
+        canvas that pull like the staff's lines, placed wherever you want them, between the
+        tuning's notes if you like. <strong>Beat guides</strong> mark places in time. Use
+        <strong>+ Fret</strong> and <strong>+ Beat</strong> in the Snap drawer to drop one at
+        the centre of the view; a new fret lands on the tuning's nearest note.
       </p>
       <ul>
-        <li>Switch to the <strong>Select</strong> tool, then click on a guide
-            line to select it. The Selection panel then shows a label
-            field (which renders inline on the guide) plus a Delete button.
-            (Other tools like Draw fall through to their normal click action
-            so guides don't get in the way of authoring.)</li>
-        <li>Drag a selected guide to <strong>move</strong> it (snaps to grid /
-            scale, with other guides as additional targets).</li>
-        <li>Press <kbd>Delete</kbd> with a guide selected to remove it.</li>
-        <li>The <strong>Guides</strong> toggle hides all guides and disables
-            their snap pull at once. Hidden guides aren't deleted; flip the
-            toggle back on to bring them back.</li>
-        <li>The <strong>Lock</strong> toggle (next to Guides) prevents existing
-            guides from being selected, dragged, or deleted on the canvas.
-            Snap pull still works while locked. Use it to protect a guide
-            layout from accidental edits while you're authoring curves.</li>
-        <li>During Compose Performance / Record, the planchette pitch snaps to
-            Y-guides as additional targets (in addition to the regular grid /
-            scale / Gravity system). X-guides only affect placement-style
-            snapping (Draw / Select), not perform-time progression.</li>
-        <li>Guides are saved with the composition. Their visibility and lock
-            state, however, are per-browser preferences (so you can hide or
-            unlock temporarily without changing the file).</li>
-        <li>Harmonic Prism's projection echoes still take exclusive snap
-            ownership when active — guides defer so projection mode stays
-            predictable.</li>
+        <li>Switch to the <strong>Select</strong> tool, then click a fret or beat guide to
+            select it. The Selection panel shows a fret's pitch (named by the tuning, with the
+            cents off the nearest note: "Db4 +12¢"), a label field (the label is drawn on the
+            line) and a Delete button. (Other tools like Draw fall through to their normal click
+            action so they don't get in the way of authoring.) An unlabelled fret shows its
+            pitch's name on the canvas.</li>
+        <li>Drag a selected fret or beat guide to <strong>move</strong> it. It snaps to the
+            grid and the scale, with the other frets and beat guides as extra targets.</li>
+        <li>Press <kbd>Delete</kbd> with one selected to remove it.</li>
+        <li>The <strong>Guides</strong> toggle hides all frets and beat guides and turns off
+            their pull at once. Hidden ones aren't deleted; flip the toggle back on to bring
+            them back.</li>
+        <li>The <strong>Lock</strong> toggle (next to Guides) stops them being selected,
+            dragged or deleted on the canvas. They still pull while locked. Use it to protect
+            a layout from accidental edits while you're drawing curves.</li>
+        <li>While performing or recording, the planchette's pitch snaps to frets as well as
+            to the staff's lines and Gravity. Beat guides only affect placement (Draw /
+            Select), not the planchette as time moves.</li>
+        <li>Frets and beat guides are saved with the composition. Their visibility and lock
+            state are per-browser preferences, so you can hide or unlock them for a while
+            without changing the file.</li>
+        <li>Harmonic Prism's projection echoes take over the pitch pull while they're on;
+            frets wait, so Projection stays predictable.</li>
       </ul>
     </div>
   </details>
@@ -937,8 +936,8 @@
     <div class="detail-body">
       <ul>
         <li><strong>Pitch lines</strong> (on by default) — turn off for a clean canvas: no
-          pitch lines, and nothing pulls the cursor in pitch except pitch guides and Harmonic
-          Prism projection echoes. Useful when you've set up your own pitch guides and want
+          pitch lines, and nothing pulls the cursor in pitch except frets and Harmonic
+          Prism projection echoes. Useful when you've set up your own frets and want
           only those.</li>
         <li><strong>Tune A4</strong> — the reference frequency (see
           <a href="#playback">Playback &amp; Transport</a>). It moves every frequency together

@@ -34,6 +34,12 @@ describe('Snap drawer (BACKLOG 16.4)', () => {
     expect(panel()).toMatch(/<option[^>]*selected[^>]*>Custom</);
   });
 
+  it('adds frets and beat guides, not Y and X guides (13.16)', () => {
+    const html = panel();
+    expect(html).toMatch(/id="add-guide-y-btn"[^>]*>\+ Fret</);
+    expect(html).toMatch(/id="add-guide-x-btn"[^>]*>\+ Beat</);
+  });
+
   it('locked guides can’t be added to', () => {
     expect(panel()).not.toMatch(/id="add-guide-x-btn"[^>]*disabled/);
     store.setGuidesLocked(true);

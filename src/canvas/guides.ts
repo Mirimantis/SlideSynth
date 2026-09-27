@@ -1,13 +1,13 @@
 import type { GuideDefinition } from '../types';
 import type { Viewport } from './viewport';
-import { centsToNoteName } from '../constants';
 import { themeColor } from '../theme/theme';
 
 const LABEL_FONT = '11px monospace';
 /** How far past the edge to draw the label so it sits in the ruler/staff strip. */
 const LABEL_PADDING = 4;
 
-/** Render every guide as a thin dashed line with optional inline label. */
+/** Render every guide as a thin dashed line with optional inline label.
+ *  `fretName` names an unlabelled fret's pitch (by the current tuning). */
 export function renderGuides(
   ctx: CanvasRenderingContext2D,
   vp: Viewport,
@@ -15,6 +15,7 @@ export function renderGuides(
   canvasWidth: number,
   canvasHeight: number,
   selectedGuideId: string | null,
+  fretName: (cents: number) => string,
 ): void {
   if (guides.length === 0) return;
   ctx.save();
@@ -30,13 +31,13 @@ export function renderGuides(
       ctx.moveTo(sx, 0);
       ctx.lineTo(sx, canvasHeight);
       ctx.stroke();
-      drawLabel(ctx, g, sx, LABEL_PADDING + 14, color, 'left');
+      drawLabel(ctx, g.label || defaultLabel(g, fretName), sx, LABEL_PADDING + 14, color, 'left');
     } else {
       const sy = vp.worldToScreen(0, g.position).sy;
       ctx.moveTo(0, sy);
       ctx.lineTo(canvasWidth, sy);
       ctx.stroke();
-      drawLabel(ctx, g, LABEL_PADDING + 32, sy - 4, color, 'left');
+      drawLabel(ctx, g.label || defaultLabel(g, fretName), LABEL_PADDING + 32, sy - 4, color, 'left');
     }
   }
   ctx.restore();
@@ -44,13 +45,12 @@ export function renderGuides(
 
 function drawLabel(
   ctx: CanvasRenderingContext2D,
-  g: GuideDefinition,
+  text: string,
   x: number,
   y: number,
   color: string,
   align: CanvasTextAlign,
 ): void {
-  const text = g.label || defaultLabel(g);
   if (!text) return;
   ctx.save();
   ctx.font = LABEL_FONT;
@@ -65,12 +65,8 @@ function drawLabel(
 }
 
 /** Default label so an unnamed guide still has something useful to read. */
-function defaultLabel(g: GuideDefinition): string {
-  if (g.orientation === 'x') {
-    return `b${g.position.toFixed(2)}`;
-  } else {
-    return centsToNoteName(g.position);
-  }
+function defaultLabel(g: GuideDefinition, fretName: (cents: number) => string): string {
+  return g.orientation === 'x' ? `b${g.position.toFixed(2)}` : fretName(g.position);
 }
 
 /**

@@ -195,11 +195,12 @@ function Slider({ id, label, min, max, step, value, shown, title, onInput }: {
 function GuidesRow({ actions }: { actions: SnapActions }) {
   const st = store.getState();
   // A new guide is selected at once; while locked it couldn't be deselected
-  // on the canvas, so adding waits for unlock.
-  const addTitle = (axis: string) => (st.guidesLocked ? 'Unlock guides to add a new one' : `Add a ${axis} guide at the centre of the viewport`);
+  // on the canvas, so adding waits for unlock. Y guides are called frets
+  // (13.16), X guides beat guides.
+  const addTitle = (what: string) => (st.guidesLocked ? 'Unlock to add one' : `Add ${what} at the centre of the view`);
   return (
     <div class="transport-row guides-row">
-      <label class="toggle-switch" title="Show snap guides — when off, guides are hidden and don't snap">
+      <label class="toggle-switch" title="Show frets and beat guides. Off: they're hidden and don't pull">
         <span class="toggle-switch-track">
           <input
             type="checkbox"
@@ -211,7 +212,7 @@ function GuidesRow({ actions }: { actions: SnapActions }) {
         </span>
         <span class="toggle-switch-label">Guides</span>
       </label>
-      <label class="toggle-switch" title="Lock guides — when locked, guides can't be selected, dragged, or deleted from the canvas (snap pull still works)">
+      <label class="toggle-switch" title="Lock frets and beat guides: they can't be selected, dragged or deleted on the canvas (they still pull)">
         <span class="toggle-switch-track">
           <input
             type="checkbox"
@@ -224,13 +225,13 @@ function GuidesRow({ actions }: { actions: SnapActions }) {
         <span class="toggle-switch-label">Lock</span>
       </label>
       <button
-        id="add-guide-x-btn" class="snap-preset-btn" disabled={st.guidesLocked} title={addTitle('vertical (beat)')}
-        onClick={e => { blur(e); actions.addGuide('x'); }}
-      >+ X</button>
-      <button
-        id="add-guide-y-btn" class="snap-preset-btn" disabled={st.guidesLocked} title={addTitle('horizontal (pitch)')}
+        id="add-guide-y-btn" class="snap-preset-btn" disabled={st.guidesLocked} title={addTitle('a fret (a pitch to land on)')}
         onClick={e => { blur(e); actions.addGuide('y'); }}
-      >+ Y</button>
+      >+ Fret</button>
+      <button
+        id="add-guide-x-btn" class="snap-preset-btn" disabled={st.guidesLocked} title={addTitle('a beat guide (a place in time)')}
+        onClick={e => { blur(e); actions.addGuide('x'); }}
+      >+ Beat</button>
     </div>
   );
 }

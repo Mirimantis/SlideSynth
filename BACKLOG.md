@@ -404,10 +404,17 @@ Resume after Phase 16. Grouped by area; roughly easiest-first within a group.
 
 Y guides become **frets**: a music word for "a pitch you can land on", instead of the maths word. X guides are unchanged. The data model keeps `GuideDefinition` and its `orientation`, so files don't change; this is naming and UI first.
 
-- [ ] **13.16 Rename Y guides to Frets** *(S)*
+- [x] **13.16 Rename Y guides to Frets** *(S, PR #92)*
   - Everywhere the user reads it: the Snap drawer (**+ Y** becomes **+ Fret**), the Selection panel ("Snap Guide" → "Fret"), tooltips, toasts.
   - The help describes them as **frets (pitch guides)**, so the music term leads and the plain description follows.
   - Consider "beat guides" for X guides in the same pass, so neither is called by an axis letter.
+  - **Done (PR #92):**
+    - **Snap drawer:** **+ Fret** and **+ Beat** (fret first), with new tooltips. The Guides and Lock switches say they cover both. X guides are **beat guides** everywhere the user reads it.
+    - **Selection panel:** "Fret" or "Beat guide" with a one-line meaning. A fret's pitch is named by the tuning with its cents offset ("Db4 +12¢ (6112.0 ¢)"). Delete Fret / Delete Beat guide.
+    - **Canvas:** an unlabelled fret shows the same tuning-aware name (`pitchLabel` in `tuning.ts`), not the nearest 12-EDO name.
+    - **+ Fret** places the new fret on the tuning's nearest note, not the nearest 12-EDO line.
+    - Command descriptions (hold A, Delete) and the help ("Frets and beat guides") updated. There were no toasts about guides.
+    - Code keeps `GuideDefinition` and its `orientation`, and the element ids, so files and tests don't change.
 - [ ] **13.17 Drag a fret out of a corner handle** *(S–M)*
   - A small handle where the rulers meet the staff's left edge (top-left corner of the canvas). Drag from it onto the canvas to place a new fret at the pitch you drop it on; release back over the handle to cancel.
   - Dragging out of the ruler itself would fight the playhead scrub (see 13.5), so the handle is separate.

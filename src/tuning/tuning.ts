@@ -538,6 +538,14 @@ export function pitchName(s: Omit<PitchSettings, 'hidePitchLines'>, cents: numbe
   return { name: noteName(tuning, s.tunedFrom, degree, note, true), offset: cents - note };
 }
 
+/** A pitch as one label: the tuning's nearest note, and the cents off it when
+ *  that rounds to a cent or more ("Db4 +12¢"). Frets use it (13.16). */
+export function pitchLabel(s: Omit<PitchSettings, 'hidePitchLines'>, cents: number): string {
+  const { name, offset } = pitchName(s, cents);
+  const off = Math.round(offset);
+  return off === 0 ? name : `${name} ${off > 0 ? '+' : ''}${off}¢`;
+}
+
 // ── The Harmonic Prism ──────────────────────────────────────────
 
 /** The steps the Prism's "Equal" intonation counts in (13.8 (b)): the

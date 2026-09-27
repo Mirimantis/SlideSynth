@@ -2,6 +2,7 @@ import '@preact/signals'; // components re-render when the store fields they rea
 import { store } from '../state/store';
 import { history } from '../state/history';
 import { centsToNoteName, CENTS_PER_SEMITONE } from '../constants';
+import { pitchLabel } from '../tuning/tuning';
 import { anyGrouped, getMovableSelection } from '../model/curve-groups';
 import type { CommandRegistry } from '../commands/registry';
 import { CommandButton } from './command-button';
@@ -43,18 +44,20 @@ export function PropertyPanel({ commands }: { commands: CommandRegistry }) {
 
 function GuideProps({ guide, locked }: { guide: GuideDefinition; locked: boolean }) {
   const id = guide.id;
-  const position = guide.orientation === 'x'
-    ? `${guide.position.toFixed(3)} beats`
-    : `${centsToNoteName(guide.position)} (${guide.position.toFixed(1)} ¢)`;
+  const fret = guide.orientation === 'y';
+  const position = fret
+    ? `${pitchLabel(store.getState(), guide.position)} (${guide.position.toFixed(1)} ¢)`
+    : `${guide.position.toFixed(3)} beats`;
+  const kind = fret ? 'Fret' : 'Beat guide';
   const savedLabel = () => store.getComposition().guides.find(g => g.id === id)?.label ?? '';
   return (
     <>
       <div class="prop-section">
-        <div class="prop-label">Snap Guide{locked ? ' (locked)' : ''}</div>
-        <div class="prop-value">{guide.orientation === 'x' ? 'Vertical (beat)' : 'Horizontal (pitch)'}</div>
+        <div class="prop-label">{kind}{locked ? ' (locked)' : ''}</div>
+        <div class="prop-value">{fret ? 'A pitch to land on' : 'A place in time'}</div>
       </div>
       <div class="prop-section">
-        <div class="prop-label">Position</div>
+        <div class="prop-label">{fret ? 'Pitch' : 'Position'}</div>
         <div class="prop-value">{position}</div>
       </div>
       <div class="prop-section">
@@ -92,13 +95,13 @@ function GuideProps({ guide, locked }: { guide: GuideDefinition; locked: boolean
           <button
             id="prop-guide-delete"
             class="snap-preset-btn"
-            title="Delete this guide"
+            title={`Delete this ${kind.toLowerCase()}`}
             onClick={() => {
               history.snapshot();
               store.removeGuide(id);
             }}
           >
-            Delete Guide
+            Delete {kind}
           </button>
         </div>
       )}
