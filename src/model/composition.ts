@@ -20,7 +20,7 @@ export function createDefaultSnapSettings(): SnapSettings {
     customScale: null,
     tunedFrom: 0,
     hidePitchLines: false,
-    referenceLines: true,
+    referenceLines: false,   // too busy as a default; a check when wanted (13.8 (f))
     magneticEnabled: DEFAULT_MAGNETIC_ENABLED,
     magneticStrength: DEFAULT_MAGNETIC_STRENGTH,
     magneticSpringK: DEFAULT_MAGNETIC_SPRING_K,

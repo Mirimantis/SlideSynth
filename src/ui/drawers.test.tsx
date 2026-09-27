@@ -86,9 +86,11 @@ describe('Tuning drawer (BACKLOG 13.8)', () => {
 
   it('other tunings offer the 12-EDO reference, which needs pitch lines (13.8 (b))', () => {
     store.setTuning({ kind: 'edo', divisions: 22, equave: 'octave' });
-    expect(panel()).toMatch(/id="reference-lines-toggle"[^>]*checked/);
-    store.setReferenceLines(false);
+    // Off by default: too busy most of the time (13.8 (f)).
+    expect(panel()).toMatch(/id="reference-lines-toggle"/);
     expect(panel()).not.toMatch(/id="reference-lines-toggle"[^>]*checked/);
+    store.setReferenceLines(true);
+    expect(panel()).toMatch(/id="reference-lines-toggle"[^>]*checked/);
     store.setPitchLinesVisible(false);
     expect(panel()).toMatch(/id="reference-lines-toggle"[^>]*disabled/);
   });

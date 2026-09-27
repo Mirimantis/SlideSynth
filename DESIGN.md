@@ -314,7 +314,7 @@ The Key and Scale dropdowns mixed two different axes: the **tuning** (which pitc
 - For non-12 tunings, an optional faint **12-EDO reference layer** helps with orientation.
 - Snapping without a scale rounds to the tuning's degrees, not to 100-cent steps.
 - The octave highlight marks the root, not C (absorbs 13.9).
-- *(Built in 13.8 (b).)* The reference layer is a drawer switch, on by default. Labels thin out by zoom as 12-EDO's did, and zoomed out, lines outside the scale fade. The draw HUD names the nearest note of the tuning.
+- *(Built in 13.8 (b).)* The reference layer is a drawer switch, off by default (on in (b); too busy as a default, so off since (f)). Labels thin out by zoom as 12-EDO's did, and zoomed out, lines outside the scale fade. The draw HUD names the nearest note of the tuning.
 - 12-EDO stays the default, so the default view doesn't change.
 
 #### The drawer: a pitch circle over the controls

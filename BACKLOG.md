@@ -587,6 +587,7 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
           - `applyFretsAsScale` uses up the octave frets (single frets stay) and turns pitch lines back on.
           - Each is one undo step; a no-op drops its snapshot.
         - **Tuned from can sit between standard notes:** a "From frets" tuning's first note is the root fret's exact pitch, so `tunedFrom` may be fractional (D +17¢). The Tuned from menu shows that value as an extra option, and letter names use the nearest note.
+        - **12-EDO reference off by default** (user feedback): too busy most of the time, though useful as a check. New compositions start with it off; files saved with it on keep it on.
         - **Drawer:** **Scale → frets** and **Frets → scale** buttons (the latter needs octave frets), with a toast saying what happened. The Tuning menu's group is now "Imported and from frets"; the last one made stays on offer, like an import.
   - **Deferred:**
     - **(e) Scale generator for other equal divisions** — MOS: large and small step counts plus mode rotation; the MIT `moment-of-symmetry` library covers the maths. A second editor, so its own item.
