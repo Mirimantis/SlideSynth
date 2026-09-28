@@ -396,6 +396,7 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
 - [ ] **13.11 Recording simplification density** *(S–M; M–L with the simplifier, own planning session)*
   - A setting to keep all recorded points, or 1/2, 1/4, 1/8, instead of today's fixed RDP fit.
   - Option to run simplification later on a kept curve (relates to 12.4 raw takes).
+  - **Spec:** [DESIGN.md › Recording fit spec](DESIGN.md#recording-fit-spec-1311-decided-2026-09-28) (planning session 2026-09-28). Decided: a least-squares fitter with sloped handles replaces RDP with flat handles; one **Accuracy** slider (2–40 ¢) instead of 1/2, 1/4, 1/8 fractions; a **Simplify** command refits existing curves (whole, or the selected span). The earlier attempt was never committed: denser RDP looked worse because every point had flat handles.
   - **Revisit the simplifier itself (2026-09-27):** find an algorithm that's adjustable and fits the recorded motion more accurately than today's fixed RDP fit (for example, curve fitting that places Bezier handles, rather than keeping a subset of points). An earlier attempt, with a less capable agent, was abandoned because it didn't work well; look at why before starting. Pairs with 13.26: fewer, better-placed points leave less wobble to nudge.
 - [x] **13.24 Transform by interval** *(S, PR #98)*
   - The transform box moves a selection up or down an octave. Offer other intervals too: a third, fourth, fifth, and the Prism chord's own intervals, in the current tuning's steps (as the Prism counts them, 13.8 (b)).
@@ -764,6 +765,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
 - [ ] **12.4 Raw-take retention** *(L, own planning session — after 9.3)*
   - Keep the high-rate capture alongside the fitted Bezier; see [DESIGN.md › Raw takes](DESIGN.md#raw-takes-design-framing-for-backlog-124).
   - Earlier parked exploration of a separate, non-editable raw curve type that plays its samples directly (convert-to-Bezier on demand): [.claude/plans/12.4-raw-recording-curve-type.md](.claude/plans/12.4-raw-recording-curve-type.md).
+  - **May shrink to nothing (2026-09-28, 13.11):** a tight fit (13.11's Accuracy at a few cents) plays what was played, stays editable, and can be simplified later from its own shape. An earlier, uncommitted try at keeping raw data found saves too big; its fallback was keeping every 4th sample (a quarter of the data, still too dense to hear the difference). Revisit only if the tight fit falls short.
   - **Session inputs:**
     - authority: raw is the immutable original, the edited Bezier wins playback;
     - retain kept takes only;

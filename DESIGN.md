@@ -400,6 +400,23 @@ A brush for reshaping part of a busy curve, typically a recorded gravity glide w
 - **One undo step per drag.**
 - **Related:** 13.11 (recording density and a better simplifier) gives recordings fewer, better-placed points to start with; 12.4 (raw takes).
 
+### Recording fit spec (13.11, decided 2026-09-28)
+
+How a recorded take (and a MIDI import's pitch bend) becomes an editable curve, and how an existing curve can be thinned.
+
+- **Why:** the old pipeline kept a subset of the samples (RDP, 15 ¢ / 0.03 beats) and gave every kept point **flat handles**, so the curve eased to a stop at each point. Measured on synthetic takes: a straight octave glide came out 133 ¢ off at worst, a wobbly rising glide 78 ¢; only vibrato (whose kept points are its peaks) fitted well. Denser RDP made it worse (an earlier, uncommitted attempt): more flat-handled points, more plateaus.
+- **The fitter** (`model/fit.ts`) treats pitch as a function of time:
+  - Each segment's handles sit at **⅓ of its width**, so time runs evenly along the segment and pitch is a plain cubic in time. What's fitted is each point's pitch and slope, by least squares against the samples; in and out handles share the slope, so every point is smooth. Nothing can run backward in time, and there's no iteration to go unstable.
+  - **Points are added where the error is worst:** start from the take's two ends, fit, add a point at the worst sample of every segment still out of tolerance, refit, until every sample is within **Accuracy**.
+  - **Error is measured in cents** (what's heard), with a little timing slack (0.03 beats) on steep parts, so a fast leap doesn't collect a pile of points.
+  - **No overshoot:** where a stretch of the take only rises or only falls (a leap into a held note), its segment's slopes are limited so the curve can't scoop past the samples.
+  - **Volume** uses the same fitter with its own tolerance (0.04, fixed); a steady volume stays two points.
+- **Accuracy** (Perform's settings in the Tool panel, a workspace pref): the most any sample may be off, from 2 ¢ (tight: keeps everything audible, including small vibrato) to 40 ¢ (loose: few points). Default set after testing. A MIDI import uses the default.
+- **Simplify** (Edit menu, Selection panel): refits the selected curves at the current Accuracy, from their own shape (sampled densely), since the raw take isn't kept. A tight take stays within a couple of cents of what was played, so refitting it is nearly the same as refitting the raw take. The curve's ends stay put. With points selected, only the span from the first to the last selected point is refitted, its ends and their slopes kept, so a busy area can be thinned without touching the rest. Volume and other lanes are refitted too. One undo step.
+- **Editing dense takes:** Nudge (13.26) for areas, Simplify to thin.
+- **Raw takes (12.4):** a tight fit may make keeping the raw samples unnecessary; 12.4 stays open until that's tried.
+- **While testing only:** a switch back to the old fitter for comparison, removed before the PR.
+
 ### Guide tracks spec (13.10, decided 2026-09-27)
 
 A curve can be a **pitch guide**: silent, drawn as scaffolding, and pulling like a fret whose pitch moves over time. It isn't a fret (a fret is one pitch), so it can't join a scale or the staff.
