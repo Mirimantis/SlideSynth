@@ -393,9 +393,10 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
 - [x] **13.9 Octave highlight follows the key root** *(S — done in 13.8 (b), PR #89)*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
-- [ ] **13.11 Recording simplification density** *(S–M)*
+- [ ] **13.11 Recording simplification density** *(S–M; M–L with the simplifier, own planning session)*
   - A setting to keep all recorded points, or 1/2, 1/4, 1/8, instead of today's fixed RDP fit.
   - Option to run simplification later on a kept curve (relates to 12.4 raw takes).
+  - **Revisit the simplifier itself (2026-09-27):** find an algorithm that's adjustable and fits the recorded motion more accurately than today's fixed RDP fit (for example, curve fitting that places Bezier handles, rather than keeping a subset of points). An earlier attempt, with a less capable agent, was abandoned because it didn't work well; look at why before starting. Pairs with 13.26: fewer, better-placed points leave less wobble to nudge.
 - [x] **13.24 Transform by interval** *(S, PR #98)*
   - The transform box moves a selection up or down an octave. Offer other intervals too: a third, fourth, fifth, and the Prism chord's own intervals, in the current tuning's steps (as the Prism counts them, 13.8 (b)).
   - With Alt+drag duplicate, that makes a harmony copy you can hear and edit, the explicit version of a projection echo (13.25).
@@ -407,7 +408,8 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - **Commands:** Move up / down by interval (Shift+↑ / ↓) and Copy up / down by interval (Alt+Shift+↑ / ↓), in the Edit menu. `moveSelectionByInterval` in `interaction.ts` serves the arrows and the commands.
     - *Behaviour change:* the octave arrows used 1200¢ in every tuning and could push a curve past the pitch range; they now use the tuning's period and clamp to the range.
     - Not done: a "copy to each chord voice" action (13.25 lists it as what removal of Projection would miss).
-- [ ] **13.26 Area Nudge tool** *(M, own planning session)*
+- [ ] **13.26 Area Nudge tool** *(M — planning session held 2026-09-27)*
+  - **Spec:** [DESIGN.md › Area Nudge spec](DESIGN.md#area-nudge-spec-1326-decided-2026-09-27). Decided: a **Nudge** tool (N); the brush reaches **along time on the one curve you press**; raised-cosine falloff; **never snaps**; **Moves: Pitch / Time / Both**, with points never passing each other in time; **Push** and **Smooth** modes, both built now.
   - A transform tool that moves only the points of a curve near the cursor, with an adjustable **falloff**: points at the cursor move fully, farther ones less, out to a radius, like a soft-brush nudge or proportional editing.
   - For adjusting part of a complex curve smoothly. A curve recorded with gravity snapping carries the spring's wobble as many points, and moving a few of them by hand leaves jagged edges. The nudge moves an area and keeps a smooth glissando on either side.
   - **Session inputs:**

@@ -383,6 +383,22 @@ The scale is the pitch grid; frets (13.16) are exceptions and additions on top o
 
   The golden-format test gets a compatibility shim.
 
+### Area Nudge spec (13.26, decided 2026-09-27)
+
+A brush for reshaping part of a busy curve, typically a recorded gravity glide whose spring wobble became many close points, without the kinks that dragging single points leaves.
+
+- **A tool, "Nudge"** (key N), in the tool strip after Select. Its settings are in the Tool panel.
+- **The brush reaches along time, on one curve.** A press picks the curve nearest the cursor (any shown track, the active track following it, as a Select click does). Points of that curve within **Size** screen pixels left and right of the cursor are in reach, however far they are in pitch; other curves, such as stacked chord voices, are never touched. Size is in pixels, like any brush, so zooming in gives finer control. **[** and **]** change it.
+- **Falloff:** a raised-cosine bell, weight 1 at the cursor to 0 at the edge. One shape for now.
+- **Moves: Pitch / Time / Both** (Tool panel; Pitch by default). With Both, Shift locks a drag to its main axis.
+- **Never snaps.** It's for fine adjustment; guides can be matched by eye.
+- **Push mode:** the drag moves each point in reach by its weight × the drag. The handles bend with the same field: each handle tip moves by its own weight, so the curve deforms smoothly instead of sliding in stiff pieces. In time, points never pass each other or change order: on the side the drag is heading, each point stops just short of the next one (which moves less), so too much time with too small a brush piles points up at the brush's leading edge, the user's call. Points outside the reach never move. Handles stay inside their segments.
+- **Smooth mode:** rubbing (dragging back and forth) relaxes the points in reach toward their neighbours, each move by its weight × a **Strength**. In pitch it irons out wobble; in time it evens out the spacing (a point moves toward the midpoint of its neighbours, so order holds by itself). Handles of the points it moves are re-smoothed (auto-smooth, the shared handle length), since their old shapes belonged to the wobble.
+- **Showing the brush:** a faint band marks the reach while hovering the curve, and the points in reach light up, stronger toward the centre.
+- **Other lanes stay put:** volume and other lanes are time-locked, as with the transform box.
+- **One undo step per drag.**
+- **Related:** 13.11 (recording density and a better simplifier) gives recordings fewer, better-placed points to start with; 12.4 (raw takes).
+
 ### Guide tracks spec (13.10, decided 2026-09-27)
 
 A curve can be a **pitch guide**: silent, drawn as scaffolding, and pulling like a fret whose pitch moves over time. It isn't a fret (a fret is one pitch), so it can't join a scale or the staff.
