@@ -12,6 +12,7 @@ import { moveIntervalCents, moveIntervalName, prismOffsetsAt, resolveTuning } fr
 import { duplicateCurves } from '../state/clipboard';
 import { moveFretLine, shownGuides } from '../model/frets';
 import { trackShown } from '../model/track';
+import { pushCurve, smoothCurve } from '../model/nudge';
 import { createGroupId, expandSelectionToGroups, remapGroupIds } from '../model/curve-groups';
 import { nearestPointOnCubicScaled, evaluateCubic, findTForX } from '../utils/bezier-math';
 import { hitTestTransformBox, getTransformCursor } from './transform-box-renderer';
@@ -108,6 +109,22 @@ export interface InteractionState {
   cursorInCanvas: boolean;
   /** Preview position for the scissors tool (world coords), null if no valid cut. */
   scissorsPreview: Vec2 | null;
+  /** A Nudge stroke in progress (13.26): the curve, its points when the press
+   *  began (Push works from them), the brush's centre and reach in beats. */
+  nudgeDrag: {
+    curveId: string;
+    orig: LanePoint[];
+    centerX: number;
+    radius: number;
+    start: Vec2;
+    lastSx: number;
+    lastSy: number;
+    moved: boolean;
+    /** Push's time shift so far (0 in pitch), so the brush's band follows. */
+    dx: number;
+  } | null;
+  /** The curve under the Nudge brush while hovering, for its highlight. */
+  nudgeHover: { curveId: string; centerX: number; radius: number } | null;
   /** Active drag-marquee on empty canvas (BACKLOG 8.3). When set, a rubber-band
    *  rect is drawn between `startWorld` and `currentWorld`; on mouseup the
    *  enclosed anchor points are committed to the multi-point selection. */
@@ -174,6 +191,8 @@ export function createInteraction(
     cursorScreenY: 0,
     cursorInCanvas: false,
     scissorsPreview: null,
+    nudgeDrag: null,
+    nudgeHover: null,
     marquee: null,
     pointGroupDrag: null,
     hoverGroupedCurveId: null,
@@ -229,6 +248,72 @@ export function createInteraction(
    *  page view nothing scrolls, so it's the same mapping as always. */
   let scrubOffsetX = 0;
 
+  /** The curve a Nudge press or hover lands on, on any shown track (the
+   *  active track following it, as a Select click does). Later tracks win,
+   *  matching the drawing order. */
+  function nudgeCurveAt(pt: Vec2): { curve: BezierCurve; track: Track } | null {
+    const st = store.getState();
+    let found: { curve: BezierCurve; track: Track } | null = null;
+    for (const t of st.composition.tracks) {
+      if (!trackShown(t, st.guidesVisible)) continue;
+      const curve = findCurveAmong(pt, vp, t.curves);
+      if (curve) found = { curve, track: t };
+    }
+    return found;
+  }
+
+  function startNudge(pt: Vec2, sx: number, sy: number): void {
+    const hit = nudgeCurveAt(pt);
+    if (!hit) return;
+    const st = store.getState();
+    if (st.selectedTrackId !== hit.track.id) store.setSelectedTrack(hit.track.id);
+    store.setSelectedCurves([hit.curve.id]);
+    history.snapshot();
+    istate.nudgeDrag = {
+      curveId: hit.curve.id,
+      orig: deepCopyPoints(pitchPoints(hit.curve)),
+      centerX: pt.x,
+      radius: st.nudgeSize / vp.state.zoomX,
+      start: { ...pt },
+      lastSx: sx,
+      lastSy: sy,
+      moved: false,
+      dx: 0,
+    };
+    istate.nudgeHover = null;
+    canvas.style.cursor = 'grabbing';
+  }
+
+  function moveNudge(drag: NonNullable<InteractionState['nudgeDrag']>, raw: { wx: number; wy: number }, sx: number, sy: number, shift: boolean): void {
+    const st = store.getState();
+    const curve = st.composition.tracks.flatMap(t => t.curves).find(c => c.id === drag.curveId);
+    if (!curve) { istate.nudgeDrag = null; return; }
+    let axes = st.nudgeAxes;
+    let moved = false;
+    if (st.nudgeMode === 'push') {
+      let dx = raw.wx - drag.start.x;
+      let dy = raw.wy - drag.start.y;
+      // Shift locks a Both drag to its main axis, as elsewhere.
+      if (axes === 'both' && shift) axes = Math.abs(dx * vp.state.zoomX) > Math.abs(dy * vp.state.zoomY) ? 'time' : 'pitch';
+      if (axes === 'pitch') dx = 0;
+      if (axes === 'time') dy = 0;
+      drag.dx = dx;
+      store.mutate(() => { moved = pushCurve(curve, drag.orig, drag.centerX, drag.radius, dx, dy); });
+    } else {
+      // Smooth works where the brush is now, by how far it rubbed.
+      const rubbed = Math.hypot(sx - drag.lastSx, sy - drag.lastSy);
+      const k = st.nudgeStrength * Math.min(1, rubbed / 20);
+      if (k > 0) {
+        store.mutate(() => {
+          moved = smoothCurve(curve, raw.wx, st.nudgeSize / vp.state.zoomX, k, axes, st.autoSmoothXRatio);
+        });
+      }
+    }
+    drag.lastSx = sx;
+    drag.lastSy = sy;
+    if (moved) drag.moved = true;
+  }
+
   function onMove(e: PointerEvent): void {
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
@@ -240,6 +325,15 @@ export function createInteraction(
     if (istate.draggingLoopMarker) {
       const beat = snapBeatForMarker(raw.wx);
       callbacks.onLoopMarkerDrag?.(istate.draggingLoopMarker, beat, 'move');
+      return;
+    }
+
+    // A Nudge stroke (13.26). Never snaps. The cursor is tracked here too, so
+    // the brush drawn on the canvas moves with it.
+    if (istate.nudgeDrag) {
+      istate.cursorWorld = { x: raw.wx, y: raw.wy };
+      istate.cursorScreenY = sy;
+      moveNudge(istate.nudgeDrag, raw, sx, sy, e.shiftKey);
       return;
     }
 
@@ -484,12 +578,22 @@ export function createInteraction(
       canvas.title = hit === 'octaveUp' || hit === 'octaveDown' ? moveArrowTitle(hit === 'octaveUp' ? 1 : -1)
         : hit === 'ungroup' ? 'Ungroup'
         : '';
+    } else if (!istate.dragging && store.getState().activeTool === 'nudge') {
+      // Nudge never snaps, so its cursor (the brush's ring, the HUD) is the raw one.
+      istate.cursorWorld = { x: raw.wx, y: raw.wy };
+      const hit = nudgeCurveAt({ x: raw.wx, y: raw.wy });
+      istate.nudgeHover = hit ? { curveId: hit.curve.id, centerX: raw.wx, radius: store.getState().nudgeSize / vp.state.zoomX } : null;
+      canvas.style.cursor = hit ? 'crosshair' : 'default';
+      canvas.title = hit
+        ? (store.getState().nudgeMode === 'push' ? 'Drag to nudge this area of the curve' : 'Rub back and forth to smooth this area of the curve')
+        : '';
     } else if (!istate.dragging && store.getState().activeTool === 'scissors') {
       canvas.style.cursor = 'crosshair';
       canvas.title = 'Click a curve to split';
       istate.scissorsPreview = findScissorsPreview({ x: raw.wx, y: raw.wy }, vp);
     } else if (!istate.dragging) {
       istate.scissorsPreview = null;
+      istate.nudgeHover = null;
       canvas.style.cursor = 'default';
       canvas.title = '';
     }
@@ -544,6 +648,12 @@ export function createInteraction(
       istate.scrubbing = true;
       scrubOffsetX = vp.state.offsetX;
       callbacks.onPlayheadScrub?.(beat, 'start');
+      return;
+    }
+
+    // Nudge (13.26): a press on a curve starts a stroke on it.
+    if (state.activeTool === 'nudge') {
+      startNudge(rawPt, sx, sy);
       return;
     }
 
@@ -660,6 +770,12 @@ export function createInteraction(
   }
 
   function onUp(): void {
+    // End a Nudge stroke: one undo step, or none if nothing moved.
+    if (istate.nudgeDrag) {
+      if (!istate.nudgeDrag.moved) history.dropLastSnapshot();
+      istate.nudgeDrag = null;
+      return;
+    }
     // End drag-marquee (BACKLOG 8.3) — commit selected points, or treat as a
     // click on empty canvas if the drag was below the click threshold.
     if (istate.marquee) {

@@ -393,9 +393,10 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
 - [x] **13.9 Octave highlight follows the key root** *(S — done in 13.8 (b), PR #89)*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
-- [ ] **13.11 Recording simplification density** *(S–M)*
+- [ ] **13.11 Recording simplification density** *(S–M; M–L with the simplifier, own planning session)*
   - A setting to keep all recorded points, or 1/2, 1/4, 1/8, instead of today's fixed RDP fit.
   - Option to run simplification later on a kept curve (relates to 12.4 raw takes).
+  - **Revisit the simplifier itself (2026-09-27):** find an algorithm that's adjustable and fits the recorded motion more accurately than today's fixed RDP fit (for example, curve fitting that places Bezier handles, rather than keeping a subset of points). An earlier attempt, with a less capable agent, was abandoned because it didn't work well; look at why before starting. Pairs with 13.26: fewer, better-placed points leave less wobble to nudge.
 - [x] **13.24 Transform by interval** *(S, PR #98)*
   - The transform box moves a selection up or down an octave. Offer other intervals too: a third, fourth, fifth, and the Prism chord's own intervals, in the current tuning's steps (as the Prism counts them, 13.8 (b)).
   - With Alt+drag duplicate, that makes a harmony copy you can hear and edit, the explicit version of a projection echo (13.25).
@@ -407,7 +408,15 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - **Commands:** Move up / down by interval (Shift+↑ / ↓) and Copy up / down by interval (Alt+Shift+↑ / ↓), in the Edit menu. `moveSelectionByInterval` in `interaction.ts` serves the arrows and the commands.
     - *Behaviour change:* the octave arrows used 1200¢ in every tuning and could push a curve past the pitch range; they now use the tuning's period and clamp to the range.
     - Not done: a "copy to each chord voice" action (13.25 lists it as what removal of Projection would miss).
-- [ ] **13.26 Area Nudge tool** *(M, own planning session)*
+- [x] **13.26 Area Nudge tool** *(M — planning session held 2026-09-27; PR #101)*
+  - **Spec:** [DESIGN.md › Area Nudge spec](DESIGN.md#area-nudge-spec-1326-decided-2026-09-27). Decided: a **Nudge** tool (N); the brush reaches **along time on the one curve you press**; raised-cosine falloff; **never snaps**; **Moves: Pitch / Time / Both**, with points never passing each other in time; **Push** and **Smooth** modes, both built now. The mouse wheel stays on zoom (considered for brush size, and dropped).
+  - **Done (PR #101):**
+    - **`model/nudge.ts`** (pure, tested): `nudgeWeight` (raised cosine), `pushCurve` (absolute from the stroke's starting points, so a drag can go back and forth; handle tips move by the field at their own place; in time, a sweep from the side the drag heads stops each point just short of the next, so nothing passes and points out of reach never move; nothing before beat 0), `smoothCurve` (one step toward the neighbours' average in pitch or midpoint in time, ends fixed, then Catmull-Rom-style handles along the new slope at the shared handle length; flat auto-smooth handles would put a ripple in a sloped glide), `pointsInReach`.
+    - **Tool:** `nudge` in the strip after Select (new `nudge.svg`), `tool.nudge` (N), and `nudge.smaller` / `nudge.larger` ([ / ], ×1.2, only while Nudge is the tool). Switching to Nudge drops the transform box.
+    - **Stroke** (`interaction.ts`): a press picks the curve under it on any shown track (the active track follows; the curve is selected); Push works from the press point and reach fixed at the press, Smooth from the cursor, by how far it rubbed. Shift locks Both to its main axis. One undo step per stroke; a press that moves nothing leaves none.
+    - **Brush on the canvas** (`canvas/nudge-brush.ts`): a band over the reach, brightest at the centre, and the points in reach lit by weight. Tokens `nudge-band`, `nudge-band-edge`, `nudge-point`.
+    - **Tool panel:** Mode (Push / Smooth), Moves (Pitch / Time / Both), Size (8–600 px), Strength (Smooth only). Workspace prefs.
+    - **After testing:** defaults Push, Both, 100 px, 0.50. The band and lit points follow the brush during a stroke (the stroke now tracks the cursor; Push lights the points it's moving, by their starting weight), and a thin ring round the cursor shows the size (`nudge-ring`). Nudge's cursor is the raw one, so the ring sits on the pointer and the HUD reads the unsnapped pitch.
   - A transform tool that moves only the points of a curve near the cursor, with an adjustable **falloff**: points at the cursor move fully, farther ones less, out to a radius, like a soft-brush nudge or proportional editing.
   - For adjusting part of a complex curve smoothly. A curve recorded with gravity snapping carries the spring's wobble as many points, and moving a few of them by hand leaves jagged edges. The nudge moves an area and keeps a smooth glissando on either side.
   - **Session inputs:**
@@ -669,6 +678,7 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
   - **What removal loses:** echoes follow the source live as it's edited (copies don't); and one switch gives every chord voice over up to ±3 octaves (copies would need several moves, or a "copy to each chord voice" action).
   - **Removal touches:** the echo renderer in `projection-renderer.ts` (the Prism Draw preview dots stay), Projection's snap targets in `snap-config.ts`, `projectionSourceId` / `projectionOctaveRange` / `activeMode` in the store and types, the `prism.projection` command (Ctrl+H), the drawer switch and Octaves ± row, and help. Saved chord specs and workspace prefs that carry the fields load and ignore them.
   - Decide after 13.24 and 13.10 exist, so there's something to move to.
+  - **Step 1, set aside (2026-09-27, PR #101):** the Projection switch and Octaves ± row are hidden (`SHOW_PROJECTION` in `ui/prism-panel.tsx`), Ctrl+H is unbound, and help describes the guide-track route instead. The back end stays, so it can come back with a one-line change. The user expects not to miss live following or the one-switch spread; if that holds after a while, step 2 removes the back end (the list above).
   - The per-note echoes tried for 13.21 (drawn in steps) were dropped: the jogs at note boundaries looked wrong, and the effort isn't worth it while Projection's future is open.
 - [ ] **13.15 Gravity feel preview** *(M)*
   - A small animated waveform in the Snap drawer showing what Force, Spring and Damping do: its amplitude, frequency and falloff change as you move the sliders.

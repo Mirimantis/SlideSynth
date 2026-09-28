@@ -3,6 +3,10 @@ import { DYNAMICS_SOURCES } from '../types';
 import { createComposition } from '../model/composition';
 import { createTrack, GUIDE_TRACK_NAME } from '../model/track';
 import { expandSelectionToGroups } from '../model/curve-groups';
+import {
+  NUDGE_AXES, NUDGE_MODES, NUDGE_SIZE_DEFAULT, NUDGE_SIZE_MAX, NUDGE_SIZE_MIN, NUDGE_STRENGTH_DEFAULT,
+  type NudgeAxes, type NudgeMode,
+} from '../model/nudge';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 import {
@@ -104,6 +108,10 @@ const METRONOME_ENABLED_STORAGE_KEY = 'slidesynth.metronomeEnabled';
 const METRONOME_VOLUME_STORAGE_KEY = 'slidesynth.metronomeVolume';
 const AUTO_SMOOTH_X_RATIO_STORAGE_KEY = 'slidesynth.autoSmoothXRatio';
 const MOVE_INTERVAL_STORAGE_KEY = 'slidesynth.moveInterval';
+const NUDGE_MODE_STORAGE_KEY = 'slidesynth.nudgeMode';
+const NUDGE_AXES_STORAGE_KEY = 'slidesynth.nudgeAxes';
+const NUDGE_SIZE_STORAGE_KEY = 'slidesynth.nudgeSize';
+const NUDGE_STRENGTH_STORAGE_KEY = 'slidesynth.nudgeStrength';
 const PRISM_CHORD_SPEC_STORAGE_KEY = 'slidesynth.prismChordSpec';
 const PRISM_OCTAVE_RANGE_STORAGE_KEY = 'slidesynth.prismOctaveRange';
 const PRISM_DRAW_MODE_STORAGE_KEY = 'slidesynth.prismDrawMode';
@@ -128,6 +136,10 @@ function saveBoolPref(key: string, value: boolean): void {
   } catch {
     // Silently ignore — preference just won't persist.
   }
+}
+
+function clampNudgeSize(px: number): number {
+  return Math.round(Math.max(NUDGE_SIZE_MIN, Math.min(NUDGE_SIZE_MAX, Number.isFinite(px) ? px : NUDGE_SIZE_DEFAULT)));
 }
 
 function validMoveInterval(n: number): number {
@@ -285,6 +297,10 @@ function createInitialState(): RawState {
     metronomeVolume: loadNumberPref(METRONOME_VOLUME_STORAGE_KEY, 0.6),
     autoSmoothXRatio: Math.max(0, Math.min(1, loadNumberPref(AUTO_SMOOTH_X_RATIO_STORAGE_KEY, AUTO_SMOOTH_X_RATIO))),
     moveInterval: validMoveInterval(loadNumberPref(MOVE_INTERVAL_STORAGE_KEY, DEFAULT_MOVE_INTERVAL)),
+    nudgeMode: loadStringPref(NUDGE_MODE_STORAGE_KEY, NUDGE_MODES, 'push'),
+    nudgeAxes: loadStringPref(NUDGE_AXES_STORAGE_KEY, NUDGE_AXES, 'both'),
+    nudgeSize: clampNudgeSize(loadNumberPref(NUDGE_SIZE_STORAGE_KEY, NUDGE_SIZE_DEFAULT)),
+    nudgeStrength: Math.max(0.05, Math.min(1, loadNumberPref(NUDGE_STRENGTH_STORAGE_KEY, NUDGE_STRENGTH_DEFAULT))),
     dynamicsSource: loadStringPref(DYNAMICS_SOURCE_STORAGE_KEY, DYNAMICS_SOURCES, 'fixed'),
     harmonicPrism: {
       chordSpec: loadChordSpecPref(DEFAULT_CHORD_SPEC),
@@ -861,6 +877,39 @@ class Store {
   setReferenceLines(visible: boolean) {
     this.state.composition.snap.referenceLines = visible;
     this.touch('snap');
+  }
+
+  // ── The Nudge brush (13.26) ──
+
+  setNudgeMode(mode: NudgeMode) {
+    if (this.state.nudgeMode === mode) return;
+    this.state.nudgeMode = mode;
+    saveStringPref(NUDGE_MODE_STORAGE_KEY, mode);
+    this.touch('nudgeMode');
+  }
+
+  setNudgeAxes(axes: NudgeAxes) {
+    if (this.state.nudgeAxes === axes) return;
+    this.state.nudgeAxes = axes;
+    saveStringPref(NUDGE_AXES_STORAGE_KEY, axes);
+    this.touch('nudgeAxes');
+  }
+
+  /** Brush size in px each side of the cursor, clamped. */
+  setNudgeSize(px: number) {
+    const size = clampNudgeSize(px);
+    if (this.state.nudgeSize === size) return;
+    this.state.nudgeSize = size;
+    saveNumberPref(NUDGE_SIZE_STORAGE_KEY, size);
+    this.touch('nudgeSize');
+  }
+
+  setNudgeStrength(s: number) {
+    const strength = Math.max(0.05, Math.min(1, s));
+    if (this.state.nudgeStrength === strength) return;
+    this.state.nudgeStrength = strength;
+    saveNumberPref(NUDGE_STRENGTH_STORAGE_KEY, strength);
+    this.touch('nudgeStrength');
   }
 
   /** What the transform box's arrows move by (13.24). */

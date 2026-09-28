@@ -140,6 +140,11 @@
   --marquee-stroke: rgba(180, 210, 255, 0.85);
   --scissors-dot: #ff5252;
   --scissors-dot-edge: #fff;
+  /* The Nudge brush (13.26): its reach, and the points it will move. */
+  --nudge-band: rgba(var(--accent-rgb), 0.10);
+  --nudge-band-edge: rgba(var(--accent-rgb), 0);
+  --nudge-point: #fff;
+  --nudge-ring: rgba(255, 255, 255, 0.28);
 
   /* ── Canvas: guides and loop ─────────────────────────────────── */
   --guide: #7a8fa6;

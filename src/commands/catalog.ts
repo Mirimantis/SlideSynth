@@ -58,6 +58,10 @@ export const COMMANDS = [
   // ── Tools ──
   { id: 'tool.draw', label: 'Draw', section: 'Tools', keys: ['D'] },
   { id: 'tool.select', label: 'Select', section: 'Tools', keys: ['V'] },
+  { id: 'tool.nudge', label: 'Nudge', section: 'Tools', keys: ['N'],
+    description: 'drag an area of a curve smoothly (Push), or rub it to even it out (Smooth)' },
+  { id: 'nudge.smaller', label: 'Smaller brush', section: 'Tools', keys: ['['], description: 'the Nudge brush' },
+  { id: 'nudge.larger', label: 'Larger brush', section: 'Tools', keys: [']'], description: 'the Nudge brush' },
   { id: 'tool.delete', label: 'Delete', section: 'Tools', keys: ['X'], description: 'click a point to remove it' },
   { id: 'tool.slice', label: 'Slice', section: 'Tools', keys: ['C'], description: 'click a curve to split it' },
   { id: 'edit.finishCurve', label: 'Finish curve', section: 'Tools', keys: ['Enter'], description: 'end the curve you’re drawing' },
@@ -95,7 +99,8 @@ export const COMMANDS = [
   // ── Harmonic Prism ──
   { id: 'prism.drawMode', label: 'Prism Draw mode', section: 'Harmonic Prism', keys: ['H'],
     description: 'each Draw click places a chord cluster' },
-  { id: 'prism.projection', label: 'Prism Projection', section: 'Harmonic Prism', keys: ['Ctrl+H'],
+  // No key while Projection is set aside (13.25); it was Ctrl+H.
+  { id: 'prism.projection', label: 'Prism Projection', section: 'Harmonic Prism',
     description: 'project harmonic echoes from the selected curve' },
 
   // ── View ──

@@ -10,6 +10,8 @@ import { renderTransformBox } from './canvas/transform-box-renderer';
 import { outlinedGroups, renderGroupOutlines } from './canvas/group-outline';
 import { renderMarquee } from './canvas/marquee-renderer';
 import { renderProjection, renderProjectionSourceHighlight, renderPrismDrawPreview } from './canvas/projection-renderer';
+import { renderNudgeBrush, renderNudgeRing } from './canvas/nudge-brush';
+import { pointsInReach } from './model/nudge';
 import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuideHandle, renderGuides } from './canvas/guides';
@@ -114,7 +116,7 @@ app.innerHTML = `
         <div id="snap-panel"></div>
       </div>
       <div class="drawer" id="drawer-prism" data-drawer="prism">
-        <div class="drawer-header" title="Harmonic Prism — ${primaryShortcut('prism.drawMode')}: Draw mode; ${primaryShortcut('prism.projection')}: projection from the selected curve">Harmonic Prism</div>
+        <div class="drawer-header" title="Harmonic Prism — ${primaryShortcut('prism.drawMode')}: Draw mode">Harmonic Prism</div>
         <div id="prism-panel"></div>
       </div>
       <div class="drawer" id="drawer-tuning" data-drawer="tuning">
@@ -1147,6 +1149,9 @@ function selectTool(tool: ToolMode) {
     interaction.transformBox = null;
     store.setSelectedCurve(null);
     store.setSelectedPoint(null);
+  } else if (tool === 'nudge') {
+    // The brush works on whatever curve you press; no box in the way.
+    interaction.transformBox = null;
   } else if (tool === 'draw') {
     // Clear the transform box but keep the curve selection so Draw extends it.
     interaction.transformBox = null;
@@ -1328,6 +1333,16 @@ const commands = createCommandRegistry({
   // Not while a note is held; otherwise a tool also leaves Perform.
   'tool.draw': { run: () => chooseTool('draw'), enabled: notWhileSounding },
   'tool.select': { run: () => chooseTool('select'), enabled: notWhileSounding },
+  'tool.nudge': { run: () => chooseTool('nudge'), enabled: notWhileSounding },
+  // [ and ] resize the Nudge brush by a fifth, while it's the tool.
+  'nudge.smaller': {
+    run() { store.setNudgeSize(store.getState().nudgeSize / 1.2); },
+    enabled: () => store.getState().activeTool === 'nudge' && !store.getState().performMode,
+  },
+  'nudge.larger': {
+    run() { store.setNudgeSize(store.getState().nudgeSize * 1.2); },
+    enabled: () => store.getState().activeTool === 'nudge' && !store.getState().performMode,
+  },
   'tool.delete': { run: () => chooseTool('delete'), enabled: notWhileSounding },
   'tool.slice': { run: () => chooseTool('scissors'), enabled: notWhileSounding },
   'edit.finishCurve': {
@@ -3078,6 +3093,37 @@ function draw() {
       rect.height,
       RULER_HEIGHT,
     );
+  }
+
+  // The Nudge brush (13.26): over the curve being nudged, or the one hovered,
+  // moving with the cursor. During a Push the lit points are the ones being
+  // moved, by the weight they had when the stroke began. A faint ring round the
+  // cursor shows the size.
+  if (state.activeTool === 'nudge' && !state.performMode) {
+    const drag = interaction.nudgeDrag;
+    const cursor = interaction.cursorWorld;
+    if (drag) {
+      const curve = comp.tracks.flatMap(t => t.curves).find(c => c.id === drag.curveId);
+      if (curve) {
+        const push = state.nudgeMode === 'push';
+        const centerX = push ? drag.centerX + drag.dx : cursor?.x ?? drag.centerX;
+        const reach = push
+          ? pointsInReach(drag.orig.map(p => p.position.x), drag.centerX, drag.radius)
+          : pointsInReach(pitchPoints(curve).map(p => p.position.x), centerX, drag.radius);
+        renderNudgeBrush(fgCtx, viewport, curve, centerX, drag.radius, reach, RULER_HEIGHT, rect.height);
+      }
+    } else if (toolHoverVisible && interaction.nudgeHover) {
+      const hover = interaction.nudgeHover;
+      const curve = comp.tracks.flatMap(t => t.curves).find(c => c.id === hover.curveId);
+      if (curve) {
+        const reach = pointsInReach(pitchPoints(curve).map(p => p.position.x), hover.centerX, hover.radius);
+        renderNudgeBrush(fgCtx, viewport, curve, hover.centerX, hover.radius, reach, RULER_HEIGHT, rect.height);
+      }
+    }
+    if (cursor && (drag || toolHoverVisible)) {
+      const s = viewport.worldToScreen(cursor.x, cursor.y);
+      renderNudgeRing(fgCtx, s.sx, s.sy, state.nudgeSize);
+    }
   }
 
   // Scissors preview dot
