@@ -360,6 +360,8 @@ export interface AppState {
   nudgeSize: number;
   nudgeStrength: number;
   autoSmoothXRatio: number;                   // 0..1 — fraction of neighbor segment length used for Draw auto-smooth + Smooth Curve action (localStorage-backed)
+  recordAccuracy: number;                     // 13.11: how closely a take is fitted, in cents (localStorage-backed)
+  recordFitLegacy: boolean;                   // 13.11, testing only: the old RDP fit, for comparison
   dynamicsSource: DynamicsSource;             // What drives performed volume (localStorage-backed)
   harmonicPrism: HarmonicPrismState;          // Harmonic Prism feature (chordSpec + octaveRange localStorage-backed)
 }

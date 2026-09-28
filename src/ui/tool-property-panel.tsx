@@ -4,6 +4,7 @@ import { primaryShortcut } from '../commands/catalog';
 import { DYNAMICS_SOURCES, type DynamicsSource } from '../types';
 import { MOVE_INTERVALS, isTwelveEdo, moveIntervalName } from '../tuning/tuning';
 import { NUDGE_SIZE_MAX, NUDGE_SIZE_MIN } from '../model/nudge';
+import { RECORD_ACCURACY_STEPS } from '../model/fit';
 
 /**
  * Tool (BACKLOG 15.4; was Tool Properties until 16.5): the active tool's settings, or Perform's. A
@@ -12,7 +13,7 @@ import { NUDGE_SIZE_MAX, NUDGE_SIZE_MIN } from '../model/nudge';
  */
 export function ToolPropertyPanel() {
   const st = store.getState();
-  if (st.performMode) return <PerformSettings source={st.dynamicsSource} />;
+  if (st.performMode) return <PerformSettings source={st.dynamicsSource} legacy={st.recordFitLegacy} />;
   if (st.activeTool === 'select') return <SelectSettings />;
   if (st.activeTool === 'nudge') return <NudgeSettings />;
   if (st.activeTool !== 'draw') return <p class="placeholder-text">No settings for this tool</p>;
@@ -110,12 +111,37 @@ function NudgeSettings() {
   );
 }
 
-/** Select's settings: what the transform box's arrows move by (13.24). */
+/** How closely takes are fitted, and Simplify refits (13.11): one pref, shown
+ *  in Perform's settings and Select's. */
+function AccuracySlider() {
+  const accuracy = store.getState().recordAccuracy;
+  const index = Math.max(0, RECORD_ACCURACY_STEPS.indexOf(accuracy));
+  return (
+    <div class="prop-section">
+      <div
+        class="prop-slider-row"
+        title={`The most a recorded take may be off what you played, in cents. Tight keeps small vibrato; loose irons it out with fewer points. Simplify (${primaryShortcut('edit.simplify')}) refits to it too`}
+      >
+        <label for="record-accuracy">Accuracy</label>
+        <input
+          type="range" id="record-accuracy" class="auto-smooth-ratio-slider"
+          min="0" max={RECORD_ACCURACY_STEPS.length - 1} step="1" value={index}
+          onInput={e => store.setRecordAccuracy(RECORD_ACCURACY_STEPS[Number((e.currentTarget as HTMLInputElement).value)] ?? accuracy)}
+        />
+        <span class="auto-smooth-ratio-value">{accuracy}¢</span>
+      </div>
+    </div>
+  );
+}
+
+/** Select's settings: what the transform box's arrows move by (13.24), and
+ *  Simplify's Accuracy (13.11). */
 function SelectSettings() {
   const st = store.getState();
   // One step is a semitone in 12-EDO, the same as Minor 2nd.
   const intervals = isTwelveEdo(st.tuning) && st.moveInterval !== 0 ? MOVE_INTERVALS.filter(i => i !== 0) : MOVE_INTERVALS;
   return (
+    <>
     <div class="prop-section">
       <div class="prop-label">Move by</div>
       <select
@@ -130,14 +156,17 @@ function SelectSettings() {
         {intervals.map(i => <option key={i} value={String(i)}>{moveIntervalName(i, st.tuning)}</option>)}
       </select>
     </div>
+    <AccuracySlider />
+    </>
   );
 }
 
 /** Perform's settings (BACKLOG 16.3, moved from the old Transport drawer):
  *  what sets the volume of what you play. The Perform session (16.8) gives it
  *  a clearer name. */
-function PerformSettings({ source }: { source: DynamicsSource }) {
+function PerformSettings({ source, legacy }: { source: DynamicsSource; legacy: boolean }) {
   return (
+    <>
     <div class="prop-section">
       <div class="prop-label">Dynamics</div>
       <select
@@ -153,5 +182,14 @@ function PerformSettings({ source }: { source: DynamicsSource }) {
         <option value="key-swell">Key swell (hold F)</option>
       </select>
     </div>
+    <AccuracySlider />
+    {/* 13.11, testing only: removed before the PR. */}
+    <div class="prop-section">
+      <label class="prop-radio" title="Testing: record with the old fit (RDP, flat handles) to compare">
+        <input type="checkbox" id="record-fit-legacy" checked={legacy}
+          onChange={e => store.setRecordFitLegacy((e.currentTarget as HTMLInputElement).checked)} /> Old fit (testing)
+      </label>
+    </div>
+    </>
   );
 }

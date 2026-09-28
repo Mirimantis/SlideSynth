@@ -3,7 +3,7 @@ import { curveFromRecording, pitchPoints, applyTransformToCurve, deepCopyPoints,
 import { createComposition } from './composition';
 import { createLane, createLanePoint } from './lane';
 import { pointSelectionOf } from './point-selection';
-import { getLane, deepCopyLanes } from './lane';
+import { getLane, deepCopyLanes, evaluateLaneAtBeat } from './lane';
 
 describe('curveFromRecording — volume lane density', () => {
   it('collapses constant volume to exactly 2 points, independent of pitch point count', () => {
@@ -62,17 +62,17 @@ describe('curveFromRecording — volume lane density', () => {
     expect(pitchPoints(curve)).toHaveLength(2); // flat pitch stays 2 points
 
     const volumeLane = getLane(curve, 'volume')!;
-    expect(volumeLane.points.length).toBeGreaterThan(2);
-    // The peak of the swell is represented, not averaged away.
-    const peak = Math.max(...volumeLane.points.map(p => p.position.y));
-    expect(peak).toBeGreaterThan(0.9);
+    // The swell's shape survives (13.11: sloped handles can carry an arch
+    // with few points), within the volume tolerance everywhere.
+    for (const s of samples) expect(Math.abs(evaluateLaneAtBeat(volumeLane, s.beat) - s.volume)).toBeLessThan(0.05);
+    expect(evaluateLaneAtBeat(volumeLane, 1)).toBeGreaterThan(0.9);
     // Endpoints stay pinned to the note's span and to what was played.
     expect(volumeLane.points[0]!.position.x).toBe(0);
     expect(volumeLane.points[volumeLane.points.length - 1]!.position.x).toBe(2);
     expect(volumeLane.points[0]!.position.y).toBeCloseTo(0.15, 6);
   });
 
-  it('leaves swell endpoints sharp and smooths only interior points', () => {
+  it('keeps the played end values of a swell', () => {
     const samples: RecordedSample[] = [];
     for (let i = 0; i <= 20; i++) {
       const t = i / 20;
@@ -80,9 +80,10 @@ describe('curveFromRecording — volume lane density', () => {
     }
     const volumeLane = getLane(curveFromRecording(samples)!, 'volume')!;
     const last = volumeLane.points.length - 1;
-    expect(volumeLane.points[0]!.handleOut).toBeNull();
-    expect(volumeLane.points[last]!.handleIn).toBeNull();
-    expect(volumeLane.points[1]!.handleOut).not.toBeNull();
+    expect(volumeLane.points[0]!.position.y).toBeCloseTo(0.1, 6);
+    expect(volumeLane.points[last]!.position.y).toBeCloseTo(0.1, 6);
+    expect(volumeLane.points[0]!.handleIn).toBeNull();
+    expect(volumeLane.points[last]!.handleOut).toBeNull();
   });
 
   it('clamps volume to [0,1]', () => {

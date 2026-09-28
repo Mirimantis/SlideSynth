@@ -9,6 +9,7 @@ import {
   smoothLaneHandles, sharpenLaneHandles, repositionLaneX,
 } from './lane';
 import { AUTO_SMOOTH_X_RATIO, MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
+import { fitSamples, fittedLanePoints, RECORD_ACCURACY_DEFAULT, VOLUME_FIT_TOLERANCE } from './fit';
 
 // The functions here are the PITCH-LANE view of a curve: the main canvas edits
 // the mandatory pitch lane (lanes[0]) through these curve-level wrappers, while
@@ -452,23 +453,59 @@ function rdpSimplify(
   return [first, last];
 }
 
+/** How a take becomes a curve (13.11). */
+export interface RecordingFit {
+  /** The most any pitch sample may be off, in cents. */
+  accuracyCents?: number;
+  /** Testing only (13.11): the old RDP fit with flat handles, for comparison. */
+  legacy?: boolean;
+}
+
 /**
- * Build an editable BezierCurve from glissandograph recording samples.
- * Runs RDP simplification with separate beat/cents tolerances, enforces
- * monotonic X (>= 0.001 apart), applies horizontal auto-smooth handles.
- * Returns null if the gesture was too short (< 0.05 beats) or yielded < 2 points.
- *
- * Pitch and volume are simplified independently (see `volumeLaneFromRecording`).
+ * Build an editable BezierCurve from glissandograph recording samples (and a
+ * MIDI import's pitch bend). The fitter (13.11, `model/fit.ts`) places points
+ * with sloped handles until every sample is within the Accuracy; volume is
+ * fitted on its own terms. Returns null if the gesture was too short
+ * (< 0.05 beats) or yielded < 2 points.
  */
-export function curveFromRecording(
+export function curveFromRecording(samples: RecordedSample[], fit: RecordingFit = {}): BezierCurve | null {
+  if (samples.length < 2) return null;
+  const duration = samples[samples.length - 1]!.beat - samples[0]!.beat;
+  if (duration < 0.05) return null;
+  if (fit.legacy) return legacyCurveFromRecording(samples);
+
+  // Strictly increasing beats (drop samples too close to their predecessor).
+  const kept: RecordedSample[] = [];
+  for (const s of samples) {
+    const prev = kept[kept.length - 1];
+    if (!prev || s.beat - prev.beat >= 0.001) kept.push(s);
+  }
+  if (kept.length < 2) return null;
+  const xs = kept.map(s => s.beat);
+
+  const curve = createCurve();
+  const pitch = pitchLane(curve);
+  pitch.points = fittedLanePoints(pitch, fitSamples(xs, kept.map(s => clampToRange(pitch, s.note)), {
+    tolerance: fit.accuracyCents ?? RECORD_ACCURACY_DEFAULT,
+  }));
+  const volume = createLane('volume');
+  volume.points = fittedLanePoints(volume, fitSamples(xs, kept.map(s => clampToRange(volume, s.volume)), {
+    tolerance: VOLUME_FIT_TOLERANCE,
+  }));
+  curve.lanes.push(volume);
+  return curve;
+}
+
+/**
+ * The fit before 13.11, kept only while testing the new one: RDP with
+ * separate beat/cents tolerances, then flat auto-smooth handles.
+ */
+function legacyCurveFromRecording(
   samples: RecordedSample[],
   toleranceBeats: number = 0.03,
   toleranceCents: number = 15,
   toleranceVolume: number = 0.04,
 ): BezierCurve | null {
-  if (samples.length < 2) return null;
-  const duration = samples[samples.length - 1]!.beat - samples[0]!.beat;
-  if (duration < 0.05) return null;
 
   const pitchXY = samples.map(s => ({ x: s.beat, y: s.note }));
   const simplified = rdpSimplify(pitchXY, toleranceBeats, toleranceCents);

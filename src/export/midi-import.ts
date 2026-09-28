@@ -281,8 +281,8 @@ function collectBendTimelines(tracks: MidiEvent[][]): {
  * no overlapping bend collapse to the legacy 2-point flat curve.
  *
  * Bend points are collected as RecordedSamples and run through
- * curveFromRecording() so they share RDP simplification + auto-smooth handle
- * generation with the live-record path. A 256-point cap protects the audio
+ * curveFromRecording() so they share the recording fitter (13.11, at the
+ * default Accuracy) with the live-record path. A 256-point cap protects the audio
  * scheduler against pathological dense-vibrato files.
  */
 function noteWithBendToCurve(
@@ -344,7 +344,7 @@ function noteWithBendToCurve(
     samples.push({ beat: endBeat, note: bendToY(lastBend), volume });
   }
 
-  const simplified = curveFromRecording(samples, 0.03, 15);
+  const simplified = curveFromRecording(samples);
   if (!simplified || pitchPoints(simplified).length < 2) {
     // Bend gesture too short for curveFromRecording's duration filter; emit a
     // direct 2-point curve at the bent endpoints so we don't lose the note.

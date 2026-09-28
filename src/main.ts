@@ -1604,6 +1604,10 @@ const composeEngine = createPerformanceEngine({
   recordingBufferMax: 3600,
   loopWrapThresholdBeats: 0.5,
   keepBufferMs: KEEP_BUFFER_MS,
+  recordingFit: () => {
+    const st = store.getState();
+    return { accuracyCents: st.recordAccuracy, legacy: st.recordFitLegacy };
+  },
 });
 
 const magneticState = createMagneticState();
@@ -2698,7 +2702,7 @@ fgCanvas.addEventListener('contextmenu', (e) => {
     onClick: () => commands.run(id),
   });
   openContextMenu(e.pageX, e.pageY,
-    (['edit.smooth', 'edit.sharpen', 'edit.join', 'edit.group', 'edit.ungroup'] as const).map(item));
+    (['edit.smooth', 'edit.sharpen', 'edit.simplify', 'edit.join', 'edit.group', 'edit.ungroup'] as const).map(item));
 });
 
 // ── Shared HUD + countdown DOM updaters ─────────────────────────
@@ -3377,7 +3381,7 @@ const MENUS: readonly MenuSpec[] = [
       'edit.join', 'edit.group', 'edit.ungroup', '-',
       'edit.moveUp', 'edit.moveDown', 'edit.copyUp', 'edit.copyDown', '-',
       'edit.sendToGuides', 'edit.copyToGuides', '-',
-      'edit.smooth', 'edit.sharpen',
+      'edit.smooth', 'edit.sharpen', 'edit.simplify',
     ],
   },
   {
