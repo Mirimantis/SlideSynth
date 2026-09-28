@@ -27,7 +27,7 @@ export const CANVAS_TOKENS = [
   'transform-fill', 'transform-outline', 'transform-handle', 'transform-handle-active', 'transform-handle-edge',
   'transform-arrow', 'ungroup-bg', 'ungroup-edge', 'ungroup-text', 'group-outline', 'group-label',
   'marquee-fill', 'marquee-stroke', 'scissors-dot', 'scissors-dot-edge',
-  'nudge-band', 'nudge-band-edge', 'nudge-point',
+  'nudge-band', 'nudge-band-edge', 'nudge-point', 'nudge-ring',
   // Guides and loop
   'guide', 'guide-selected', 'guide-label-bg', 'guide-handle-bg', 'loop-in', 'loop-out', 'loop-range',
   // Playhead, planchette, metronome

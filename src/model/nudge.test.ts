@@ -91,7 +91,7 @@ describe('Smooth', () => {
   });
 
   it('the brush shows the points it reaches, by weight', () => {
-    const reach = pointsInReach(curveAt([0, 6000], [1, 6000], [2, 6000]), 1, 1);
+    const reach = pointsInReach([0, 1, 2], 1, 1);
     expect(reach).toEqual([{ index: 1, weight: 1 }]);
   });
 });
@@ -126,6 +126,19 @@ describe('a Nudge stroke on the canvas', () => {
     expect(moved % 100).not.toBe(0);   // not on a staff line: no snap
     history.undo();
     expect(pitchPoints(curve())[1]!.position.y).toBe(6000);
+  });
+
+  it('the brush follows the cursor during a stroke, unsnapped (for the highlight and ring)', () => {
+    store.setNudgeAxes('both');
+    const p = vp.worldToScreen(2, 6000);
+    interaction.input.down(at(p.sx, p.sy));
+    interaction.input.move(at(p.sx + 30, p.sy - 7));
+    const cursor = interaction.cursorWorld!;
+    expect(cursor.x).toBeCloseTo(vp.screenToWorld(p.sx + 30, 0).wx, 6);
+    expect(cursor.y % 100).not.toBe(0);
+    // Push's band moves by the time shift so far.
+    expect(interaction.nudgeDrag!.dx).toBeCloseTo(30 / vp.state.zoomX, 6);
+    interaction.input.up(at(p.sx + 30, p.sy - 7));
   });
 
   it('a press without a drag leaves no undo step', () => {

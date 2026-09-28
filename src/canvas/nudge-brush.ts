@@ -1,7 +1,6 @@
 import type { BezierCurve } from '../types';
 import type { Viewport } from './viewport';
 import { pitchPoints } from '../model/curve';
-import { pointsInReach } from '../model/nudge';
 import { themeColor } from '../theme/theme';
 
 /**
@@ -15,6 +14,9 @@ export function renderNudgeBrush(
   curve: BezierCurve,
   centerX: number,
   radius: number,
+  /** The points to light and their weights: those in reach while hovering or
+   *  smoothing, the ones being pushed during a Push. */
+  reach: readonly { index: number; weight: number }[],
   top: number,
   height: number,
 ): void {
@@ -31,13 +33,25 @@ export function renderNudgeBrush(
 
   const points = pitchPoints(curve);
   ctx.fillStyle = themeColor('nudge-point');
-  for (const { index, weight } of pointsInReach(curve, centerX, radius)) {
-    const p = points[index]!.position;
+  for (const { index, weight } of reach) {
+    const p = points[index]?.position;
+    if (!p) continue;
     const s = vp.worldToScreen(p.x, p.y);
     ctx.globalAlpha = 0.25 + 0.75 * weight;
     ctx.beginPath();
     ctx.arc(s.sx, s.sy, 2 + 2.5 * weight, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+/** A thin, faint ring round the cursor at the brush's size. */
+export function renderNudgeRing(ctx: CanvasRenderingContext2D, sx: number, sy: number, radiusPx: number): void {
+  ctx.save();
+  ctx.strokeStyle = themeColor('nudge-ring');
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.restore();
 }

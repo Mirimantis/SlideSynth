@@ -298,7 +298,7 @@ function createInitialState(): RawState {
     autoSmoothXRatio: Math.max(0, Math.min(1, loadNumberPref(AUTO_SMOOTH_X_RATIO_STORAGE_KEY, AUTO_SMOOTH_X_RATIO))),
     moveInterval: validMoveInterval(loadNumberPref(MOVE_INTERVAL_STORAGE_KEY, DEFAULT_MOVE_INTERVAL)),
     nudgeMode: loadStringPref(NUDGE_MODE_STORAGE_KEY, NUDGE_MODES, 'push'),
-    nudgeAxes: loadStringPref(NUDGE_AXES_STORAGE_KEY, NUDGE_AXES, 'pitch'),
+    nudgeAxes: loadStringPref(NUDGE_AXES_STORAGE_KEY, NUDGE_AXES, 'both'),
     nudgeSize: clampNudgeSize(loadNumberPref(NUDGE_SIZE_STORAGE_KEY, NUDGE_SIZE_DEFAULT)),
     nudgeStrength: Math.max(0.05, Math.min(1, loadNumberPref(NUDGE_STRENGTH_STORAGE_KEY, NUDGE_STRENGTH_DEFAULT))),
     dynamicsSource: loadStringPref(DYNAMICS_SOURCE_STORAGE_KEY, DYNAMICS_SOURCES, 'fixed'),

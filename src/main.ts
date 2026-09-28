@@ -10,7 +10,8 @@ import { renderTransformBox } from './canvas/transform-box-renderer';
 import { outlinedGroups, renderGroupOutlines } from './canvas/group-outline';
 import { renderMarquee } from './canvas/marquee-renderer';
 import { renderProjection, renderProjectionSourceHighlight, renderPrismDrawPreview } from './canvas/projection-renderer';
-import { renderNudgeBrush } from './canvas/nudge-brush';
+import { renderNudgeBrush, renderNudgeRing } from './canvas/nudge-brush';
+import { pointsInReach } from './model/nudge';
 import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuideHandle, renderGuides } from './canvas/guides';
@@ -3094,15 +3095,35 @@ function draw() {
     );
   }
 
-  // The Nudge brush (13.26): over the curve being nudged, or the one hovered.
-  // Smooth's centre follows the cursor; Push's stays where the press was.
+  // The Nudge brush (13.26): over the curve being nudged, or the one hovered,
+  // moving with the cursor. During a Push the lit points are the ones being
+  // moved, by the weight they had when the stroke began. A faint ring round the
+  // cursor shows the size.
   if (state.activeTool === 'nudge' && !state.performMode) {
     const drag = interaction.nudgeDrag;
-    const target = drag
-      ? { curveId: drag.curveId, centerX: state.nudgeMode === 'push' ? drag.centerX : interaction.cursorWorld?.x ?? drag.centerX, radius: drag.radius }
-      : toolHoverVisible ? interaction.nudgeHover : null;
-    const curve = target && comp.tracks.flatMap(t => t.curves).find(c => c.id === target.curveId);
-    if (target && curve) renderNudgeBrush(fgCtx, viewport, curve, target.centerX, target.radius, RULER_HEIGHT, rect.height);
+    const cursor = interaction.cursorWorld;
+    if (drag) {
+      const curve = comp.tracks.flatMap(t => t.curves).find(c => c.id === drag.curveId);
+      if (curve) {
+        const push = state.nudgeMode === 'push';
+        const centerX = push ? drag.centerX + drag.dx : cursor?.x ?? drag.centerX;
+        const reach = push
+          ? pointsInReach(drag.orig.map(p => p.position.x), drag.centerX, drag.radius)
+          : pointsInReach(pitchPoints(curve).map(p => p.position.x), centerX, drag.radius);
+        renderNudgeBrush(fgCtx, viewport, curve, centerX, drag.radius, reach, RULER_HEIGHT, rect.height);
+      }
+    } else if (toolHoverVisible && interaction.nudgeHover) {
+      const hover = interaction.nudgeHover;
+      const curve = comp.tracks.flatMap(t => t.curves).find(c => c.id === hover.curveId);
+      if (curve) {
+        const reach = pointsInReach(pitchPoints(curve).map(p => p.position.x), hover.centerX, hover.radius);
+        renderNudgeBrush(fgCtx, viewport, curve, hover.centerX, hover.radius, reach, RULER_HEIGHT, rect.height);
+      }
+    }
+    if (cursor && (drag || toolHoverVisible)) {
+      const s = viewport.worldToScreen(cursor.x, cursor.y);
+      renderNudgeRing(fgCtx, s.sx, s.sy, state.nudgeSize);
+    }
   }
 
   // Scissors preview dot

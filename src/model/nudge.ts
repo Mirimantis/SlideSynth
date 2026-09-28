@@ -21,7 +21,7 @@ export const NUDGE_MODES: readonly NudgeMode[] = ['push', 'smooth'];
 /** Brush size (the reach each side of the cursor), in screen pixels. */
 export const NUDGE_SIZE_MIN = 8;
 export const NUDGE_SIZE_MAX = 600;
-export const NUDGE_SIZE_DEFAULT = 60;
+export const NUDGE_SIZE_DEFAULT = 100;
 export const NUDGE_STRENGTH_DEFAULT = 0.5;
 
 /** Closest two points may come in time, in beats: they never pass or meet. */
@@ -165,13 +165,13 @@ function slopeHandles(curve: BezierCurve, i: number, ratio: number): void {
   }
 }
 
-/** The points of a curve within a brush, with their weights, for drawing the
- *  brush's highlight. */
-export function pointsInReach(curve: BezierCurve, centerX: number, radius: number): { index: number; weight: number }[] {
+/** Which of these points (by their beats) a brush reaches, with their
+ *  weights, for drawing its highlight. */
+export function pointsInReach(xs: readonly number[], centerX: number, radius: number): { index: number; weight: number }[] {
   if (radius <= 0) return [];
   const out: { index: number; weight: number }[] = [];
-  pitchLane(curve).points.forEach((p, index) => {
-    const weight = nudgeWeight((p.position.x - centerX) / radius);
+  xs.forEach((x, index) => {
+    const weight = nudgeWeight((x - centerX) / radius);
     if (weight > 0) out.push({ index, weight });
   });
   return out;

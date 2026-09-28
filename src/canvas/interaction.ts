@@ -120,6 +120,8 @@ export interface InteractionState {
     lastSx: number;
     lastSy: number;
     moved: boolean;
+    /** Push's time shift so far (0 in pitch), so the brush's band follows. */
+    dx: number;
   } | null;
   /** The curve under the Nudge brush while hovering, for its highlight. */
   nudgeHover: { curveId: string; centerX: number; radius: number } | null;
@@ -276,6 +278,7 @@ export function createInteraction(
       lastSx: sx,
       lastSy: sy,
       moved: false,
+      dx: 0,
     };
     istate.nudgeHover = null;
     canvas.style.cursor = 'grabbing';
@@ -294,6 +297,7 @@ export function createInteraction(
       if (axes === 'both' && shift) axes = Math.abs(dx * vp.state.zoomX) > Math.abs(dy * vp.state.zoomY) ? 'time' : 'pitch';
       if (axes === 'pitch') dx = 0;
       if (axes === 'time') dy = 0;
+      drag.dx = dx;
       store.mutate(() => { moved = pushCurve(curve, drag.orig, drag.centerX, drag.radius, dx, dy); });
     } else {
       // Smooth works where the brush is now, by how far it rubbed.
@@ -324,8 +328,11 @@ export function createInteraction(
       return;
     }
 
-    // A Nudge stroke (13.26). Never snaps.
+    // A Nudge stroke (13.26). Never snaps. The cursor is tracked here too, so
+    // the brush drawn on the canvas moves with it.
     if (istate.nudgeDrag) {
+      istate.cursorWorld = { x: raw.wx, y: raw.wy };
+      istate.cursorScreenY = sy;
       moveNudge(istate.nudgeDrag, raw, sx, sy, e.shiftKey);
       return;
     }
@@ -572,6 +579,8 @@ export function createInteraction(
         : hit === 'ungroup' ? 'Ungroup'
         : '';
     } else if (!istate.dragging && store.getState().activeTool === 'nudge') {
+      // Nudge never snaps, so its cursor (the brush's ring, the HUD) is the raw one.
+      istate.cursorWorld = { x: raw.wx, y: raw.wy };
       const hit = nudgeCurveAt({ x: raw.wx, y: raw.wy });
       istate.nudgeHover = hit ? { curveId: hit.curve.id, centerX: raw.wx, radius: store.getState().nudgeSize / vp.state.zoomX } : null;
       canvas.style.cursor = hit ? 'crosshair' : 'default';

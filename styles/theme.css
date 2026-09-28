@@ -144,6 +144,7 @@
   --nudge-band: rgba(var(--accent-rgb), 0.10);
   --nudge-band-edge: rgba(var(--accent-rgb), 0);
   --nudge-point: #fff;
+  --nudge-ring: rgba(255, 255, 255, 0.28);
 
   /* ── Canvas: guides and loop ─────────────────────────────────── */
   --guide: #7a8fa6;

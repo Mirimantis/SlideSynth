@@ -390,11 +390,12 @@ A brush for reshaping part of a busy curve, typically a recorded gravity glide w
 - **A tool, "Nudge"** (key N), in the tool strip after Select. Its settings are in the Tool panel.
 - **The brush reaches along time, on one curve.** A press picks the curve nearest the cursor (any shown track, the active track following it, as a Select click does). Points of that curve within **Size** screen pixels left and right of the cursor are in reach, however far they are in pitch; other curves, such as stacked chord voices, are never touched. Size is in pixels, like any brush, so zooming in gives finer control. **[** and **]** change it.
 - **Falloff:** a raised-cosine bell, weight 1 at the cursor to 0 at the edge. One shape for now.
-- **Moves: Pitch / Time / Both** (Tool panel; Pitch by default). With Both, Shift locks a drag to its main axis.
+- **Moves: Pitch / Time / Both** (Tool panel). With Both, Shift locks a drag to its main axis.
+- **Defaults** (set after testing): Push, Both, Size 100 px, Strength 0.50.
 - **Never snaps.** It's for fine adjustment; guides can be matched by eye.
 - **Push mode:** the drag moves each point in reach by its weight × the drag. The handles bend with the same field: each handle tip moves by its own weight, so the curve deforms smoothly instead of sliding in stiff pieces. In time, points never pass each other or change order: on the side the drag is heading, each point stops just short of the next one (which moves less), so too much time with too small a brush piles points up at the brush's leading edge, the user's call. Points outside the reach never move. Handles stay inside their segments.
 - **Smooth mode:** rubbing (dragging back and forth) relaxes the points in reach toward their neighbours, each move by its weight × a **Strength**. In pitch it irons out wobble; in time it evens out the spacing (a point moves toward the midpoint of its neighbours, so order holds by itself). Handles of the points it moves are re-smoothed (auto-smooth, the shared handle length), since their old shapes belonged to the wobble.
-- **Showing the brush:** a faint band marks the reach while hovering the curve, and the points in reach light up, stronger toward the centre.
+- **Showing the brush:** a faint band marks the reach while hovering the curve, and the points in reach light up, stronger toward the centre. Both move with the brush during a stroke (Push lights the points it's moving). A thin, faint ring round the cursor shows the size. Nudge's cursor is never snapped.
 - **Other lanes stay put:** volume and other lanes are time-locked, as with the transform box.
 - **One undo step per drag.**
 - **Related:** 13.11 (recording density and a better simplifier) gives recordings fewer, better-placed points to start with; 12.4 (raw takes).
