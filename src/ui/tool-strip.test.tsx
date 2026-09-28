@@ -54,8 +54,8 @@ describe('tool strip (BACKLOG 16.4)', () => {
     expect(strip()).toMatch(/<button[^>]*perform-entry[^>]*disabled/);
   });
 
-  it('greys every button while the left button is sounding', () => {
-    expect(strip(true).match(/disabled/g)).toHaveLength(5);
+  it('greys every button (five tools and Perform) while the left button is sounding', () => {
+    expect(strip(true).match(/disabled/g)).toHaveLength(6);
   });
 
   it('shows the chord badge on Draw and Perform only while Prism Draw is on', () => {

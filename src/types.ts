@@ -214,10 +214,10 @@ export interface TransportState {
 
 // ── Tool ────────────────────────────────────────────────────────
 
-export type ToolMode = 'draw' | 'select' | 'delete' | 'scissors';
+export type ToolMode = 'draw' | 'select' | 'nudge' | 'delete' | 'scissors';
 
 /** Tools that own cursor X motion in Idle (i.e. placing / picking / slicing curves). */
-export const XY_TOOLS: readonly ToolMode[] = ['draw', 'select', 'delete', 'scissors'];
+export const XY_TOOLS: readonly ToolMode[] = ['draw', 'select', 'nudge', 'delete', 'scissors'];
 
 // ── Performance (Perform / Record state) ────────────────────────
 
@@ -353,6 +353,12 @@ export interface AppState {
   /** What the transform box's arrows move by (13.24); see tuning.ts
    *  MoveInterval. Workspace pref (localStorage). */
   moveInterval: number;
+  /** The Nudge brush (13.26): mode, which way it moves, its size (px each
+   *  side of the cursor) and Smooth's strength. Workspace prefs. */
+  nudgeMode: 'push' | 'smooth';
+  nudgeAxes: 'pitch' | 'time' | 'both';
+  nudgeSize: number;
+  nudgeStrength: number;
   autoSmoothXRatio: number;                   // 0..1 — fraction of neighbor segment length used for Draw auto-smooth + Smooth Curve action (localStorage-backed)
   dynamicsSource: DynamicsSource;             // What drives performed volume (localStorage-backed)
   harmonicPrism: HarmonicPrismState;          // Harmonic Prism feature (chordSpec + octaveRange localStorage-backed)

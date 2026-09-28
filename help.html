@@ -468,6 +468,39 @@
     </div>
   </details>
 
+  <!-- Nudge -->
+  <h2 id="nudge">Nudge (Area Brush)</h2>
+  <p>
+    The <strong>Nudge</strong> tool (<kbd>N</kbd>) reshapes part of a curve smoothly, without
+    the kinks that dragging single points leaves. It's made for busy curves, such as a
+    recorded glide with Gravity's wobble in it.
+  </p>
+  <details>
+    <summary>Nudge details</summary>
+    <div class="detail-body">
+      <ul>
+        <li>Hover a curve: a faint band shows the brush's reach, and the points it will move
+          light up, brightest at the centre. Press on the curve to work on it (any shown track;
+          it becomes the active one). Other curves, even stacked chord voices, are never
+          touched.</li>
+        <li>The brush reaches along time: every point of that curve within <strong>Size</strong>
+          pixels left and right of the cursor, however high or low. Zoom in for finer work.
+          <kbd>[</kbd> and <kbd>]</kbd> change the size.</li>
+        <li><strong>Push</strong>: drag to move that area. Points at the cursor move fully, fading
+          smoothly to the brush's edge, and the curve bends to follow, so the glide on either side
+          stays smooth.</li>
+        <li><strong>Smooth</strong>: rub back and forth over an area to even it out. In pitch it
+          irons out wobble; in time it evens out the spacing between points.
+          <strong>Strength</strong> sets how much each rub does. The curve's ends stay put.</li>
+        <li><strong>Moves: Pitch / Time / Both</strong> chooses what changes. In time, points never
+          pass each other: pushing far with a small brush piles them up at the brush's leading
+          edge. With Both, hold <kbd>Shift</kbd> to lock a drag to one direction.</li>
+        <li>Nudge never snaps; line things up by eye (frets and pitch guides help). Each stroke
+          is one undo step. Volume and other lanes stay where they are.</li>
+      </ul>
+    </div>
+  </details>
+
   <!-- Slice -->
   <h2 id="scissors">Slice (Split Curve)</h2>
   <p>

@@ -10,6 +10,7 @@ import { renderTransformBox } from './canvas/transform-box-renderer';
 import { outlinedGroups, renderGroupOutlines } from './canvas/group-outline';
 import { renderMarquee } from './canvas/marquee-renderer';
 import { renderProjection, renderProjectionSourceHighlight, renderPrismDrawPreview } from './canvas/projection-renderer';
+import { renderNudgeBrush } from './canvas/nudge-brush';
 import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuideHandle, renderGuides } from './canvas/guides';
@@ -1147,6 +1148,9 @@ function selectTool(tool: ToolMode) {
     interaction.transformBox = null;
     store.setSelectedCurve(null);
     store.setSelectedPoint(null);
+  } else if (tool === 'nudge') {
+    // The brush works on whatever curve you press; no box in the way.
+    interaction.transformBox = null;
   } else if (tool === 'draw') {
     // Clear the transform box but keep the curve selection so Draw extends it.
     interaction.transformBox = null;
@@ -1328,6 +1332,16 @@ const commands = createCommandRegistry({
   // Not while a note is held; otherwise a tool also leaves Perform.
   'tool.draw': { run: () => chooseTool('draw'), enabled: notWhileSounding },
   'tool.select': { run: () => chooseTool('select'), enabled: notWhileSounding },
+  'tool.nudge': { run: () => chooseTool('nudge'), enabled: notWhileSounding },
+  // [ and ] resize the Nudge brush by a fifth, while it's the tool.
+  'nudge.smaller': {
+    run() { store.setNudgeSize(store.getState().nudgeSize / 1.2); },
+    enabled: () => store.getState().activeTool === 'nudge' && !store.getState().performMode,
+  },
+  'nudge.larger': {
+    run() { store.setNudgeSize(store.getState().nudgeSize * 1.2); },
+    enabled: () => store.getState().activeTool === 'nudge' && !store.getState().performMode,
+  },
   'tool.delete': { run: () => chooseTool('delete'), enabled: notWhileSounding },
   'tool.slice': { run: () => chooseTool('scissors'), enabled: notWhileSounding },
   'edit.finishCurve': {
@@ -3078,6 +3092,17 @@ function draw() {
       rect.height,
       RULER_HEIGHT,
     );
+  }
+
+  // The Nudge brush (13.26): over the curve being nudged, or the one hovered.
+  // Smooth's centre follows the cursor; Push's stays where the press was.
+  if (state.activeTool === 'nudge' && !state.performMode) {
+    const drag = interaction.nudgeDrag;
+    const target = drag
+      ? { curveId: drag.curveId, centerX: state.nudgeMode === 'push' ? drag.centerX : interaction.cursorWorld?.x ?? drag.centerX, radius: drag.radius }
+      : toolHoverVisible ? interaction.nudgeHover : null;
+    const curve = target && comp.tracks.flatMap(t => t.curves).find(c => c.id === target.curveId);
+    if (target && curve) renderNudgeBrush(fgCtx, viewport, curve, target.centerX, target.radius, RULER_HEIGHT, rect.height);
   }
 
   // Scissors preview dot

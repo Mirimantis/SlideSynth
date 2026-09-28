@@ -3,6 +3,7 @@ import { store } from '../state/store';
 import { primaryShortcut } from '../commands/catalog';
 import { DYNAMICS_SOURCES, type DynamicsSource } from '../types';
 import { MOVE_INTERVALS, isTwelveEdo, moveIntervalName } from '../tuning/tuning';
+import { NUDGE_SIZE_MAX, NUDGE_SIZE_MIN } from '../model/nudge';
 
 /**
  * Tool (BACKLOG 15.4; was Tool Properties until 16.5): the active tool's settings, or Perform's. A
@@ -13,6 +14,7 @@ export function ToolPropertyPanel() {
   const st = store.getState();
   if (st.performMode) return <PerformSettings source={st.dynamicsSource} />;
   if (st.activeTool === 'select') return <SelectSettings />;
+  if (st.activeTool === 'nudge') return <NudgeSettings />;
   if (st.activeTool !== 'draw') return <p class="placeholder-text">No settings for this tool</p>;
 
   const mode = st.drawPreviewMode;
@@ -53,6 +55,57 @@ export function ToolPropertyPanel() {
           <span class="auto-smooth-ratio-value">{ratio.toFixed(2)}</span>
         </div>
       </div>
+    </>
+  );
+}
+
+/** The Nudge brush (13.26): Push or Smooth, which way it moves, its size,
+ *  and how hard Smooth rubs. */
+function NudgeSettings() {
+  const st = store.getState();
+  const radio = <T extends string>(name: string, value: T, current: T, label: string, set: (v: T) => void, title: string) => (
+    <label class="prop-radio" title={title}>
+      <input type="radio" name={name} value={value} checked={current === value} onChange={() => set(value)} /> {label}
+    </label>
+  );
+  return (
+    <>
+      <div class="prop-section">
+        <div class="prop-label">Mode</div>
+        {radio('nudge-mode', 'push', st.nudgeMode, 'Push', m => store.setNudgeMode(m),
+          'Drag to move an area of the curve: points at the cursor move fully, fading out to the brush’s edge')}
+        {radio('nudge-mode', 'smooth', st.nudgeMode, 'Smooth', m => store.setNudgeMode(m),
+          'Rub back and forth to even out the area under the brush: wobble in pitch, uneven spacing in time')}
+      </div>
+      <div class="prop-section">
+        <div class="prop-label">Moves</div>
+        {radio('nudge-axes', 'pitch', st.nudgeAxes, 'Pitch', a => store.setNudgeAxes(a), 'Points move only in pitch; their timing stays')}
+        {radio('nudge-axes', 'time', st.nudgeAxes, 'Time', a => store.setNudgeAxes(a), 'Points move only in time, never passing each other')}
+        {radio('nudge-axes', 'both', st.nudgeAxes, 'Both', a => store.setNudgeAxes(a), 'Points move in pitch and time; hold Shift to lock a drag to one')}
+      </div>
+      <div class="prop-section">
+      <div class="prop-slider-row" title={`How far the brush reaches each side of the cursor, in screen pixels (${primaryShortcut('nudge.smaller')} / ${primaryShortcut('nudge.larger')})`}>
+        <label for="nudge-size">Size</label>
+        <input
+          type="range" id="nudge-size" class="auto-smooth-ratio-slider"
+          min={NUDGE_SIZE_MIN} max={NUDGE_SIZE_MAX} step="1" value={st.nudgeSize}
+          onInput={e => store.setNudgeSize(Number((e.currentTarget as HTMLInputElement).value))}
+        />
+        <span class="auto-smooth-ratio-value">{st.nudgeSize}px</span>
+      </div>
+      {st.nudgeMode === 'smooth' && (
+        <div class="prop-slider-row" title="How much each rub evens out the points under the brush">
+          <label for="nudge-strength">Strength</label>
+          <input
+            type="range" id="nudge-strength" class="auto-smooth-ratio-slider"
+            min="0.05" max="1" step="0.05" value={st.nudgeStrength}
+            onInput={e => store.setNudgeStrength(Number((e.currentTarget as HTMLInputElement).value))}
+          />
+          <span class="auto-smooth-ratio-value">{st.nudgeStrength.toFixed(2)}</span>
+        </div>
+      )}
+      </div>
+      <p class="placeholder-text">Never snaps. One undo step per stroke.</p>
     </>
   );
 }

@@ -10,6 +10,7 @@ import { Icon } from './icon';
 import { CommandButton } from './command-button';
 import iconDraw from '../assets/icons/draw.svg?raw';
 import iconSelect from '../assets/icons/select.svg?raw';
+import iconNudge from '../assets/icons/nudge.svg?raw';
 import iconDelete from '../assets/icons/delete.svg?raw';
 import iconSlice from '../assets/icons/slice.svg?raw';
 import iconPerform from '../assets/icons/perform.svg?raw';
@@ -18,6 +19,7 @@ import iconPerform from '../assets/icons/perform.svg?raw';
 export const TOOL_COMMANDS: Readonly<Record<ToolMode, CommandId>> = {
   draw: 'tool.draw',
   select: 'tool.select',
+  nudge: 'tool.nudge',
   delete: 'tool.delete',
   scissors: 'tool.slice',
 };
@@ -25,11 +27,12 @@ export const TOOL_COMMANDS: Readonly<Record<ToolMode, CommandId>> = {
 const TOOL_ICONS: Readonly<Record<ToolMode, string>> = {
   draw: iconDraw,
   select: iconSelect,
+  nudge: iconNudge,
   delete: iconDelete,
   scissors: iconSlice,
 };
 
-const TOOLS: readonly ToolMode[] = ['draw', 'select', 'delete', 'scissors'];
+const TOOLS: readonly ToolMode[] = ['draw', 'select', 'nudge', 'delete', 'scissors'];
 
 /**
  * The tool strip (BACKLOG 16.4): Draw, Select, Delete, Slice and the Perform
