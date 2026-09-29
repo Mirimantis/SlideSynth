@@ -386,7 +386,8 @@
   <h3>Recording</h3>
   <ul>
     <li><strong>R</strong> or the red <strong>Record</strong> button arms recording, switching to Perform first if you're in Compose. From Idle it runs a 3-second count-in then starts Playback; turn <strong>Count-in</strong> off in the Record button's ▾ menu to start recording straight away. If Playback is already running, it arms immediately with no countdown.</li>
-    <li>While recording, each LMB press/release captures a curve onto the selected track. The curve is simplified and auto-smoothed on release, so the result is fully editable afterward. A live trail follows the planchette as you record, showing the path being captured; on release it's replaced by the simplified curve.</li>
+    <li>While recording, each LMB press/release captures a curve onto the selected track. The take is fitted with a smooth, editable curve on release. A live trail follows the planchette as you record, showing the path being captured; on release it's replaced by the fitted curve.</li>
+    <li><strong>Accuracy</strong> (the Tool panel, in Perform) sets how closely a take is fitted: the most any moment of it may be off what you played, from 2¢ to 40¢. Tight keeps small vibrato and wobble, with more points; loose irons them out with fewer. Held notes come out exactly flat, and a vibrato's points sit on its peaks and troughs with level handles, so you can select the tops and drag them together; other points are added only where a glide needs them. A fast leap may land a few milliseconds early or late rather than collect a pile of points. The same setting is used by <strong>Simplify</strong>, so you can record tight and thin a take later.</li>
     <li><strong>Escape</strong> during the countdown or recording stops and returns to Idle.</li>
     <li>Recording continues past the composition end so you can extend phrases or capture silence; an AFK timeout stops it after 1 minute of inactivity (a warning popup appears at 30s with a countdown to the stop). The timeout is suppressed while <strong>Loop</strong> is on, while the playhead hasn't yet reached the rightmost control point (there's still existing content to record over), and while MIDI keys are being played.</li>
     <li>Looping back (loop-wrap) during recording commits the current gesture as a curve and flashes the planchette — the next pass starts a fresh curve.</li>
@@ -462,8 +463,14 @@
         <li>When a single curve is selected, drag its handles (handleIn / handleOut) to adjust curvature.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to the horizontal or vertical axis.</li>
         <li>Right-click anywhere on the canvas to open an action menu with
-            <strong>Smooth Curve</strong>, <strong>Sharpen Curve</strong>, and
+            <strong>Smooth Curve</strong>, <strong>Sharpen Curve</strong>, <strong>Simplify Curve</strong>, and
             <strong>Join</strong>; items dim when no curves are selected.</li>
+        <li><strong>Simplify Curve</strong> (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, or Simplify in the
+            Selection panel) refits the selected curves with fewer points, keeping every part of them within
+            the <strong>Accuracy</strong> (in Select's Tool panel, shared with recording). Its ends stay put.
+            Select two or more points on a curve to simplify just the stretch between them; the rest of the
+            curve isn't touched. Volume is thinned too. If the curve is already as simple as the Accuracy
+            allows, nothing changes.</li>
       </ul>
     </div>
   </details>

@@ -7,6 +7,7 @@ import {
   NUDGE_AXES, NUDGE_MODES, NUDGE_SIZE_DEFAULT, NUDGE_SIZE_MAX, NUDGE_SIZE_MIN, NUDGE_STRENGTH_DEFAULT,
   type NudgeAxes, type NudgeMode,
 } from '../model/nudge';
+import { clampRecordAccuracy, RECORD_ACCURACY_DEFAULT } from '../model/fit';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 import {
@@ -119,6 +120,8 @@ const GUIDES_VISIBLE_STORAGE_KEY = 'slidesynth.guidesVisible';
 const GUIDES_LOCKED_STORAGE_KEY = 'slidesynth.guidesLocked';
 const FRETS_VISIBLE_STORAGE_KEY = 'slidesynth.fretsVisible';
 const DYNAMICS_SOURCE_STORAGE_KEY = 'slidesynth.dynamicsSource';
+const RECORD_ACCURACY_STORAGE_KEY = 'slidesynth.recordAccuracy';
+const RECORD_FIT_LEGACY_STORAGE_KEY = 'slidesynth.recordFitLegacy';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -302,6 +305,8 @@ function createInitialState(): RawState {
     nudgeSize: clampNudgeSize(loadNumberPref(NUDGE_SIZE_STORAGE_KEY, NUDGE_SIZE_DEFAULT)),
     nudgeStrength: Math.max(0.05, Math.min(1, loadNumberPref(NUDGE_STRENGTH_STORAGE_KEY, NUDGE_STRENGTH_DEFAULT))),
     dynamicsSource: loadStringPref(DYNAMICS_SOURCE_STORAGE_KEY, DYNAMICS_SOURCES, 'fixed'),
+    recordAccuracy: clampRecordAccuracy(loadNumberPref(RECORD_ACCURACY_STORAGE_KEY, RECORD_ACCURACY_DEFAULT)),
+    recordFitLegacy: loadBoolPref(RECORD_FIT_LEGACY_STORAGE_KEY, false),
     harmonicPrism: {
       chordSpec: loadChordSpecPref(DEFAULT_CHORD_SPEC),
       projectionOctaveRange: Math.max(0, Math.min(3, Math.round(loadNumberPref(PRISM_OCTAVE_RANGE_STORAGE_KEY, 2)))),
@@ -699,6 +704,23 @@ class Store {
     this.state.dynamicsSource = source;
     saveStringPref(DYNAMICS_SOURCE_STORAGE_KEY, source);
     this.touch('dynamicsSource');
+  }
+
+  /** How closely a take (and Simplify) fits, in cents (13.11). */
+  setRecordAccuracy(cents: number) {
+    const accuracy = clampRecordAccuracy(cents);
+    if (this.state.recordAccuracy === accuracy) return;
+    this.state.recordAccuracy = accuracy;
+    saveNumberPref(RECORD_ACCURACY_STORAGE_KEY, accuracy);
+    this.touch('recordAccuracy');
+  }
+
+  /** Record with the old fit, for comparison (13.11; kept for now). */
+  setRecordFitLegacy(legacy: boolean) {
+    if (this.state.recordFitLegacy === legacy) return;
+    this.state.recordFitLegacy = legacy;
+    saveBoolPref(RECORD_FIT_LEGACY_STORAGE_KEY, legacy);
+    this.touch('recordFitLegacy');
   }
 
   setMetronomeEnabled(enabled: boolean) {

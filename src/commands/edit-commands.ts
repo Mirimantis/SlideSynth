@@ -7,15 +7,16 @@ import { history } from '../state/history';
 import { copySelectedCurves, cutSelectedCurves, pasteCurves, duplicateCurves, continueCurves, hasClipboard } from '../state/clipboard';
 import { moveSelectionByInterval, rebuildTransformBox, type InteractionState } from '../canvas/interaction';
 import { joinCurves, sharpenCurveHandles, smoothCurveHandles, pitchPoints, deleteSelectedPoints } from '../model/curve';
-import { pointCount } from '../model/point-selection';
+import { NO_POINTS, pointCount } from '../model/point-selection';
+import { simplifyCurve } from '../model/fit';
 import { assignGroup, dissolveGroup, allShareGroup, anyGrouped } from '../model/curve-groups';
 import { showToast } from '../ui/toast';
 
 /** The Edit section of the command catalog (BACKLOG 15.3): undo, clipboard,
- *  delete, join, group, smooth / sharpen. */
+ *  delete, join, group, smooth / sharpen / simplify. */
 export type EditCommandId = Extract<CommandId,
   | 'edit.undo' | 'edit.redo' | 'edit.copy' | 'edit.cut' | 'edit.paste' | 'edit.duplicate' | 'edit.continue'
-  | 'edit.delete' | 'edit.join' | 'edit.group' | 'edit.ungroup' | 'edit.smooth' | 'edit.sharpen'
+  | 'edit.delete' | 'edit.join' | 'edit.group' | 'edit.ungroup' | 'edit.smooth' | 'edit.sharpen' | 'edit.simplify'
   | 'edit.moveUp' | 'edit.moveDown' | 'edit.copyUp' | 'edit.copyDown'
   | 'edit.sendToGuides' | 'edit.copyToGuides'>;
 
@@ -257,6 +258,47 @@ export function createEditCommands(ctx: EditContext): Record<EditCommandId, Comm
         store.mutate(() => {
           for (const curve of sel.curves) sharpenCurveHandles(curve);
         });
+      },
+    },
+
+    // 13.11: refit at the Accuracy. Selected points: the span from the first
+    // to the last on each curve; otherwise whole curves.
+    'edit.simplify': {
+      enabled: () => !ctx.isPerformLocked() && (hasSelection() || pointCount(store.getState().selectedPoints) > 0),
+      run() {
+        const st = store.getState();
+        const byId = new Map(st.composition.tracks.flatMap(t => t.curves).map(c => [c.id, c]));
+        const jobs: { curve: BezierCurve; span?: { first: number; last: number } }[] = [];
+        if (pointCount(st.selectedPoints) > 0) {
+          for (const [id, indices] of st.selectedPoints) {
+            const curve = byId.get(id);
+            if (!curve || indices.size < 2) continue;
+            jobs.push({ curve, span: { first: Math.min(...indices), last: Math.max(...indices) } });
+          }
+        } else {
+          for (const curve of selectedCurves()?.curves ?? []) jobs.push({ curve });
+        }
+        if (jobs.length === 0) {
+          showToast('Select curves, or at least two points on a curve');
+          return;
+        }
+        history.snapshot();
+        let changed = false;
+        store.mutate(() => {
+          for (const { curve, span } of jobs) {
+            if (simplifyCurve(curve, st.recordAccuracy, span)) changed = true;
+          }
+        });
+        if (!changed) {
+          history.dropLastSnapshot();
+          showToast(`Already as simple as ${st.recordAccuracy}¢ allows`);
+          return;
+        }
+        // Point indices moved; keep the curves selected instead.
+        if (pointCount(st.selectedPoints) > 0) store.setSelectedPoints(NO_POINTS);
+        interaction.transformBox = null;
+        const track = activeTrack();
+        if (track) rebuildTransformBox(interaction, track);
       },
     },
   };

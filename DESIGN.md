@@ -400,6 +400,29 @@ A brush for reshaping part of a busy curve, typically a recorded gravity glide w
 - **One undo step per drag.**
 - **Related:** 13.11 (recording density and a better simplifier) gives recordings fewer, better-placed points to start with; 12.4 (raw takes).
 
+### Recording fit spec (13.11, decided 2026-09-28)
+
+How a recorded take (and a MIDI import's pitch bend) becomes an editable curve, and how an existing curve can be thinned.
+
+- **Why:** the old pipeline kept a subset of the samples (RDP, 15 ¢ / 0.03 beats) and gave every kept point **flat handles**, so the curve eased to a stop at each point. Measured on synthetic takes: a straight octave glide came out 133 ¢ off at worst, a wobbly rising glide 78 ¢; only vibrato (whose kept points are its peaks) fitted well. Denser RDP made it worse (an earlier, uncommitted attempt): more flat-handled points, more plateaus.
+- **The fitter** (`model/fit.ts`) treats pitch as a function of time:
+  - Each segment's handles sit at **⅓ of its width**, so time runs evenly along the segment and pitch is a plain cubic in time. What's fitted is each point's pitch and slope, by least squares against the samples; in and out handles share the slope, so every point is smooth. Nothing can run backward in time, and there's no iteration to go unstable.
+  - **First, the shape** (added in testing: the old fit's flat handles had a purpose). Points with **level handles** go where editing wants them, and they stay:
+    - **Holds:** a stretch at least ¼ beat long whose pitch stays inside a band (the Accuracy, but never wider than 10 ¢, or a loose Accuracy would call stretches of a vibrato holds) and doesn't drift (its trend under half the band, so a slow glide isn't made into steps) gets a point at each end, both at its average: exactly flat, so a scale can't amplify a bend in a held note, and a glide lands on it smoothly.
+    - **Peaks and troughs:** each turn that comes back by more than twice the Accuracy (smaller ones fit inside the band anyway) gets a point on its extreme. A vibrato's tops can be selected and dragged together, and level handles follow a sine within about 1 % of its swing.
+  - **Then the cleanup:** sloped points are added where the error is worst: fit, add a point at the worst sample of every segment still out of tolerance, refit, until every sample is within **Accuracy**.
+  - **Sloped points are spaced out** (added in testing: they clustered beside the level points): a new one goes at least a third of the way into the gap it splits, and never nearer its neighbours than 1/16 beat, so handles are longer and easier to grab, and moving one leaves its neighbours' shape alone. Where a gap is too short to split, a little fit is given up. (1/8 beat was tried: a springy leap then missed by ~50 ¢.)
+  - **Error is measured in cents** (what's heard), with a little timing slack (0.01 beats, found in building: 0.03 excused several cents on ordinary glides) on steep parts, so a fast leap doesn't collect a pile of points.
+  - **Then sloped points are taken out** where the few segments round them can be refitted without one (adding at the worst sample alone isn't economical). The shape's points stay.
+  - **The ends keep the first and last samples' values:** a take starts and ends where it was played.
+  - **No overshoot:** where a stretch of the take only rises or only falls (a leap into a held note), its segment's slopes are limited so the curve can't scoop past the samples.
+  - **Volume** uses the same fitter with its own tolerance (0.04, fixed); a steady volume stays two points.
+- **Accuracy** (Perform's settings in the Tool panel, and Select's for Simplify; one workspace pref): the most any sample may be off, from 2 ¢ (tight: keeps everything audible, including small vibrato) to 40 ¢ (loose: few points), in steps 2, 3, 4, 6, 8, 10, 15, 20, 30, 40. Default 8 ¢, to be confirmed in testing. A MIDI import uses the default.
+- **Simplify** (Edit menu, canvas right-click menu, Selection panel, Alt+Shift+S): refits the selected curves at the current Accuracy, from their own shape (sampled densely), since the raw take isn't kept. A tight take stays within a couple of cents of what was played, so refitting it is nearly the same as refitting the raw take. The curve's ends stay put. With points selected, only the span from the first to the last selected point is refitted, its ends and their slopes kept, so a busy area can be thinned without touching the rest. Volume and other lanes are refitted too. One undo step.
+- **Editing dense takes:** Nudge (13.26) for areas, Simplify to thin.
+- **Raw takes (12.4):** a tight fit may make keeping the raw samples unnecessary; 12.4 stays open until that's tried.
+- **Old fit (for now):** a switch in Perform's settings back to the old fitter, for comparison. Kept after the PR in case something else turns up (decided 2026-09-28); the new fit is meant to be permanent. Whether to remove it is decided before 16.8 (which redesigns Perform's settings) or 17.1 (which would carry the old code into the core), whichever comes first.
+
 ### Guide tracks spec (13.10, decided 2026-09-27)
 
 A curve can be a **pitch guide**: silent, drawn as scaffolding, and pulling like a fret whose pitch moves over time. It isn't a fret (a fret is one pitch), so it can't join a scale or the staff.

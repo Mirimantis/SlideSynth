@@ -223,6 +223,13 @@ function TrackProps({ track, commands }: { track: Track; commands: CommandRegist
           </CommandButton>
         </div>
       )}
+      {selected.length > 0 && (
+        <div class="prop-section">
+          <CommandButton id="edit.simplify" commands={commands} class="snap-preset-btn">
+            Simplify
+          </CommandButton>
+        </div>
+      )}
       {selected.length > 0 && <div class="panel-header" style={{ marginTop: '8px' }}>Track</div>}
       <div class="prop-section">
         <div class="prop-label">Track</div>

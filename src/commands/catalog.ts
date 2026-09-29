@@ -95,6 +95,8 @@ export const COMMANDS = [
     description: 'put a copy of the selected curves on a guide track, and keep the originals' },
   { id: 'edit.smooth', label: 'Smooth Curve', section: 'Edit', keys: ['Shift+S'], description: 'reset handles to the auto-smooth defaults' },
   { id: 'edit.sharpen', label: 'Sharpen Curve', section: 'Edit', keys: ['Alt+S'], description: 'clear all handles for sharp corners' },
+  { id: 'edit.simplify', label: 'Simplify Curve', section: 'Edit', keys: ['Alt+Shift+S'],
+    description: 'refit the selected curves (or the span between selected points) with fewer points, within the Accuracy' },
 
   // ── Harmonic Prism ──
   { id: 'prism.drawMode', label: 'Prism Draw mode', section: 'Harmonic Prism', keys: ['H'],

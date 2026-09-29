@@ -1,5 +1,5 @@
 import type { VoiceId, BezierCurve, PerformancePhase } from '../types';
-import { curveFromRecording, type RecordedSample } from '../model/curve';
+import { curveFromRecording, type RecordedSample, type RecordingFit } from '../model/curve';
 
 export interface PerformanceEngineConfig {
   countdownSeconds: number;
@@ -11,6 +11,8 @@ export interface PerformanceEngineConfig {
    *  the beat counter backwards, so beat-based ageing would misbehave at
    *  exactly the moment a looper is busiest. */
   keepBufferMs: number;
+  /** How a kept take is fitted (13.11), read when it's kept. */
+  recordingFit?: () => RecordingFit;
 }
 
 /** Hard cap on retained phrases per voice — a backstop beside time-based
@@ -190,7 +192,7 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
     const samples = p.samples.slice();
     p.committed = true;
     if (samples.length < 2) return null;
-    return curveFromRecording(samples);
+    return curveFromRecording(samples, config.recordingFit?.());
   }
 
   return {
@@ -272,7 +274,7 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
         if (p.committed) continue;
         if (p.samples.length < 2) continue;
         const samples = p.samples.slice();
-        const curve = curveFromRecording(samples);
+        const curve = curveFromRecording(samples, config.recordingFit?.());
         if (!curve) {
           // Real samples but below the minimum gesture duration — consume it so
           // a repeat press walks past instead of retrying the same scrap.

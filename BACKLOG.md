@@ -17,8 +17,8 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Quick wins:** 13.24 Transform by interval (the first half of the Projection question, 13.25), 12.3 unknown file sections round-trip.
-2. **Planning sessions, roughly by payoff:** 13.10 Curves as pitch guides (the other half of 13.25); 13.26 Area Nudge with 13.11 recording density; 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics); 13.23 Key guides, then 12.1.
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102).
+2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
 3. **Background, whenever:** 15.8, then 15.3 and 15.4.
 
 ---
@@ -336,6 +336,7 @@ Implementation comes first: block out every control so it works, then hold the d
     - **Guard** (`theme.test.ts`): no colour literal outside theme.css, except the preset tones' colours, a new tone's default and the missing-token magenta; no `var()` without a definition; every canvas token defined. Vitest now loads `styles/*.css` (`test.css.include`) so the test can read them.
     - Values are unchanged, so nothing looks different.
 - [ ] **16.8 Perform experience** *(L, own planning session — after 16.2)*
+  - **Before starting, decide on 13.11's Old fit switch** (reminder, 2026-09-28): this session redesigns Perform's settings, where the switch lives. Removing it first (`recordFitLegacy`, `legacyCurveFromRecording`) keeps it out of the redesign.
   - Make Perform feel like picking up an instrument, not sitting down in an airplane cockpit: a musical instrument with a recording studio attached, visually distinct from the compose DAW.
   - **Session inputs:**
     - how you enter and leave it: a strip button, a top-bar switch, a key, a transition;
@@ -356,6 +357,7 @@ Implementation comes first: block out every control so it works, then hold the d
 Required before any VST, VCV or hardware work starts (see [Horizon](#horizon-thinking--not-ready-to-build)).
 
 - [ ] **17.1 Isolate `src/core/`** *(M)*
+  - **Before starting, decide on 13.11's Old fit switch** (reminder, 2026-09-28): the recording fit is curve math bound for the core; removing the old RDP path (`legacyCurveFromRecording`) first keeps it out of the core, 17.2's conformance suite and any port.
   - Holds cents/music math, curve evaluation + sampling, snap + magnetic physics, the gravity-map types and the `.gliss` codec.
   - No DOM, store, audio or canvas imports. Enforce this with a lint rule or a tsconfig project reference.
 - [ ] **17.2 Conformance suite** *(M)*
@@ -393,9 +395,18 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
 - [x] **13.9 Octave highlight follows the key root** *(S — done in 13.8 (b), PR #89)*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
-- [ ] **13.11 Recording simplification density** *(S–M; M–L with the simplifier, own planning session)*
+- [x] **13.11 Recording simplification density** *(M–L — planning session held 2026-09-28; PR #102)*
   - A setting to keep all recorded points, or 1/2, 1/4, 1/8, instead of today's fixed RDP fit.
   - Option to run simplification later on a kept curve (relates to 12.4 raw takes).
+  - **Spec:** [DESIGN.md › Recording fit spec](DESIGN.md#recording-fit-spec-1311-decided-2026-09-28) (planning session 2026-09-28). Decided: a least-squares fitter with sloped handles replaces RDP with flat handles; one **Accuracy** slider (2–40 ¢) instead of 1/2, 1/4, 1/8 fractions; a **Simplify** command refits existing curves (whole, or the selected span). The earlier attempt was never committed: denser RDP looked worse because every point had flat handles.
+  - **Done (PR #102):**
+    - **`model/fit.ts`** (pure, tested): `fitSamples` (least-squares cubic Hermite fit, handles at ⅓ of each segment so time is linear; greedy point insertion at the worst sample, a knot's own sample counting too; an overshoot guard (Fritsch–Carlson on segments whose samples only rise, fall or hold) with a refit of values after it; a pruning pass that removes points whose neighbourhood refits within tolerance; banded Cholesky solve), `knotsToLanePoints`, `simplifyLane` / `simplifyCurve` (refit from the lane's own shape at 64 samples a beat, whole or a span with its end values and slopes held; never adds points).
+    - **Shape pass** (added in testing: the user found sloped points at random places on a vibrato hard to edit, and held notes slightly bent): `findHolds` (band capped at 10 ¢ for pitch, no drift, ≥ ¼ beat) and `findTurns` (reversal > 2 × Accuracy) place points with level handles first; they're never pruned; pinned values and slopes come out exact. Sloped points added after go at least ⅓ into their gap and ≥ 1/16 beat from neighbours (they had clustered on the sample beside a level point).
+    - Measured on synthetic takes (old → new at 8 ¢): straight octave glide 133 ¢ → 0 ¢ off with 2 points; wobbly glide 78 ¢ → 8.6 ¢; leap into a hold 43 ¢ → 4.9 ¢, holds exactly flat, no overshoot; vibrato 5.4 ¢ with 22 points → 0.4 ¢ with 22, its 20 inner points on the peaks and troughs with level handles. A minute-long take fits in well under 0.2 s.
+    - **`curveFromRecording(samples, { accuracyCents, legacy })`**: the fitter for pitch (at the Accuracy) and volume (0.04); the performance engine reads the fit from the store when a take is kept; MIDI import uses the default.
+    - **Accuracy** (`recordAccuracy`, workspace pref, default 8 ¢): a slider in Perform's settings and Select's.
+    - **Simplify Curve** (`edit.simplify`, Alt+Shift+S): Edit menu, right-click menu, Selection panel. Selected points: the span between the first and last on each curve. One undo step; a toast when nothing can be thinned.
+    - **Kept for now (decided 2026-09-28):** "Old fit (testing)" in Perform's settings (`recordFitLegacy`, the old RDP path `legacyCurveFromRecording` in `curve.ts`), in case something else turns up. The new fit is meant to be permanent. **Reminder:** decide whether to remove it before starting 16.8 or 17.1 (both entries carry the reminder).
   - **Revisit the simplifier itself (2026-09-27):** find an algorithm that's adjustable and fits the recorded motion more accurately than today's fixed RDP fit (for example, curve fitting that places Bezier handles, rather than keeping a subset of points). An earlier attempt, with a less capable agent, was abandoned because it didn't work well; look at why before starting. Pairs with 13.26: fewer, better-placed points leave less wobble to nudge.
 - [x] **13.24 Transform by interval** *(S, PR #98)*
   - The transform box moves a selection up or down an octave. Offer other intervals too: a third, fourth, fifth, and the Prism chord's own intervals, in the current tuning's steps (as the Prism counts them, 13.8 (b)).
@@ -764,6 +775,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
 - [ ] **12.4 Raw-take retention** *(L, own planning session — after 9.3)*
   - Keep the high-rate capture alongside the fitted Bezier; see [DESIGN.md › Raw takes](DESIGN.md#raw-takes-design-framing-for-backlog-124).
   - Earlier parked exploration of a separate, non-editable raw curve type that plays its samples directly (convert-to-Bezier on demand): [.claude/plans/12.4-raw-recording-curve-type.md](.claude/plans/12.4-raw-recording-curve-type.md).
+  - **May shrink to nothing (2026-09-28, 13.11):** a tight fit (13.11's Accuracy at a few cents) plays what was played, stays editable, and can be simplified later from its own shape. An earlier, uncommitted try at keeping raw data found saves too big; its fallback was keeping every 4th sample (a quarter of the data, still too dense to hear the difference). Revisit only if the tight fit falls short.
   - **Session inputs:**
     - authority: raw is the immutable original, the edited Bezier wins playback;
     - retain kept takes only;
