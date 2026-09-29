@@ -17,8 +17,8 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Quick wins:** 13.24 Transform by interval (the first half of the Projection question, 13.25), 12.3 unknown file sections round-trip.
-2. **Planning sessions, roughly by payoff:** 13.10 Curves as pitch guides (the other half of 13.25); 13.26 Area Nudge with 13.11 recording density; 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics); 13.23 Key guides, then 12.1.
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102).
+2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
 3. **Background, whenever:** 15.8, then 15.3 and 15.4.
 
 ---
@@ -395,11 +395,11 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
 - [x] **13.9 Octave highlight follows the key root** *(S — done in 13.8 (b), PR #89)*
   - The staff highlights C lines to show octaves. In a key without C (e.g. G♯ harmonic minor) there's no octave marker at all.
   - Highlight the key's root instead.
-- [ ] **13.11 Recording simplification density** *(S–M; M–L with the simplifier, own planning session)*
+- [x] **13.11 Recording simplification density** *(M–L — planning session held 2026-09-28; PR #102)*
   - A setting to keep all recorded points, or 1/2, 1/4, 1/8, instead of today's fixed RDP fit.
   - Option to run simplification later on a kept curve (relates to 12.4 raw takes).
   - **Spec:** [DESIGN.md › Recording fit spec](DESIGN.md#recording-fit-spec-1311-decided-2026-09-28) (planning session 2026-09-28). Decided: a least-squares fitter with sloped handles replaces RDP with flat handles; one **Accuracy** slider (2–40 ¢) instead of 1/2, 1/4, 1/8 fractions; a **Simplify** command refits existing curves (whole, or the selected span). The earlier attempt was never committed: denser RDP looked worse because every point had flat handles.
-  - **Done (this PR):**
+  - **Done (PR #102):**
     - **`model/fit.ts`** (pure, tested): `fitSamples` (least-squares cubic Hermite fit, handles at ⅓ of each segment so time is linear; greedy point insertion at the worst sample, a knot's own sample counting too; an overshoot guard (Fritsch–Carlson on segments whose samples only rise, fall or hold) with a refit of values after it; a pruning pass that removes points whose neighbourhood refits within tolerance; banded Cholesky solve), `knotsToLanePoints`, `simplifyLane` / `simplifyCurve` (refit from the lane's own shape at 64 samples a beat, whole or a span with its end values and slopes held; never adds points).
     - **Shape pass** (added in testing: the user found sloped points at random places on a vibrato hard to edit, and held notes slightly bent): `findHolds` (band capped at 10 ¢ for pitch, no drift, ≥ ¼ beat) and `findTurns` (reversal > 2 × Accuracy) place points with level handles first; they're never pruned; pinned values and slopes come out exact. Sloped points added after go at least ⅓ into their gap and ≥ 1/16 beat from neighbours (they had clustered on the sample beside a level point).
     - Measured on synthetic takes (old → new at 8 ¢): straight octave glide 133 ¢ → 0 ¢ off with 2 points; wobbly glide 78 ¢ → 8.6 ¢; leap into a hold 43 ¢ → 4.9 ¢, holds exactly flat, no overshoot; vibrato 5.4 ¢ with 22 points → 0.4 ¢ with 22, its 20 inner points on the peaks and troughs with level handles. A minute-long take fits in well under 0.2 s.
