@@ -421,7 +421,7 @@ How a recorded take (and a MIDI import's pitch bend) becomes an editable curve, 
 - **Simplify** (Edit menu, canvas right-click menu, Selection panel, Alt+Shift+S): refits the selected curves at the current Accuracy, from their own shape (sampled densely), since the raw take isn't kept. A tight take stays within a couple of cents of what was played, so refitting it is nearly the same as refitting the raw take. The curve's ends stay put. With points selected, only the span from the first to the last selected point is refitted, its ends and their slopes kept, so a busy area can be thinned without touching the rest. Volume and other lanes are refitted too. One undo step.
 - **Editing dense takes:** Nudge (13.26) for areas, Simplify to thin.
 - **Raw takes (12.4):** a tight fit may make keeping the raw samples unnecessary; 12.4 stays open until that's tried.
-- **While testing only:** a switch back to the old fitter for comparison, removed before the PR.
+- **Old fit (for now):** a switch in Perform's settings back to the old fitter, for comparison. Kept after the PR in case something else turns up (decided 2026-09-28); the new fit is meant to be permanent. Whether to remove it is decided before 16.8 (which redesigns Perform's settings) or 17.1 (which would carry the old code into the core), whichever comes first.
 
 ### Guide tracks spec (13.10, decided 2026-09-27)
 

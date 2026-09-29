@@ -336,6 +336,7 @@ Implementation comes first: block out every control so it works, then hold the d
     - **Guard** (`theme.test.ts`): no colour literal outside theme.css, except the preset tones' colours, a new tone's default and the missing-token magenta; no `var()` without a definition; every canvas token defined. Vitest now loads `styles/*.css` (`test.css.include`) so the test can read them.
     - Values are unchanged, so nothing looks different.
 - [ ] **16.8 Perform experience** *(L, own planning session — after 16.2)*
+  - **Before starting, decide on 13.11's Old fit switch** (reminder, 2026-09-28): this session redesigns Perform's settings, where the switch lives. Removing it first (`recordFitLegacy`, `legacyCurveFromRecording`) keeps it out of the redesign.
   - Make Perform feel like picking up an instrument, not sitting down in an airplane cockpit: a musical instrument with a recording studio attached, visually distinct from the compose DAW.
   - **Session inputs:**
     - how you enter and leave it: a strip button, a top-bar switch, a key, a transition;
@@ -356,6 +357,7 @@ Implementation comes first: block out every control so it works, then hold the d
 Required before any VST, VCV or hardware work starts (see [Horizon](#horizon-thinking--not-ready-to-build)).
 
 - [ ] **17.1 Isolate `src/core/`** *(M)*
+  - **Before starting, decide on 13.11's Old fit switch** (reminder, 2026-09-28): the recording fit is curve math bound for the core; removing the old RDP path (`legacyCurveFromRecording`) first keeps it out of the core, 17.2's conformance suite and any port.
   - Holds cents/music math, curve evaluation + sampling, snap + magnetic physics, the gravity-map types and the `.gliss` codec.
   - No DOM, store, audio or canvas imports. Enforce this with a lint rule or a tsconfig project reference.
 - [ ] **17.2 Conformance suite** *(M)*
@@ -404,7 +406,7 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - **`curveFromRecording(samples, { accuracyCents, legacy })`**: the fitter for pitch (at the Accuracy) and volume (0.04); the performance engine reads the fit from the store when a take is kept; MIDI import uses the default.
     - **Accuracy** (`recordAccuracy`, workspace pref, default 8 ¢): a slider in Perform's settings and Select's.
     - **Simplify Curve** (`edit.simplify`, Alt+Shift+S): Edit menu, right-click menu, Selection panel. Selected points: the span between the first and last on each curve. One undo step; a toast when nothing can be thinned.
-    - **Testing only, to remove before the PR:** "Old fit (testing)" in Perform's settings (`recordFitLegacy`, the old RDP path `legacyCurveFromRecording`).
+    - **Kept for now (decided 2026-09-28):** "Old fit (testing)" in Perform's settings (`recordFitLegacy`, the old RDP path `legacyCurveFromRecording` in `curve.ts`), in case something else turns up. The new fit is meant to be permanent. **Reminder:** decide whether to remove it before starting 16.8 or 17.1 (both entries carry the reminder).
   - **Revisit the simplifier itself (2026-09-27):** find an algorithm that's adjustable and fits the recorded motion more accurately than today's fixed RDP fit (for example, curve fitting that places Bezier handles, rather than keeping a subset of points). An earlier attempt, with a less capable agent, was abandoned because it didn't work well; look at why before starting. Pairs with 13.26: fewer, better-placed points leave less wobble to nudge.
 - [x] **13.24 Transform by interval** *(S, PR #98)*
   - The transform box moves a selection up or down an octave. Offer other intervals too: a third, fourth, fifth, and the Prism chord's own intervals, in the current tuning's steps (as the Prism counts them, 13.8 (b)).

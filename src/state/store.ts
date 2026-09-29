@@ -715,7 +715,7 @@ class Store {
     this.touch('recordAccuracy');
   }
 
-  /** Testing only (13.11): record with the old fit, for comparison. */
+  /** Record with the old fit, for comparison (13.11; kept for now). */
   setRecordFitLegacy(legacy: boolean) {
     if (this.state.recordFitLegacy === legacy) return;
     this.state.recordFitLegacy = legacy;

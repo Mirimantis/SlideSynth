@@ -183,7 +183,8 @@ function PerformSettings({ source, legacy }: { source: DynamicsSource; legacy: b
       </select>
     </div>
     <AccuracySlider />
-    {/* 13.11, testing only: removed before the PR. */}
+    {/* 13.11: kept for comparison while the new fit settles; its removal is
+        decided before 16.8 or 17.1 (see BACKLOG 13.11). */}
     <div class="prop-section">
       <label class="prop-radio" title="Testing: record with the old fit (RDP, flat handles) to compare">
         <input type="checkbox" id="record-fit-legacy" checked={legacy}

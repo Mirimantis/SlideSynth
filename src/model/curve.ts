@@ -457,7 +457,7 @@ function rdpSimplify(
 export interface RecordingFit {
   /** The most any pitch sample may be off, in cents. */
   accuracyCents?: number;
-  /** Testing only (13.11): the old RDP fit with flat handles, for comparison. */
+  /** The old RDP fit with flat handles, kept for comparison for now (13.11). */
   legacy?: boolean;
 }
 
@@ -494,7 +494,7 @@ export function curveFromRecording(samples: RecordedSample[], fit: RecordingFit 
 }
 
 /**
- * The fit before 13.11, kept only while testing the new one: RDP with
+ * The fit before 13.11, kept for comparison while the new one settles: RDP with
  * separate beat/cents tolerances, then flat auto-smooth handles.
  */
 function legacyCurveFromRecording(
