@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { Lane } from '../types';
 import {
-  fitSamples, knotsToLanePoints, hermite, simplifyLane, simplifyCurve, clampRecordAccuracy,
-  FIT_SLACK_BEATS, RECORD_ACCURACY_DEFAULT, type FitKnot,
+  fitSamples, knotsToLanePoints, hermite, simplifyLane, simplifyCurve, clampRecordAccuracy, findHolds, findTurns,
+  FIT_SLACK_BEATS, RECORD_ACCURACY_DEFAULT, PITCH_HOLD_BAND_CENTS, type FitKnot,
 } from './fit';
 import { curveFromRecording, type RecordedSample } from './curve';
 import { createLane, createLanePoint, evaluateLaneAtBeat, getLane, pitchLane } from './lane';
@@ -74,7 +74,7 @@ describe('fitSamples', () => {
   it('keeps vibrato when tight and irons it out when loose', () => {
     const g = GESTURES['vibrato ±25¢']!;
     const tight = fitSamples(g.xs, g.ys, { tolerance: 2 });
-    const loose = fitSamples(g.xs, g.ys, { tolerance: 40 });
+    const loose = fitSamples(g.xs, g.ys, { tolerance: 40, holdBand: PITCH_HOLD_BAND_CENTS });
     // Ten cycles: about a point per peak and trough.
     expect(tight.length).toBeGreaterThanOrEqual(20);
     expect(tight.length).toBeLessThanOrEqual(26);
@@ -104,6 +104,47 @@ describe('fitSamples', () => {
     expect(two[1]!.y).toBeCloseTo(6100, 3);
     expect(two[0]!.slope).toBeCloseTo(100, 3);
     expect(fitSamples([0], [6000], { tolerance: 8 })).toEqual([{ x: 0, y: 6000, slope: 0 }]);
+  });
+});
+
+describe('the shape pass', () => {
+  const pitchOpts = (tolerance: number) => ({ tolerance, holdBand: Math.min(tolerance, PITCH_HOLD_BAND_CENTS) });
+
+  it('puts a vibrato\'s points on its peaks and troughs, with level handles', () => {
+    const g = GESTURES['vibrato ±25¢']!;
+    const knots = fitSamples(g.xs, g.ys, pitchOpts(8));
+    const inner = knots.slice(1, -1);
+    // Ten cycles: a peak and a trough each.
+    expect(inner).toHaveLength(20);
+    for (const k of inner) {
+      expect(k.slope).toBe(0);
+      expect(Math.abs(Math.abs(k.y - 6000) - 25)).toBeLessThan(1.5);
+    }
+  });
+
+  it('makes a held note exactly flat', () => {
+    const g = take(3, b => (b < 1 ? 6000 + 2 * Math.sin(b * 17) : 6500 + 3 * Math.sin(b * 11)));
+    const lane = laneOf(fitSamples(g.xs, g.ys, pitchOpts(8)));
+    const values = [];
+    for (let b = 1.3; b <= 3; b += 0.01) values.push(evaluateLaneAtBeat(lane, b));
+    expect(Math.max(...values) - Math.min(...values)).toBeLessThan(1e-9);
+  });
+
+  it('does not make a slow glide into steps', () => {
+    const g = take(4, b => 6000 + 20 * b);
+    expect(findHolds(g.xs, g.ys, 8)).toHaveLength(0);
+    expect(fitSamples(g.xs, g.ys, pitchOpts(8))).toHaveLength(2);
+  });
+
+  it('caps the hold band, so a loose Accuracy irons a vibrato out instead of stepping it', () => {
+    const g = GESTURES['vibrato ±25¢']!;
+    expect(fitSamples(g.xs, g.ys, pitchOpts(40))).toHaveLength(2);
+  });
+
+  it('finds turns only where the samples come back by the reversal', () => {
+    const ys = [0, 5, 10, 4, 12, 30, 20, 25, 0];
+    expect(findTurns(ys, 8)).toEqual([5]);
+    expect(findTurns(ys, 5)).toEqual([2, 3, 5, 6, 7]);
   });
 });
 
@@ -158,7 +199,7 @@ describe('simplifyLane', () => {
   it('thins a dense curve and keeps its ends', () => {
     const lane = denseLane(b => 6000 + 150 * b + 12 * Math.sin(2 * Math.PI * 3 * b));
     const before = lane.points.length;
-    expect(simplifyLane(lane, 15)).toBe(true);
+    expect(simplifyLane(lane, { tolerance: 15 })).toBe(true);
     expect(lane.points.length).toBeLessThan(before / 5);
     expect(lane.points[0]!.position).toEqual({ x: 0, y: 6000 });
     expect(lane.points[lane.points.length - 1]!.position.x).toBe(4);
@@ -170,7 +211,7 @@ describe('simplifyLane', () => {
     const from = lane.points[30]!.position.x;
     const to = lane.points[90]!.position.x;
     const slopeAtStart = (evaluateLaneAtBeat(lane, from + 1e-4) - evaluateLaneAtBeat(lane, from)) / 1e-4;
-    expect(simplifyLane(lane, 4, { from, to })).toBe(true);
+    expect(simplifyLane(lane, { tolerance: 4 }, { from, to })).toBe(true);
     const after = lane.points;
     for (let i = 0; i <= 30; i++) expect(after[i]!.position).toEqual(before[i]);
     const tail = after.length - 1;
@@ -184,7 +225,7 @@ describe('simplifyLane', () => {
     const lane = createLane('pitch');
     lane.points = knotsToLanePoints([{ x: 0, y: 6000, slope: 0 }, { x: 1, y: 6100, slope: 0 }, { x: 2, y: 6000, slope: 0 }]);
     const before = JSON.stringify(lane.points);
-    expect(simplifyLane(lane, 2)).toBe(false);
+    expect(simplifyLane(lane, { tolerance: 2 })).toBe(false);
     expect(JSON.stringify(lane.points)).toBe(before);
   });
 });

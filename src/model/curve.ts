@@ -9,7 +9,7 @@ import {
   smoothLaneHandles, sharpenLaneHandles, repositionLaneX,
 } from './lane';
 import { AUTO_SMOOTH_X_RATIO, MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
-import { fitSamples, fittedLanePoints, RECORD_ACCURACY_DEFAULT, VOLUME_FIT_TOLERANCE } from './fit';
+import { fitSamples, fittedLanePoints, laneFitOptions, RECORD_ACCURACY_DEFAULT } from './fit';
 
 // The functions here are the PITCH-LANE view of a curve: the main canvas edits
 // the mandatory pitch lane (lanes[0]) through these curve-level wrappers, while
@@ -485,13 +485,10 @@ export function curveFromRecording(samples: RecordedSample[], fit: RecordingFit 
 
   const curve = createCurve();
   const pitch = pitchLane(curve);
-  pitch.points = fittedLanePoints(pitch, fitSamples(xs, kept.map(s => clampToRange(pitch, s.note)), {
-    tolerance: fit.accuracyCents ?? RECORD_ACCURACY_DEFAULT,
-  }));
+  const accuracy = fit.accuracyCents ?? RECORD_ACCURACY_DEFAULT;
+  pitch.points = fittedLanePoints(pitch, fitSamples(xs, kept.map(s => clampToRange(pitch, s.note)), laneFitOptions(pitch, accuracy)));
   const volume = createLane('volume');
-  volume.points = fittedLanePoints(volume, fitSamples(xs, kept.map(s => clampToRange(volume, s.volume)), {
-    tolerance: VOLUME_FIT_TOLERANCE,
-  }));
+  volume.points = fittedLanePoints(volume, fitSamples(xs, kept.map(s => clampToRange(volume, s.volume)), laneFitOptions(volume, accuracy)));
   curve.lanes.push(volume);
   return curve;
 }

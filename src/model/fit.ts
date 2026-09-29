@@ -8,8 +8,15 @@ import { clampToRange, evaluateLaneAtBeat, pitchLane } from './lane';
  * curve whose handles sit at ⅓ of each segment's width. That makes time run
  * evenly along a segment, so the segment is a plain cubic in time (a cubic
  * Hermite piece) and the fit is linear: each point's value and slope, by least
- * squares. Points are added where the error is worst until every sample is
- * within the tolerance. Pure.
+ * squares.
+ *
+ * Two passes. First the shape: a hold (a stretch that stays inside the
+ * tolerance band, without drifting) gets a point at each end, both at its
+ * average with flat handles, so it's exactly flat; each peak and trough gets a
+ * point with a flat handle, so a vibrato's tops can be selected and dragged
+ * together. Those points stay. Then the cleanup: sloped points are added where
+ * the error is worst until every sample is within the tolerance, and those
+ * that turn out not to be needed are taken out again. Pure.
  */
 
 /** A fitted point: where it is, and the curve's slope there (value per beat). */
@@ -19,11 +26,14 @@ export interface FitKnot {
   slope: number;
 }
 
-/** A point the fit must keep: its value, and its slope when given. */
+/** What a fitted point must keep: its value, its slope, or both. */
 export interface FitPin {
-  y: number;
+  y?: number;
   slope?: number;
 }
+
+/** Rules for fitted points, by sample index. */
+type Rules = ReadonlyMap<number, FitPin>;
 
 export interface FitOptions {
   /** The most any sample may be off, in the samples' own units. */
@@ -38,6 +48,11 @@ export interface FitOptions {
   pinEnd?: FitPin;
   /** Stop adding points here (a safety net, not a density setting). */
   maxPoints?: number;
+  /** The shape pass (holds and turns with flat handles). On by default. */
+  shape?: boolean;
+  /** How far a hold's samples may spread (default: the tolerance). A loose
+   *  tolerance with no cap would call stretches of a vibrato holds. */
+  holdBand?: number;
 }
 
 /** Accuracy choices, in cents: the most any sample of a take may be off. */
@@ -57,6 +72,16 @@ export function laneTolerance(lane: Lane, accuracyCents: number): number {
   return lane.type === 'pitch' ? accuracyCents : VOLUME_FIT_TOLERANCE;
 }
 
+/** The widest a held note's wobble can be, in cents, and still count as a
+ *  hold, whatever the Accuracy. */
+export const PITCH_HOLD_BAND_CENTS = 10;
+
+/** Fit options for a lane at this Accuracy. */
+export function laneFitOptions(lane: Lane, accuracyCents: number): FitOptions {
+  const tolerance = laneTolerance(lane, accuracyCents);
+  return lane.type === 'pitch' ? { tolerance, holdBand: Math.min(tolerance, PITCH_HOLD_BAND_CENTS) } : { tolerance };
+}
+
 export const FIT_SLACK_BEATS = 0.01;
 const FIT_MAX_POINTS = 2000;
 const FIT_MAX_ROUNDS = 60;
@@ -65,6 +90,10 @@ const PIN_WEIGHT = 1e6;
 /** Weight of the faint pull toward the samples' own shape, which only matters
  *  where a segment has too few samples to settle its ends. */
 const PRIOR_WEIGHT = 1e-3;
+/** A hold lasts at least this long, in beats. */
+export const HOLD_MIN_BEATS = 0.25;
+/** A peak or trough this close to a hold, in beats, belongs to the hold. */
+const TURN_HOLD_GAP = 0.05;
 
 /**
  * Fit samples (`xs` strictly increasing, in beats) with the fewest points that
@@ -74,12 +103,35 @@ export function fitSamples(xs: readonly number[], ys: readonly number[], opts: F
   const n = Math.min(xs.length, ys.length);
   if (n === 0) return [];
   if (n === 1) return [{ x: xs[0]!, y: opts.pinStart?.y ?? ys[0]!, slope: 0 }];
+  const tolerance = opts.tolerance;
   const slack = opts.slackBeats ?? FIT_SLACK_BEATS;
   const maxPoints = Math.max(2, opts.maxPoints ?? FIT_MAX_POINTS);
-  opts = { ...opts, pinStart: opts.pinStart ?? { y: ys[0]! }, pinEnd: opts.pinEnd ?? { y: ys[n - 1]! } };
 
-  let knots = [0, n - 1];
-  let fit = solve(xs, ys, knots, opts);
+  // The shape pass: points that stay, with their rules.
+  const rules = new Map<number, FitPin>();
+  const shape = new Set<number>([0, n - 1]);
+  if (opts.shape !== false) {
+    const holds = findHolds(xs, ys, Math.min(tolerance, opts.holdBand ?? tolerance));
+    for (const h of holds) {
+      rules.set(h.start, { y: h.level, slope: 0 });
+      rules.set(h.end, { y: h.level, slope: 0 });
+      shape.add(h.start);
+      shape.add(h.end);
+    }
+    for (const i of findTurns(ys, 2 * tolerance)) {
+      const x = xs[i]!;
+      if (holds.some(h => x >= xs[h.start]! - TURN_HOLD_GAP && x <= xs[h.end]! + TURN_HOLD_GAP)) continue;
+      rules.set(i, { slope: 0 });
+      shape.add(i);
+    }
+  }
+  // The ends: a pin the caller gives wins; else a hold's rule; else a take
+  // starts and ends where it was played.
+  rules.set(0, opts.pinStart ?? rules.get(0) ?? { y: ys[0]! });
+  rules.set(n - 1, opts.pinEnd ?? rules.get(n - 1) ?? { y: ys[n - 1]! });
+
+  let knots = [...shape].sort((p, q) => p - q);
+  let fit = solve(xs, ys, knots, rules, tolerance);
   for (let round = 0; round < FIT_MAX_ROUNDS && knots.length < maxPoints; round++) {
     const added = new Set<number>();
     for (let j = 0; j < knots.length - 1; j++) {
@@ -87,7 +139,7 @@ export function fitSamples(xs: readonly number[], ys: readonly number[], opts: F
       const b = knots[j + 1]!;
       if (b - a < 2) continue; // no sample between to add
       let worst = -1;
-      let worstErr = opts.tolerance;
+      let worstErr = tolerance;
       // The ends count too: a knot's own sample can be off (its value is a
       // compromise with its neighbours), and then the sample beside it is
       // the one to add.
@@ -99,34 +151,121 @@ export function fitSamples(xs: readonly number[], ys: readonly number[], opts: F
     }
     if (added.size === 0) break;
     knots = [...knots, ...[...added].slice(0, maxPoints - knots.length)].sort((p, q) => p - q);
-    fit = solve(xs, ys, knots, opts);
+    fit = solve(xs, ys, knots, rules, tolerance);
   }
-  return prune(xs, ys, knots, fit, opts.tolerance, slack);
+  return prune(xs, ys, knots, fit, rules, shape, tolerance, slack);
+}
+
+/**
+ * Holds: the longest stretches, at least HOLD_MIN_BEATS long, whose samples
+ * stay within a band `band` wide and don't drift (the trend across the
+ * stretch is under half the band, so a slow glide isn't made into steps).
+ * Each at its samples' average.
+ */
+export function findHolds(xs: readonly number[], ys: readonly number[], band: number): { start: number; end: number; level: number }[] {
+  const holds: { start: number; end: number; level: number }[] = [];
+  const n = ys.length;
+  let i = 0;
+  while (i < n - 1) {
+    let lo = ys[i]!;
+    let hi = lo;
+    let j = i;
+    while (j + 1 < n) {
+      const y = ys[j + 1]!;
+      if (Math.max(hi, y) - Math.min(lo, y) > band) break;
+      lo = Math.min(lo, y);
+      hi = Math.max(hi, y);
+      j++;
+    }
+    if (xs[j]! - xs[i]! >= HOLD_MIN_BEATS && Math.abs(trend(xs, ys, i, j)) <= band / 2) {
+      let sum = 0;
+      for (let k = i; k <= j; k++) sum += ys[k]!;
+      holds.push({ start: i, end: j, level: sum / (j - i + 1) });
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  return holds;
+}
+
+/** How far a least-squares line through samples i..j rises across them. */
+function trend(xs: readonly number[], ys: readonly number[], i: number, j: number): number {
+  const m = j - i + 1;
+  let sx = 0, sy = 0;
+  for (let k = i; k <= j; k++) { sx += xs[k]!; sy += ys[k]!; }
+  const mx = sx / m;
+  const my = sy / m;
+  let sxy = 0, sxx = 0;
+  for (let k = i; k <= j; k++) {
+    const dx = xs[k]! - mx;
+    sxy += dx * (ys[k]! - my);
+    sxx += dx * dx;
+  }
+  return sxx > 0 ? (sxy / sxx) * (xs[j]! - xs[i]!) : 0;
+}
+
+/**
+ * Peaks and troughs: turns where the samples come back by at least `reversal`
+ * from their extreme (smaller wobbles fit inside the tolerance anyway). The
+ * sample indices of the extremes, in order; the take's ends aren't turns.
+ */
+export function findTurns(ys: readonly number[], reversal: number): number[] {
+  const turns: number[] = [];
+  const n = ys.length;
+  let dir = 0;
+  let ext = 0;
+  let lo = 0;
+  let hi = 0;
+  for (let i = 1; i < n; i++) {
+    const y = ys[i]!;
+    if (dir === 0) {
+      if (y < ys[lo]!) lo = i;
+      if (y > ys[hi]!) hi = i;
+      if (y - ys[lo]! >= reversal) { dir = 1; ext = i; }
+      else if (ys[hi]! - y >= reversal) { dir = -1; ext = i; }
+    } else if (dir > 0) {
+      if (y >= ys[ext]!) ext = i;
+      else if (ys[ext]! - y >= reversal) { turns.push(ext); dir = -1; ext = i; }
+    } else {
+      if (y <= ys[ext]!) ext = i;
+      else if (y - ys[ext]! >= reversal) { turns.push(ext); dir = 1; ext = i; }
+    }
+  }
+  return turns;
 }
 
 /** Knots each side of a removed one that are refitted with it gone. */
 const PRUNE_REACH = 2;
 
 /**
- * Adding points where the error is worst isn't economical (a vibrato gets
- * points beside its peaks as well as on them). So try taking each point out,
- * refitting the few segments round it with their outer ends held (value and
- * slope), and keep the removal if every sample there is still within tolerance.
+ * Adding points where the error is worst isn't economical (a glide gets points
+ * beside the ones it needs). So try taking each added point out (the shape
+ * pass's stay), refitting the few segments round it with their outer ends
+ * held (value and slope), and keep the removal if every sample there is still
+ * within tolerance.
  */
-function prune(xs: readonly number[], ys: readonly number[], knots: number[], fit: FitKnot[], tolerance: number, slack: number): FitKnot[] {
+function prune(
+  xs: readonly number[], ys: readonly number[], knots: number[], fit: FitKnot[],
+  rules: Rules, shape: ReadonlySet<number>, tolerance: number, slack: number,
+): FitKnot[] {
   let j = 1;
   while (j < knots.length - 1) {
+    if (shape.has(knots[j]!)) { j++; continue; }
     const lo = Math.max(0, j - PRUNE_REACH);
     const hi = Math.min(knots.length - 1, j + PRUNE_REACH);
     const base = knots[lo]!;
     const local = knots.slice(lo, hi + 1).filter((_, q) => q !== j - lo).map(i => i - base);
     const wx = xs.slice(base, knots[hi]! + 1);
     const wy = ys.slice(base, knots[hi]! + 1);
-    const trial = solve(wx, wy, local, {
-      tolerance,
-      pinStart: { y: fit[lo]!.y, slope: fit[lo]!.slope },
-      pinEnd: { y: fit[hi]!.y, slope: fit[hi]!.slope },
-    });
+    const localRules = new Map<number, FitPin>();
+    for (const i of local) {
+      const r = rules.get(i + base);
+      if (r) localRules.set(i, r);
+    }
+    localRules.set(0, { y: fit[lo]!.y, slope: fit[lo]!.slope });
+    localRules.set(local[local.length - 1]!, { y: fit[hi]!.y, slope: fit[hi]!.slope });
+    const trial = solve(wx, wy, local, localRules, tolerance);
     let ok = true;
     for (let s = 0, i = 0; i < wx.length && ok; i++) {
       while (s < local.length - 2 && i > local[s + 1]!) s++;
@@ -171,17 +310,17 @@ export function hermite(a: FitKnot, b: FitKnot, x: number): { value: number; slo
  * matrix is banded (a knot only meets its neighbours), solved by a banded
  * Cholesky.
  */
-function solve(xs: readonly number[], ys: readonly number[], knots: readonly number[], opts: FitOptions): FitKnot[] {
-  const fit = leastSquares(xs, ys, knots, opts, new Map());
-  const held = guardOvershoot(fit, ys, knots, opts);
+function solve(xs: readonly number[], ys: readonly number[], knots: readonly number[], rules: Rules, tolerance: number): FitKnot[] {
+  const fit = leastSquares(xs, ys, knots, rules, new Map());
+  const held = guardOvershoot(fit, ys, knots, rules, tolerance);
   if (held.size === 0) return fit;
-  const refit = leastSquares(xs, ys, knots, opts, held);
-  guardOvershoot(refit, ys, knots, opts);
+  const refit = leastSquares(xs, ys, knots, rules, held);
+  guardOvershoot(refit, ys, knots, rules, tolerance);
   return refit;
 }
 
 function leastSquares(
-  xs: readonly number[], ys: readonly number[], knots: readonly number[], opts: FitOptions,
+  xs: readonly number[], ys: readonly number[], knots: readonly number[], rules: Rules,
   /** Knots whose slope is held, by knot index. */
   heldSlopes: ReadonlyMap<number, number>,
 ): FitKnot[] {
@@ -236,17 +375,20 @@ function leastSquares(
     addRow([2 * j], [1], ys[i]!, PRIOR_WEIGHT);
     addRow([2 * j + 1], [1], est * scale[j]!, PRIOR_WEIGHT);
   }
-  const pin = (j: number, p: FitPin | undefined) => {
-    if (!p) return;
-    addRow([2 * j], [1], p.y, PIN_WEIGHT);
-    if (p.slope !== undefined) addRow([2 * j + 1], [1], p.slope * scale[j]!, PIN_WEIGHT);
-  };
-  pin(0, opts.pinStart);
-  pin(k - 1, opts.pinEnd);
+  for (let j = 0; j < k; j++) {
+    const r = rules.get(knots[j]!);
+    if (r?.y !== undefined) addRow([2 * j], [1], r.y, PIN_WEIGHT);
+    if (r?.slope !== undefined) addRow([2 * j + 1], [1], r.slope * scale[j]!, PIN_WEIGHT);
+  }
   for (const [j, slope] of heldSlopes) addRow([2 * j + 1], [1], slope * scale[j]!, PIN_WEIGHT);
 
   const u = bandedCholeskySolve(band, rhs, size, BW);
-  return kx.map((x, j) => ({ x, y: u[2 * j]!, slope: u[2 * j + 1]! / scale[j]! }));
+  // Pinned values and slopes come out exact (the solve only gets them close),
+  // so a hold is truly flat and a peak's handles truly level.
+  return kx.map((x, j) => {
+    const r = rules.get(knots[j]!);
+    return { x, y: r?.y ?? u[2 * j]!, slope: r?.slope ?? heldSlopes.get(j) ?? u[2 * j + 1]! / scale[j]! };
+  });
 }
 
 /** Solve N u = rhs for a symmetric positive-definite N in upper band storage
@@ -288,16 +430,16 @@ function bandedCholeskySolve(band: Float64Array, rhs: Float64Array, n: number, b
  * scoop past them (Fritsch–Carlson). A leap into a held note ends flat. Pinned
  * slopes are left alone. Returns the slopes it changed, by knot index.
  */
-function guardOvershoot(fit: FitKnot[], ys: readonly number[], knots: readonly number[], opts: FitOptions): Map<number, number> {
+function guardOvershoot(fit: FitKnot[], ys: readonly number[], knots: readonly number[], rules: Rules, tolerance: number): Map<number, number> {
   const k = fit.length;
   const changed = new Map<number, number>();
-  const fixed = (j: number) => (j === 0 && opts.pinStart?.slope !== undefined) || (j === k - 1 && opts.pinEnd?.slope !== undefined);
+  const fixed = (j: number) => rules.get(knots[j]!)?.slope !== undefined;
   const set = (j: number, slope: number) => {
     if (fixed(j) || slope === fit[j]!.slope) return;
     fit[j]!.slope = slope;
     changed.set(j, slope);
   };
-  const give = opts.tolerance / 2;
+  const give = tolerance / 2;
   for (let j = 0; j < k - 1; j++) {
     const a = fit[j]!;
     const b = fit[j + 1]!;
@@ -368,7 +510,7 @@ const SIMPLIFY_MIN_SAMPLES_PER_SEGMENT = 8;
  * put. Changes nothing unless the refit has fewer points. Returns whether it
  * changed the lane.
  */
-export function simplifyLane(lane: Lane, tolerance: number, span?: { from: number; to: number }): boolean {
+export function simplifyLane(lane: Lane, opts: FitOptions, span?: { from: number; to: number }): boolean {
   const pts = lane.points;
   if (pts.length < 3) return false;
   let i0 = 0;
@@ -396,7 +538,7 @@ export function simplifyLane(lane: Lane, tolerance: number, span?: { from: numbe
 
   const inner = span && (i0 > 0 || i1 < pts.length - 1);
   const knots = fitSamples(xs, ys, {
-    tolerance,
+    ...opts,
     pinStart: { y: pts[i0]!.position.y, ...(inner && i0 > 0 ? { slope: slopeAt(lane, i0, 'out') } : {}) },
     pinEnd: { y: pts[i1]!.position.y, ...(inner && i1 < pts.length - 1 ? { slope: slopeAt(lane, i1, 'in') } : {}) },
   });
@@ -445,7 +587,7 @@ export function simplifyCurve(curve: BezierCurve, accuracyCents: number, pointSp
   }
   let changed = false;
   for (const lane of curve.lanes) {
-    if (simplifyLane(lane, laneTolerance(lane, accuracyCents), span)) changed = true;
+    if (simplifyLane(lane, laneFitOptions(lane, accuracyCents), span)) changed = true;
   }
   return changed;
 }
