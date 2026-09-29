@@ -94,6 +94,13 @@ const PRIOR_WEIGHT = 1e-3;
 export const HOLD_MIN_BEATS = 0.25;
 /** A peak or trough this close to a hold, in beats, belongs to the hold. */
 const TURN_HOLD_GAP = 0.05;
+/** An added (sloped) point goes at least this far into the gap it splits,
+ *  as a fraction of the gap, and never nearer its neighbours than
+ *  MIN_ADD_GAP_BEATS: points spaced out have longer handles, easier to grab,
+ *  and moving one leaves its neighbours' shape alone. A little fit is given up
+ *  where a gap is too short to split. */
+const ADD_FRACTION = 1 / 3;
+export const MIN_ADD_GAP_BEATS = 1 / 16;
 
 /**
  * Fit samples (`xs` strictly increasing, in beats) with the fewest points that
@@ -147,7 +154,17 @@ export function fitSamples(xs: readonly number[], ys: readonly number[], opts: F
         const e = sampleError(fit, j, xs[i]!, ys[i]!, slack);
         if (e > worstErr) { worstErr = e; worst = i; }
       }
-      if (worst >= 0) added.add(Math.min(b - 1, Math.max(a + 1, worst)));
+      if (worst < 0) continue;
+      // Not at the worst sample itself if that's near an end: into the gap.
+      const xa = xs[a]!;
+      const xb = xs[b]!;
+      const gap = Math.max((xb - xa) * ADD_FRACTION, MIN_ADD_GAP_BEATS);
+      if (xb - xa < 2 * gap) continue; // too short to split: keep the error
+      const target = Math.min(xb - gap, Math.max(xa + gap, xs[worst]!));
+      let at = worst;
+      if (xs[at]! < target) while (at < b && xs[at]! < target) at++;
+      else while (at > a && xs[at]! > target) at--;
+      if (at > a && at < b) added.add(at);
     }
     if (added.size === 0) break;
     knots = [...knots, ...[...added].slice(0, maxPoints - knots.length)].sort((p, q) => p - q);

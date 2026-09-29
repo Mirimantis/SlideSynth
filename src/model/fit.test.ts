@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Lane } from '../types';
 import {
   fitSamples, knotsToLanePoints, hermite, simplifyLane, simplifyCurve, clampRecordAccuracy, findHolds, findTurns,
-  FIT_SLACK_BEATS, RECORD_ACCURACY_DEFAULT, PITCH_HOLD_BAND_CENTS, type FitKnot,
+  FIT_SLACK_BEATS, RECORD_ACCURACY_DEFAULT, PITCH_HOLD_BAND_CENTS, MIN_ADD_GAP_BEATS, type FitKnot,
 } from './fit';
 import { curveFromRecording, type RecordedSample } from './curve';
 import { createLane, createLanePoint, evaluateLaneAtBeat, getLane, pitchLane } from './lane';
@@ -139,6 +139,26 @@ describe('the shape pass', () => {
   it('caps the hold band, so a loose Accuracy irons a vibrato out instead of stepping it', () => {
     const g = GESTURES['vibrato ±25¢']!;
     expect(fitSamples(g.xs, g.ys, pitchOpts(40))).toHaveLength(2);
+  });
+
+  it('keeps sloped points spaced out from their neighbours', () => {
+    // A lopsided vibrato on a glide, with a little noise: its peaks are
+    // sharper than level handles make them, which used to put a sloped point
+    // on the very next sample.
+    let seed = 7;
+    const noise = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) - 0.5;
+    const g = take(6, b => {
+      const p = 2 * Math.PI * 2.2 * b;
+      return 6000 + 60 * b + 22 * Math.sin(p) + 8 * Math.sin(2 * p + 1) + 2 * noise();
+    });
+    for (const tol of [4, 8]) {
+      const knots = fitSamples(g.xs, g.ys, pitchOpts(tol));
+      knots.forEach((k, j) => {
+        if (k.slope === 0 || j === 0 || j === knots.length - 1) return;
+        expect(k.x - knots[j - 1]!.x).toBeGreaterThanOrEqual(MIN_ADD_GAP_BEATS);
+        expect(knots[j + 1]!.x - k.x).toBeGreaterThanOrEqual(MIN_ADD_GAP_BEATS);
+      });
+    }
   });
 
   it('finds turns only where the samples come back by the reversal', () => {
