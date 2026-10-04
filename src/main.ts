@@ -28,7 +28,8 @@ import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
 import { createMidiInput } from './audio/midi-input';
 import { createDynamicsBus } from './audio/dynamics-bus';
-import { createMagneticState, updateMagnetic, resetMagnetic } from './utils/snap-magnetic';
+import { createMagneticState, updateMagnetic, resetMagnetic, type MagneticState } from './utils/snap-magnetic';
+import { allocateFingerVoice, edgeScrollStep, isFingerVoice } from './canvas/fingers';
 import { renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, LOOP_WRAP_FLASH_MS, PULSE_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { h, render } from 'preact';
 import { signal } from '@preact/signals-core';
@@ -83,7 +84,7 @@ import { canOpenLayer, createLayerTrack, newestLayerTrack, LAYER_TRACK_LIMIT } f
 import { findDroppablePass, dropPassCurves, type CommittedPass } from './model/pass-log';
 import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
 import { effect, watch } from './state/reactive';
-import type { AppState, Composition, ToolMode, BezierCurve, TransportState, PlanchetteState } from './types';
+import type { AppState, Composition, ToolMode, BezierCurve, TransportState, PlanchetteState, VoiceId } from './types';
 import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, isOpenEnded, performPhase, forcesScrollView } from './state/transport';
 
 // ── Theme (BACKLOG 16.7) ────────────────────────────────────────
@@ -1201,7 +1202,7 @@ function play(): void {
 function setPerformMode(on: boolean): boolean {
   const st = store.getState();
   if (st.performMode === on) return true;
-  if (composeEngine.isLmbDown()) return false;
+  if (composeEngine.isLmbDown() || fingers.size > 0) return false;
   if (!on && forcesScrollView(st.transport)) {
     showToast('Stop recording first', 2000);
     return false;
@@ -1640,7 +1641,9 @@ function magneticNowBeats(): number {
  *  tick can keep advancing the planchette pitch even when the mouse isn't moving. */
 let lastComposeSy: number | null = null;
 
-function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number; snapTarget: number | null; snapConfig: SnapConfig } {
+/** `mag` is the Gravity state of the finger this is for: the primary's, or an
+ *  extra finger's (13.33). */
+function computeComposeCursorPitch(sy: number, mag: MagneticState = magneticState): { cursorWorldY: number; snappedWorldY: number; snapTarget: number | null; snapConfig: SnapConfig } {
   const { wy } = viewport.screenToWorld(0, sy);
   const st = store.getState();
   // The same targets drawing uses (15.6): scale or chromatic lines, pitch
@@ -1679,13 +1682,13 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
     const attractor = adaptive.target !== null && adaptive.captured
       ? { target: adaptive.target, radius: adaptive.radius }
       : null;
-    const magneticPitch = updateMagnetic(magneticState, wy, magneticNowBeats(), st.magneticStrength, st.magneticSpringK, st.magneticDamping, attractor, st.magneticSpeed);
+    const magneticPitch = updateMagnetic(mag, wy, magneticNowBeats(), st.magneticStrength, st.magneticSpringK, st.magneticDamping, attractor, st.magneticSpeed);
     return { cursorWorldY: wy, snappedWorldY: magneticPitch, snapTarget, snapConfig };
   }
 
   // Non-magnetic path: instant snap (or raw cursor Y when snap is off, or no
   // attractor in None mode between guides).
-  resetMagnetic(magneticState);
+  resetMagnetic(mag);
   return { cursorWorldY: wy, snappedWorldY: snappedWy, snapTarget, snapConfig };
 }
 
@@ -1726,16 +1729,20 @@ let hapticLine: number | null = null;
  *  ones that would snap, with Snap on or off. Does nothing on a device that
  *  can't vibrate. */
 function hapticCheck() {
-  const st = store.getState();
-  if (!hapticInput || !composeEngine.isLmbDown() || !st.hapticClicks) {
+  if (!hapticInput || !composeEngine.isLmbDown() || !store.getState().hapticClicks) {
     hapticLine = null;
     return;
   }
-  const { wy, config } = hapticInput;
+  hapticLine = hapticFollow(hapticInput.wy, hapticInput.config, hapticLine);
+}
+
+/** One finger's haptic step: the line it's on after moving to `wy` (from
+ *  `held`, the line it was on), with a click if it just came onto one. */
+function hapticFollow(wy: number, config: SnapConfig, held: number | null): number | null {
   const pxPerCent = viewport.state.zoomY;
-  const step = hapticStep(wy, hapticLine, nearestSnapLine(wy, config, HAPTIC_RANGE_PX / pxPerCent), pxPerCent);
-  hapticLine = step.line;
-  if (step.click) hapticClick(st.hapticMs, performance.now());
+  const step = hapticStep(wy, held, nearestSnapLine(wy, config, HAPTIC_RANGE_PX / pxPerCent), pxPerCent);
+  if (step.click) hapticClick(store.getState().hapticMs, performance.now());
+  return step.line;
 }
 
 /** The cursor left the pitch area: the mouse's planchettes have no pitch
@@ -1802,9 +1809,10 @@ function updateHarmonyVoices(snappedBaseY: number) {
  *  still. Also updates the currently-sounding synth so the audible pitch
  *  matches. No-op when Magnetic is off. */
 function tickComposePitchMode() {
-  if (lastComposeSy === null) return;
   const st = store.getState();
   if (!st.snapEnabled || !st.magneticEnabled) return;
+  for (const f of fingers.values()) updateFinger(f);
+  if (lastComposeSy === null) return;
   composeUpdatePlanchette(lastComposeSy);
   if (composeEngine.isLmbDown()) {
     const p = store.getState().performance.planchettes[0];
@@ -1821,21 +1829,16 @@ const PERFORM_Y_EDGE_PX = 30;            // distance from edge that triggers scr
 const PERFORM_Y_PAN_PX_PER_FRAME = 4;    // peak scroll speed (at the very edge / off-canvas)
 
 function tickPerformYAutoScroll() {
-  if (!composeEngine.isLmbDown()) return;
-  if (lastComposeSy === null) return;
+  // Every finger down counts (13.33): the one nearest an edge sets the speed,
+  // and fingers at both edges cancel out. Near the top reveals higher pitches
+  // (pan world up = increase offsetY); near the bottom, or off-canvas below,
+  // lower ones.
+  const primaryHeld = composeEngine.isLmbDown() && lastComposeSy !== null;
+  const ys = [...fingers.values()].map(f => f.sy);
+  if (primaryHeld) ys.push(lastComposeSy!);
+  if (ys.length === 0) return;
   const rect = fgCanvas.getBoundingClientRect();
-  const top = RULER_HEIGHT;
-  const bottom = rect.height;
-  let dsy = 0;
-  if (lastComposeSy < top + PERFORM_Y_EDGE_PX) {
-    // Near top → reveal higher pitches above (pan world up = increase offsetY).
-    const closeness = Math.min(1, (top + PERFORM_Y_EDGE_PX - lastComposeSy) / PERFORM_Y_EDGE_PX);
-    dsy = +PERFORM_Y_PAN_PX_PER_FRAME * closeness;
-  } else if (lastComposeSy > bottom - PERFORM_Y_EDGE_PX) {
-    // Near bottom (or off-canvas below) → reveal lower pitches.
-    const closeness = Math.min(1, (lastComposeSy - (bottom - PERFORM_Y_EDGE_PX)) / PERFORM_Y_EDGE_PX);
-    dsy = -PERFORM_Y_PAN_PX_PER_FRAME * closeness;
-  }
+  const dsy = edgeScrollStep(ys, RULER_HEIGHT, rect.height, PERFORM_Y_EDGE_PX, PERFORM_Y_PAN_PX_PER_FRAME);
   if (dsy === 0) return;
   const beforeOffsetY = viewport.state.offsetY;
   viewport.panBy(0, dsy);
@@ -1844,9 +1847,11 @@ function tickPerformYAutoScroll() {
   // don't waste work re-evaluating the planchette / synth pitch.
   if (viewport.state.offsetY === beforeOffsetY) return;
   bgDirty = true;
-  // The world Y under the (unchanged screen) cursor has shifted — re-snap and
-  // re-tune the held perform tone.
-  composeUpdatePlanchette(lastComposeSy);
+  // The world Y under the (unchanged screen) fingers has shifted — re-snap and
+  // re-tune every held note, so they glide with the view.
+  for (const f of fingers.values()) updateFinger(f);
+  if (!primaryHeld) return;
+  composeUpdatePlanchette(lastComposeSy!);
   const p = store.getState().performance.planchettes[0];
   if (p?.snappedWorldY != null) updateComposePerformPitch(p.snappedWorldY);
 }
@@ -1918,8 +1923,9 @@ function stopComposePerformSounding() {
   // handled by syncHarmonyPlanchettes when playback ends or drawMode toggles
   // off; leaving the planchettes in place during continuing playback gives
   // the user persistent chord-shape feedback even between LMB presses.
-  const planchettes = store.getState().performance.planchettes;
-  for (const p of planchettes) preview.stopDrawPreview(p.voiceId);
+  // Only the button's own voices: extra fingers (13.33) and held MIDI notes
+  // play on until they're lifted.
+  for (const voiceId of lmbVoiceIds()) preview.stopDrawPreview(voiceId);
   store.setPerformLmbSounding(false);
   heldNoteRoot = null;
 }
@@ -2058,7 +2064,9 @@ function captureComposeRecordingSample() {
   // Any rolling transport captures an armed MIDI track — plain Play included,
   // which used to spawn the note planchettes but never record them (15.2).
   const midiActive = st.midiArmedTrackId !== null && isRolling(st.transport);
-  if (!lmbActive && !midiActive) return;
+  // Extra fingers (13.33) have a planchette only while they're down.
+  const fingersActive = fingers.size > 0 && isRolling(st.transport);
+  if (!lmbActive && !midiActive && !fingersActive) return;
   const beat = playback.getPositionBeats();
   // Capture every active voice (primary + any chord-cluster harmonies + every
   // held MIDI note). The engine's captureSample is keyed by voiceId and already
@@ -2067,8 +2075,9 @@ function captureComposeRecordingSample() {
   // run in parallel, recording into independent voices.
   for (const p of planchettesAsSounding(g.planchettes)) {
     if (p.snappedWorldY == null) continue;
-    const isMidiVoice = p.voiceId.startsWith('midi-');
-    if (isMidiVoice ? !midiActive : !lmbActive) continue;
+    const sourceActive = p.voiceId.startsWith('midi-') ? midiActive
+      : isFingerVoice(p.voiceId) ? fingersActive : lmbActive;
+    if (!sourceActive) continue;
     composeEngine.captureSample(p.voiceId, {
       beat,
       note: p.snappedWorldY,
@@ -2179,11 +2188,11 @@ function finalizeComposeRecordedCurves() {
 }
 
 /** Voice ids the LMB session owns (primary + harmonies), excluding MIDI voices
- *  which have their own finalize path. */
+ *  and extra fingers (13.33), which each have their own finalize path. */
 function lmbVoiceIds(): string[] {
   return store.getState().performance.planchettes
     .map(p => p.voiceId)
-    .filter(v => !v.startsWith('midi-'));
+    .filter(v => !v.startsWith('midi-') && !isFingerVoice(v));
 }
 
 /** Seal every LMB-owned phrase. Called on release, stop, and loop wrap — after
@@ -2252,20 +2261,28 @@ const passLog: CommittedPass[] = [];
  *  gesture had multiple voices. Shared by the armed-release path and
  *  retrospective keep so both commit identically — and therefore the one place
  *  layer routing (10.3) and pass registration (10.4) need to hook. */
+/** Takes that make a Prism chord: harmony voices among them. */
+function isPrismChord(finalized: ReadonlyArray<{ voiceId: string }>): boolean {
+  return finalized.some(f => parseHarmonyIndex(f.voiceId) !== null);
+}
+
 function commitFinalizedCurves(
   finalized: Array<{ voiceId: string; curve: import('./types').BezierCurve }>,
   source: import('./types').Track,
 ) {
-  const groupId = finalized.length > 1 ? createGroupId() : null;
+  // Only a Prism chord is grouped. Fingers (13.33) can't be told apart, so
+  // their takes stay separate, and so do a hand's several primary takes.
+  const groupId = isPrismChord(finalized) ? createGroupId() : null;
   store.mutate((comp) => {
     // Resolved inside the mutation so opening a layer shares the caller's
     // history snapshot: creating the track and filling it are one undo step.
     const { track, createdTrack } = resolveCommitTrack(source, comp);
+    let voiceIndex = 0;
     for (let i = 0; i < finalized.length; i++) {
       const { curve, voiceId } = finalized[i]!;
-      if (groupId) {
+      if (groupId && !isFingerVoice(voiceId)) {
         curve.groupId = groupId;
-        curve.voiceIndex = i;
+        curve.voiceIndex = voiceIndex++;
       }
       track.curves.push(curve);
       store.setPerformCurrentCurve(voiceId, curve.id);
@@ -2344,15 +2361,11 @@ function keepLastPhrase() {
   // Build curves BEFORE snapshotting: curveFromRecording produces detached
   // curves without touching the composition, so if every candidate turns out
   // too short to fit we bail without having pushed a bogus undo entry.
-  // Keep every voice that has a keepable phrase, so a chord cluster played as
-  // one gesture commits as one group. MIDI voices are excluded — they belong to
-  // the MIDI-armed track and commit on noteOff.
-  const finalized: Array<{ voiceId: string; curve: import('./types').BezierCurve }> = [];
-  for (const voiceId of composeEngine.getKeepableVoiceIds()) {
-    if (voiceId.startsWith('midi-')) continue;
-    const curve = composeEngine.keepCurve(voiceId);
-    if (curve) finalized.push({ voiceId, curve });
-  }
+  // Keep the whole last hand: every take that sounded together with the newest
+  // (13.33), so a chord cluster played as one gesture commits as one group and
+  // a multitouch hand commits all its fingers. MIDI voices are excluded — they
+  // belong to the MIDI-armed track and commit on noteOff.
+  const finalized = composeEngine.keepHand(v => !v.startsWith('midi-'));
   if (finalized.length === 0) {
     showToast('Nothing to keep', 2000);
     return;
@@ -2366,9 +2379,9 @@ function keepLastPhrase() {
   commitFinalizedCurves(finalized, track);
   const beats = curveDurationBeats(finalized[0]!.curve);
   showToast(
-    finalized.length > 1
-      ? `Kept ${finalized.length}-voice phrase (${beats.toFixed(1)} beats)`
-      : `Kept phrase (${beats.toFixed(1)} beats)`,
+    finalized.length === 1 ? `Kept phrase (${beats.toFixed(1)} beats)`
+      : isPrismChord(finalized) ? `Kept ${finalized.length}-voice phrase (${beats.toFixed(1)} beats)`
+      : `Kept ${finalized.length} phrases`,
     2000,
   );
   bgDirty = true;
@@ -2426,6 +2439,8 @@ function tickComposePerform() {
       // un-armed mirror of the armed 8.21 behaviour below.
       closeLmbPhrases();
       if (isCapturing(store.getState().transport) && composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
+      // Each held extra finger (13.33) likewise, and keeps sounding.
+      sealFingerTakes(isCapturing(store.getState().transport));
       // Loop wrap during sustained MIDI notes splits the curves at the wrap so
       // recordings don't cross the loop boundary as a single curve. Keep the
       // planchettes around so capture continues for still-held keys on the
@@ -2531,6 +2546,7 @@ function applyTransportEffects(prev: TransportState, next: TransportState, event
     if (prev.capture === 'pass-recording') {
       if (composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
       finalizeAllInFlightMidiVoices({ keepPlanchette: true });
+      sealFingerTakes(true);
     }
     showToast('Pass record cancelled', 2000);
   }
@@ -2595,6 +2611,8 @@ function endPerformSession(prev: TransportState): void {
   // Finalize any in-flight MIDI voices before tearing down — otherwise their
   // buffers would be discarded by composeEngine.stopSession() below.
   finalizeAllInFlightMidiVoices();
+  // Extra fingers (13.33) too; they play again once lifted and put back.
+  for (const [pointerId, f] of [...fingers]) releaseFinger(pointerId, f, isCapturing(prev));
   if (composeEngine.isLmbDown()) {
     stopComposePerformSounding();
   }
@@ -2655,6 +2673,7 @@ const performInput = {
   down(e: PointerEvent) {
     composeUpdatePlanchette(e.clientY - fgCanvas.getBoundingClientRect().top);
     composeEngine.onLmbDown(performance.now());
+    fingerOrder = [...fingerOrder.filter(v => v !== 'primary'), 'primary'];
     // Touching down on a line clicks too (13.35).
     hapticCheck();
     const planchette = store.getState().performance.planchettes[0];
@@ -2673,6 +2692,7 @@ const performInput = {
     // A session that ended while the button was held has already released it.
     if (!composeEngine.isLmbDown()) return;
     composeEngine.onLmbUp();
+    fingerOrder = fingerOrder.filter(v => v !== 'primary');
     // CRITICAL ORDERING: finalize BEFORE stopping synths so the planchette array
     // (and therefore the voiceIds we finalize) still contains every active voice.
     // syncHarmonyPlanchettes only removes harmonies when playback ends or drawMode
@@ -2693,12 +2713,117 @@ const performInput = {
   },
 };
 
+// ── Multitouch (BACKLOG 13.33) ─────────────────────────────────
+// While a finger plays in Perform, more fingers can join on a touch screen
+// (the router decides which). Each is its own voice with its own Gravity,
+// haptic clicks and rail marker, sounding until it lifts. The first finger
+// stays the primary, with the Prism, hover and the rest; Prism Draw ignores
+// extra fingers.
+
+/** An extra finger playing beside the primary. */
+interface Finger {
+  voiceId: VoiceId;
+  /** Screen Y of its latest move. */
+  sy: number;
+  magnetic: MagneticState;
+  /** Last snap target, for the cross flash (see prevSnapTarget). */
+  prevSnapTarget: number | null;
+  /** The line it's on, for haptic clicks (see hapticLine). */
+  hapticLine: number | null;
+}
+
+/** Extra fingers down, by pointer id. */
+const fingers = new Map<number, Finger>();
+/** Voices of the fingers down, oldest first, the primary as 'primary': the
+ *  pitch HUD shows the newest. */
+let fingerOrder: VoiceId[] = [];
+
+/** Move a finger's planchette and voice to where it is now. */
+function updateFinger(f: Finger) {
+  const { cursorWorldY, snappedWorldY, snapTarget, snapConfig } = computeComposeCursorPitch(f.sy, f.magnetic);
+  store.setPlanchetteY(f.voiceId, cursorWorldY, snappedWorldY);
+  f.hapticLine = store.getState().hapticClicks ? hapticFollow(cursorWorldY, snapConfig, f.hapticLine) : null;
+  if (f.prevSnapTarget != null && snapTarget != null && f.prevSnapTarget !== snapTarget) {
+    store.markPlanchetteCrossed(f.voiceId, Date.now());
+  }
+  f.prevSnapTarget = snapTarget;
+  if (preview.isDrawPreviewActive(f.voiceId)) preview.updateDrawPitch(snappedWorldY, f.voiceId);
+}
+
+/** Commit a finger's take while recording, as its own ungrouped curve, like
+ *  a MIDI note. Its phrase must be closed first. */
+function commitFingerTake(voiceId: VoiceId) {
+  const st = store.getState();
+  const track = st.composition.tracks.find(t => t.id === st.selectedTrackId);
+  if (!track) return;
+  const curve = composeEngine.finalizeCurve(voiceId, () => history.snapshot());
+  if (curve) commitFinalizedCurves([{ voiceId, curve }], track);
+  bgDirty = true;
+}
+
+/** Close every held finger's take (a loop wrap, a cancelled pass), committing
+ *  it when `commit`. They keep sounding into a fresh take. */
+function sealFingerTakes(commit: boolean) {
+  const now = performance.now();
+  for (const f of fingers.values()) {
+    composeEngine.closePhrase(f.voiceId, now);
+    if (commit) commitFingerTake(f.voiceId);
+  }
+}
+
+/** A finger lifted, or its session ended: close its take (committing it when
+ *  `commit`) and silence it. */
+function releaseFinger(pointerId: number, f: Finger, commit: boolean) {
+  fingers.delete(pointerId);
+  fingerOrder = fingerOrder.filter(v => v !== f.voiceId);
+  composeEngine.closePhrase(f.voiceId, performance.now());
+  if (commit) commitFingerTake(f.voiceId);
+  preview.stopDrawPreview(f.voiceId);
+  store.removePerformPlanchette(f.voiceId);
+}
+
+const fingerInput = {
+  down(e: PointerEvent): boolean {
+    const st = store.getState();
+    if (st.harmonicPrism.drawMode) return false;
+    const voiceId = allocateFingerVoice([...fingers.values()].map(f => f.voiceId));
+    const tone = getSelectedTrackTone();
+    if (!voiceId || !tone) return false;
+    const f: Finger = {
+      voiceId,
+      sy: e.clientY - fgCanvas.getBoundingClientRect().top,
+      magnetic: createMagneticState(),
+      prevSnapTarget: null,
+      hapticLine: null,
+    };
+    fingers.set(e.pointerId, f);
+    fingerOrder.push(voiceId);
+    store.addPerformPlanchette({ voiceId, trackId: st.selectedTrackId, cursorWorldY: null, snappedWorldY: null, lastCrossedAt: 0 });
+    composeEngine.markActivity(performance.now());
+    updateFinger(f);
+    const y = store.getState().performance.planchettes.find(p => p.voiceId === voiceId)?.snappedWorldY;
+    if (y != null) preview.startDrawPreview(tone, y, voiceId, dynamics.getValue(voiceId));
+    return true;
+  },
+  move(e: PointerEvent) {
+    const f = fingers.get(e.pointerId);
+    if (!f) return;
+    f.sy = e.clientY - fgCanvas.getBoundingClientRect().top;
+    composeEngine.markActivity(performance.now());
+    updateFinger(f);
+  },
+  up(e: PointerEvent) {
+    const f = fingers.get(e.pointerId);
+    if (f) releaseFinger(e.pointerId, f, isCapturing(store.getState().transport));
+  },
+};
+
 createInputRouter({
   canvas: fgCanvas,
   isPerforming: isComposePerformActive,
   isInRuler: e => e.clientY - fgCanvas.getBoundingClientRect().top < RULER_HEIGHT,
   isRulerLocked: () => forcesScrollView(store.getState().transport),
-  perform: performInput,
+  perform: { ...performInput, finger: fingerInput },
   pan: createPanGesture(fgCanvas),
   tool: interaction.input,
 });
@@ -2739,8 +2864,21 @@ fgCanvas.addEventListener('contextmenu', (e) => {
 });
 
 // ── Shared HUD + countdown DOM updaters ─────────────────────────
+/** The planchette the pitch HUD shows: the newest finger down (13.33), else
+ *  the primary. */
+function hudPlanchette(state: AppState): PlanchetteState | undefined {
+  const planchettes = state.performance.planchettes;
+  for (let i = fingerOrder.length - 1; i >= 0; i--) {
+    const v = fingerOrder[i]!;
+    if (v === 'primary' && !composeEngine.isLmbDown()) continue;
+    const p = planchettes.find(pl => pl.voiceId === v);
+    if (p) return p;
+  }
+  return planchettes[0];
+}
+
 function updatePitchHudDom(state: AppState) {
-  const planchette = state.performance.planchettes[0];
+  const planchette = hudPlanchette(state);
   const show = state.pitchHudVisible && planchette?.snappedWorldY != null;
   if (show) {
     // Dynamics is shown whenever a live source is driving the bus, held or not,

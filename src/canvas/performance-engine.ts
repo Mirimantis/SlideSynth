@@ -35,6 +35,9 @@ export interface RecordedPhrase {
   committed: boolean;
   /** Wall clock at close; 0 while open. Drives eviction. */
   closedAtMs: number;
+  /** Wall clock when it opened. With closedAtMs, tells which takes sounded
+   *  together, for keeping a whole hand (13.33). */
+  openedAtMs: number;
 }
 
 export interface TickArgs {
@@ -93,6 +96,16 @@ export interface PerformanceEngine {
    * pass is exactly one undo entry.
    */
   keepCurve(voiceId: VoiceId): BezierCurve | null;
+  /**
+   * Keep a whole hand (13.33): the newest keepable take among the voices
+   * `include` accepts, and every keepable take that overlapped it in time,
+   * directly or through another one: all the fingers that were down together,
+   * or a Prism chord. Each is committed as keepCurve commits one (an
+   * in-progress take is split). Returns them in voice order; empty when
+   * there's nothing to keep. Takes too short to fit are consumed and stepped
+   * over, so one press lands on real material.
+   */
+  keepHand(include: (voiceId: VoiceId) => boolean): Array<{ voiceId: VoiceId; curve: BezierCurve }>;
   /** Voices holding a phrase that "keep that" could commit right now. */
   getKeepableVoiceIds(): VoiceId[];
   /** Total keepable phrases across all voices — drives the Keep button's lit state. */
@@ -187,6 +200,33 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
     }
   }
 
+  /** Commit one keepable phrase as a curve (keepCurve, keepHand). Null if it's
+   *  too short to fit: it's consumed anyway, so a repeat press walks past it. */
+  function keepPhrase(list: RecordedPhrase[], p: RecordedPhrase): BezierCurve | null {
+    const samples = p.samples.slice();
+    const curve = curveFromRecording(samples, config.recordingFit?.());
+    p.committed = true;
+    if (!curve) return null;
+    if (p.open) {
+      // The voice is still sounding: seal what we just kept and continue
+      // capturing into a fresh phrase, seeded with the last sample so the
+      // next curve picks up exactly where this one ended (and the monotonic
+      // guard has a baseline). Without this the rest of a held gesture
+      // would be written into an already-committed phrase and lost.
+      const now = performance.now();
+      p.open = false;
+      p.closedAtMs = now;
+      list.push({
+        samples: [samples[samples.length - 1]!],
+        open: true,
+        committed: false,
+        closedAtMs: 0,
+        openedAtMs: now,
+      });
+    }
+    return curve;
+  }
+
   function takeCurve(p: RecordedPhrase | null): BezierCurve | null {
     if (!p) return null;
     const samples = p.samples.slice();
@@ -231,7 +271,7 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
       // Defensive: a stray begin without a matching close shouldn't leave two
       // open phrases on one voice.
       closeOpenPhrase(voiceId, now);
-      getPhrases(voiceId).push({ samples: [], open: true, committed: false, closedAtMs: 0 });
+      getPhrases(voiceId).push({ samples: [], open: true, committed: false, closedAtMs: 0, openedAtMs: now });
     },
 
     closePhrase(voiceId, now) {
@@ -243,7 +283,7 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
       if (!open) {
         // Capture without an explicit begin (defensive) — start a phrase so the
         // samples aren't dropped on the floor.
-        open = { samples: [], open: true, committed: false, closedAtMs: 0 };
+        open = { samples: [], open: true, committed: false, closedAtMs: 0, openedAtMs: performance.now() };
         getPhrases(voiceId).push(open);
       }
       const buf = open.samples;
@@ -271,35 +311,53 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
       // than silently swallowed, so one press always lands on real material.
       for (let i = list.length - 1; i >= 0; i--) {
         const p = list[i]!;
-        if (p.committed) continue;
-        if (p.samples.length < 2) continue;
-        const samples = p.samples.slice();
-        const curve = curveFromRecording(samples, config.recordingFit?.());
-        if (!curve) {
-          // Real samples but below the minimum gesture duration — consume it so
-          // a repeat press walks past instead of retrying the same scrap.
-          p.committed = true;
-          continue;
-        }
-        p.committed = true;
-        if (p.open) {
-          // The voice is still sounding: seal what we just kept and continue
-          // capturing into a fresh phrase, seeded with the last sample so the
-          // next curve picks up exactly where this one ended (and the monotonic
-          // guard has a baseline). Without this the rest of a held gesture
-          // would be written into an already-committed phrase and lost.
-          p.open = false;
-          p.closedAtMs = performance.now();
-          list.push({
-            samples: [samples[samples.length - 1]!],
-            open: true,
-            committed: false,
-            closedAtMs: 0,
-          });
-        }
-        return curve;
+        if (!isKeepable(p)) continue;
+        // Real samples but below the minimum gesture duration: keepPhrase
+        // consumed it, so walk on past.
+        const curve = keepPhrase(list, p);
+        if (curve) return curve;
       }
       return null;
+    },
+
+    keepHand(include) {
+      const end = (p: RecordedPhrase) => (p.open ? Infinity : p.closedAtMs);
+      for (;;) {
+        const candidates: Array<{ voiceId: VoiceId; list: RecordedPhrase[]; p: RecordedPhrase }> = [];
+        for (const [voiceId, list] of phrases) {
+          if (!include(voiceId)) continue;
+          for (const p of list) if (isKeepable(p)) candidates.push({ voiceId, list, p });
+        }
+        if (candidates.length === 0) return [];
+        // The newest take: the one still sounding, or the last to end.
+        let seed = candidates[0]!;
+        for (const c of candidates) {
+          if (end(c.p) > end(seed.p) || (end(c.p) === end(seed.p) && c.p.openedAtMs > seed.p.openedAtMs)) seed = c;
+        }
+        // Grow the hand by everything overlapping it until nothing more does.
+        const hand = new Set([seed]);
+        let lo = seed.p.openedAtMs;
+        let hi = end(seed.p);
+        let grew = true;
+        while (grew) {
+          grew = false;
+          for (const c of candidates) {
+            if (hand.has(c) || c.p.openedAtMs > hi || end(c.p) < lo) continue;
+            hand.add(c);
+            lo = Math.min(lo, c.p.openedAtMs);
+            hi = Math.max(hi, end(c.p));
+            grew = true;
+          }
+        }
+        const out: Array<{ voiceId: VoiceId; curve: BezierCurve }> = [];
+        for (const c of candidates) {
+          if (!hand.has(c)) continue;
+          const curve = keepPhrase(c.list, c.p);
+          if (curve) out.push({ voiceId: c.voiceId, curve });
+        }
+        // A hand of scraps too short to fit was consumed: try the one before.
+        if (out.length > 0) return out;
+      }
     },
 
     getKeepableVoiceIds() {

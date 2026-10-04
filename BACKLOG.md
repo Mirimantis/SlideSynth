@@ -472,8 +472,24 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - The transport was hidden, not gone: the top bar's right zone never wrapped, so on a narrow screen it slid under the menus. The bar now wraps, and the right zone drops to its own line when there's no room (all 13 buttons reachable at 375 px wide).
 - [x] **13.37 Touch-friendly defaults** *(S — added and done 2026-10-04; PR #104)*
   - From touch testing, fine without touch too: the app **opens in Perform**; **Scroll canvas during playback** is on by default (an explicit saved choice is kept); a **new composition starts in 12-EDO, root C, Major** (`NEW_COMPOSITION_SCALE`). A file or MIDI import with no snap settings still gets All notes, as before.
-- [ ] **13.33 Multitouch: play several notes at once** *(M–L, own planning session — added 2026-10-04; the user's biggest touch want)*
+- [ ] **13.33 Multitouch: play several notes at once** *(M–L — added 2026-10-04, planned 2026-10-04; the user's biggest touch want)*
   - Each finger on the canvas plays its own voice in Perform. Doesn't need the rest of 13.27 first.
+  - **Decided (2026-10-04), a first version to refine in testing:**
+    - **Touch only, Perform only.** The mouse and pen work as today: the first finger (or the mouse) is the `primary` voice, with everything it has now (Prism, pitch HUD, hover). Each further finger is its own voice (`touch-1`…), with its own Gravity, haptic clicks and rail marker; fingers start and stop independently. Editing (the Draw tool and the rest) ignores extra fingers.
+    - **Limit: 10 fingers** (to see how a phone copes; each is its own audio-thread voice). An eleventh is ignored.
+    - **The Prism applies only to the first finger, and Prism Draw mode ignores extra fingers.** The Prism may turn out not to suit multitouch.
+    - **Recording:** each finger's take is its own ungrouped curve, finalized when that finger lifts, like a MIDI note. Fingers can't be told apart (a lifted finger's slot is reused), so nothing is grouped by finger.
+    - **Keep** takes the last "hand": every take that overlapped in time with the newest one (all the fingers that were down together), each as its own ungrouped curve, in one undo step; pressing again steps back a hand. A Prism chord still keeps as one group. Keep may need to work more like MIDI recording; see in testing.
+    - **Edge scrolling:** any finger near the top or bottom edge scrolls, the one nearest the edge sets the speed, and fingers at both edges cancel out. Every held note glides with the view.
+    - **Pitch HUD:** the newest finger's note.
+    - **No pressure** for now (most devices don't report it); the dynamics bus (Swell) applies to every finger.
+  - **Built (2026-10-04), waiting for testing on a phone:**
+    - **Router** (`input-router.ts`): while a performing press is in progress, a touch that would perform joins as an extra finger (`joinsAsFinger`), with its own pointer capture, moves and release; it never moves the primary's planchette. Mouse, pen and the rulers are unchanged.
+    - **Fingers** (`canvas/fingers.ts`, `main.ts`): each extra finger gets the lowest free voice `touch-1`…`touch-9` (`allocateFingerVoice`; the primary is the tenth), a planchette, a live voice, its own Gravity state (`computeComposeCursorPitch` takes the finger's), haptic hysteresis (`hapticFollow`) and cross flash. Gravity ticks every finger each frame. Fingers can't leave Perform mode while held. Releasing the primary now stops only its own voices (it used to stop every planchette's, which also cut held MIDI notes on an armed track).
+    - **Recording:** a finger's take is closed on lift and, while capturing, committed as its own curve (`commitFingerTake`), as its own pass in the pass log. Loop wraps and a cancelled pass seal held fingers' takes (`sealFingerTakes`); ending a session releases them.
+    - **Keep:** the engine's phrases record when they opened (`openedAtMs`), and `keepHand` keeps the newest take plus every take overlapping it, directly or through another. `commitFinalizedCurves` groups only a Prism chord (`isPrismChord`), never fingers.
+    - **Edge scrolling:** `edgeScrollStep` combines every held finger; the HUD follows the newest finger (`hudPlanchette`).
+    - Rail markers for extra fingers use the ordinary planchette colour: a voice isn't a finger, so a colour per voice would suggest an identity the fingers don't have.
   - **Already in place:** the performance engine keys phrases by voice, MIDI already plays a voice per note (`midi-<note>`), and the state holds a list of planchettes (used today for the Prism's harmony voices; the mouse and touch drive only the primary one).
   - **Session inputs:**
     - a voice per pointer id: start, follow and release per finger; a voice limit;

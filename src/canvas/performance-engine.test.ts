@@ -174,6 +174,68 @@ describe('performance engine — retrospective keep', () => {
   });
 });
 
+describe('performance engine — keeping a hand (13.33)', () => {
+  /** A take from `openMs` to `closeMs` (null: still sounding). */
+  function take(engine: PerformanceEngine, voiceId: string, startBeat: number, openMs: number, closeMs: number | null) {
+    engine.beginPhrase(voiceId, openMs);
+    for (let i = 0; i <= 4; i++) {
+      engine.captureSample(voiceId, { beat: startBeat + i * 0.25, note: 6000 + i * 50, volume: 0.8 });
+    }
+    if (closeMs !== null) engine.closePhrase(voiceId, closeMs);
+  }
+  const notMidi = (v: string) => !v.startsWith('midi-');
+  const voices = (kept: Array<{ voiceId: string }>) => kept.map(k => k.voiceId).sort();
+
+  it('keeps every take that overlapped the newest, and steps back a hand per press', () => {
+    const engine = createPerformanceEngine(CONFIG);
+    take(engine, 'primary', 0, 1000, 2000);     // hand 1
+    take(engine, 'touch-1', 0, 1200, 1800);
+    take(engine, 'primary', 8, 5000, 6000);     // hand 2: three fingers
+    take(engine, 'touch-1', 8, 5100, 5500);
+    take(engine, 'touch-2', 8, 5400, 6200);     // overlaps only through primary
+
+    expect(voices(engine.keepHand(notMidi))).toEqual(['primary', 'touch-1', 'touch-2']);
+    expect(voices(engine.keepHand(notMidi))).toEqual(['primary', 'touch-1']);
+    expect(engine.keepHand(notMidi)).toEqual([]);
+  });
+
+  it('takes two turns of one finger slot when another finger held through both', () => {
+    const engine = createPerformanceEngine(CONFIG);
+    take(engine, 'primary', 0, 1000, 5000);
+    take(engine, 'touch-1', 1, 1500, 2000);
+    take(engine, 'touch-1', 3, 3000, 3500);
+    const kept = engine.keepHand(notMidi);
+    expect(voices(kept)).toEqual(['primary', 'touch-1', 'touch-1']);
+  });
+
+  it('keeps a still-sounding hand and splits each take so capture goes on', () => {
+    const engine = createPerformanceEngine(CONFIG);
+    take(engine, 'primary', 0, 1000, null);
+    take(engine, 'touch-1', 0, 1100, null);
+    expect(voices(engine.keepHand(notMidi))).toEqual(['primary', 'touch-1']);
+    expect(engine.getRecordingBuffers().get('touch-1')?.length).toBe(1);
+  });
+
+  it('leaves out voices the filter rejects (MIDI notes)', () => {
+    const engine = createPerformanceEngine(CONFIG);
+    take(engine, 'primary', 0, 1000, 2000);
+    take(engine, 'midi-60', 0, 1000, 2000);
+    expect(voices(engine.keepHand(notMidi))).toEqual(['primary']);
+    expect(engine.getKeepableVoiceIds()).toEqual(['midi-60']);
+  });
+
+  it('steps over a hand of scraps too short to fit', () => {
+    const engine = createPerformanceEngine(CONFIG);
+    take(engine, 'primary', 0, 1000, 2000);
+    engine.beginPhrase('touch-1', 3000);
+    engine.captureSample('touch-1', { beat: 9, note: 6000, volume: 0.8 });
+    engine.captureSample('touch-1', { beat: 9.001, note: 6001, volume: 0.8 });
+    engine.closePhrase('touch-1', 3100);
+    expect(voices(engine.keepHand(notMidi))).toEqual(['primary']);
+    expect(engine.getKeepablePhraseCount()).toBe(0);
+  });
+});
+
 describe('performance engine — armed finalize', () => {
   it('finalizes only the current phrase, not earlier buffered history', () => {
     const engine = createPerformanceEngine(CONFIG);
