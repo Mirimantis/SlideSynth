@@ -81,8 +81,9 @@ An honest description of the code as it stands, including the problems Phase 15 
 
 ```
 src/
-├── main.ts          # ~3,900 lines: DOM layout template, UI wiring, command handlers,
-│                    #   perform/record/jam state machine, render loop, store watches
+├── main.ts          # ~3,100 lines (15.3 under way): DOM layout template, UI wiring, command handlers,
+│                    #   perform/record/jam wiring, the frame loop, store watches
+├── app/             # redraw.ts: what the next frame must draw (markBgDirty, requestRedraw)
 ├── commands/        # catalog (every command: label, keys, description), keys (chord matching),
 │                    #   registry (dispatch + keyboard), edit-commands
 ├── help/            # shortcut-table (help.html's table, generated from the catalog)
@@ -93,14 +94,17 @@ src/
 ├── model/           # curve, lane, track, tone, composition, curve-groups, layer, pass-log, point-selection
 ├── audio/           # engine, tone-synth, playback (voice-pool scheduler), curve-sampler, preview (live voices),
 │                    #   live-voice (+ live-voice-dsp, live-voice.worklet: audio-rate pitch/gain smoothing),
-│                    #   metronome, midi-input, dynamics-bus, voice-allocation
+│                    #   metronome, midi-input, dynamics-bus, voice-allocation, schedule-math (the scheduler's
+│                    #   pure timing: beat ↔ audio time, a curve's events in one look-ahead window)
 ├── canvas/          # viewport, interaction (tool mouse handling, ~1,400 lines), performance-engine
-│                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), and one renderer per layer
+│                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), scene (draws every layer from
+│                    #   the state, read-only), and one renderer per layer
 ├── tuning/          # tuning.ts: tunings, scales, degree names, and the pitch set the staff and snap use (13.8);
 │                    #   scl.ts: Scala .scl import and export
 ├── ui/              # Preact (.tsx): top-bar, menu, tool-strip, settings-dialog, tempo-panel, snap-panel,
 │                    #   prism-panel, tuning-panel, pitch-circle, track-list, property-panel, tool-property-panel.
-│                    #   Vanilla DOM: drawer, tone builder/picker, older dialogs, HUDs
+│                    #   Vanilla DOM: drawer, tone builder/picker, older dialogs, HUDs (pitch-hud, perf-hud,
+│                    #   session-overlays), zoom-sliders, param-graph-resize
 ├── theme/           # theme.ts: the canvas's reader for the colour tokens in styles/theme.css
 ├── export/          # json-export (.gliss envelope + migrations), wav-export, midi-import
 └── utils/           # bezier-math, snap, snap-magnetic, snap-presets, harmonics, svg helpers
@@ -120,7 +124,7 @@ styles/              # theme.css (every colour, as tokens), main / panels / dial
 
 ### Known structural problems (the review's findings)
 
-1. *(Keyboard map resolved in 15.3: the command catalog and registry in `src/commands/`. Layout, perform logic and the render loop are still in `main.ts`.)* **`main.ts` does everything** — layout HTML, wiring, keyboard map, perform logic, render loop, and inline model edits (e.g. multi-point delete in the key handler).
+1. *(Keyboard map resolved in 15.3: the command catalog and registry in `src/commands/`. Drawing moved to `canvas/scene.ts` in 15.3 PR A. Layout, perform logic and the frame loop are still in `main.ts`.)* **`main.ts` does everything** — layout HTML, wiring, keyboard map, perform logic, render loop, and inline model edits (e.g. multi-point delete in the key handler).
 2. *(Resolved in 15.2: the explicit state machine in `src/state/transport.ts` and one input router per canvas in `src/canvas/input-router.ts`.)* **The perform state machine is implicit.** Play / jam / record / pass-record / MIDI-arm state is spread across ~8 flags in the store, the playback engine and module-level variables, each transition function setting its own combination. Two canvas mouse handlers use two different definitions of "is the left button performing?" (`isComposePerformActive` in `main.ts` vs. `isComposePerformLocked` in `interaction.ts`) — with Lock Rail off, a Draw click during Jam both sounds a note and places a curve point.
 3. **Coarse store notification + hand-synced UI.** Every store change rebuilds the track list and both property panels via `innerHTML`, including on every mousemove of a drag. Widgets that don't subscribe drift out of sync. *(Resolved in 15.1: signals-backed store, targeted watches, render-if-changed panels.)*
 4. **Duplicated state.** Snap settings exist in both `AppState` and `composition.snap`; loop-enabled lives in the playback engine; the snap config is built in three places that disagree (the Space-hold preview ignores guides and projection). *(Snap mirrors and loop state resolved in 15.1; one snap-config builder in 15.6, `src/state/snap-config.ts`.)*
