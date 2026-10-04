@@ -448,6 +448,9 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
   - **Tested on touch (2026-10-04, an Android phone and a large Wacom Intuos, on the 13.28 test build):** far more works than expected.
     - **Navigation mostly works:** the zoom sliders, dragging in the ruler, and playing a note to the canvas edge to scroll, with a few bugs.
     - **Performing works.** The Tuning and Snap panels are easy to use.
+    - **Portrait is better for performing on a phone:** it gives the most travel across pitch. Zoomed to about 1.5 octaves there was plenty of room to hit notes and to scroll up and down at the edges; one finger moves easily up and down with the rail snapped to the middle, and there's room for the left and right panels.
+    - **Bugs found:** in portrait on a phone, most transport buttons disappear; the pitch zoom slider ends up near the middle of the screen (both 13.32). On the large touchscreen the sliders were well out of the way.
+    - **The biggest want: multitouch** (13.33). Also wanted: a rotated piano-roll canvas (13.34), haptic clicks on snap lines (13.35), faster gravity without vibrato (13.36).
     - **Drawing and editing don't work well.**
     - **No pinch to zoom** (decided): the zoom sliders are the way to zoom; they need a better layout instead, since they get in the way of performing on a small phone screen (13.32).
   - **Session inputs:**
@@ -460,9 +463,30 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - Perform: a finger per voice (multitouch polyphony; the engine already keys phrases by voice), and touch as the instrument in 16.8's "stage" view;
     - platform limits: iOS needs a user gesture to start audio, AudioWorklet support and latency on mobile, and no Web MIDI in iOS Safari;
     - relation to 11.3 (pen pressure and tilt share the Pointer Events path).
-- [ ] **13.32 Zoom sliders out of the performer's way** *(S — added 2026-10-04)*
-  - Found testing on a phone (13.27): the zoom sliders sit over the canvas's bottom-right corner (100 px and 80 px) and get in the way of performing on a small screen. Zoom stays on the sliders (no pinch to zoom), so they need a better layout.
-  - Pull forward from 13.27: it's small, and helps the touch use that already works.
+- [ ] **13.32 Phone layout fixes: zoom sliders, transport** *(S — added 2026-10-04)*
+  - Found testing on a phone (13.27). Pulled forward from 13.27: small, and it helps the touch use that already works.
+  - **Zoom sliders on the canvas's edges** (decided): they float over the canvas's bottom-right corner and get in the way of performing on a small screen; in portrait the pitch slider lands near the middle of the screen. Move them to the edges, like scrollbars: time along the bottom, pitch down the right side, never over the canvas. Zoom stays on the sliders (no pinch to zoom).
+  - **Transport in portrait:** on a phone in portrait most of the transport buttons disappear. They need to stay reachable (wrap, shrink, or move).
+- [ ] **13.33 Multitouch: play several notes at once** *(M–L, own planning session — added 2026-10-04; the user's biggest touch want)*
+  - Each finger on the canvas plays its own voice in Perform. Doesn't need the rest of 13.27 first.
+  - **Already in place:** the performance engine keys phrases by voice, MIDI already plays a voice per note (`midi-<note>`), and the state holds a list of planchettes (used today for the Prism's harmony voices; the mouse and touch drive only the primary one).
+  - **Session inputs:**
+    - a voice per pointer id: start, follow and release per finger; a voice limit;
+    - gravity per finger: each needs its own magnetic state and planchette;
+    - recording: each finger's take becomes its own curve (a chord recorded at once), grouped or not;
+    - dynamics per finger (pressure where the device reports it, 11.3);
+    - the Prism: each finger a chord, or the Prism off while multitouch;
+    - edge scrolling with several fingers down; the pitch HUD with several notes;
+    - a mouse can't do it, so it's touch- (and pen-) only.
+- [ ] **13.34 Piano-roll orientation: the canvas turned 90°** *(L, own planning session — added 2026-10-04)*
+  - An option to rotate the canvas so time runs vertically (beat 0 at the bottom, the canvas scrolling down as it plays) and pitch runs horizontally (low on the left, high on the right): a glissando piano roll, suited to portrait screens and multitouch (13.33).
+  - **Session inputs:**
+    - the viewport's mapping is the place to swap axes; every renderer and hit-test goes through it, but rulers, the rail, the staff labels, edge scrolling and the zoom sliders (13.32) all assume today's layout;
+    - Perform only, or editing too;
+    - which way it scrolls, and where the rail sits (a horizontal line, like a keyboard's edge).
+- [ ] **13.35 Haptic click on snap lines** *(S–M — added 2026-10-04)*
+  - On devices that can vibrate, a tiny haptic click when the **finger** (the cursor, not the planchette) crosses a snap line while performing.
+  - **Notes:** the browser's Vibration API works in Chrome on Android; iOS Safari and desktops don't support it, so it's an extra where available. Very short pulses (a few ms) may be rounded up or ignored by some phones; test the shortest that's felt. A setting to turn it off. A first taste of H.3's felt detents.
 
 ### Frets (pitch guides)
 
@@ -727,6 +751,16 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
 - [ ] **13.15 Gravity feel preview** *(M)*
   - A small animated waveform in the Snap drawer showing what Force, Spring and Damping do: its amplitude, frequency and falloff change as you move the sliders.
   - Drive it from the real `snap-magnetic` integrator (a step response into a well), so the preview is the feel, not an illustration of it.
+- [ ] **13.36 Faster gravity, and glides without vibrato** *(M, own planning session — added 2026-10-04)*
+  - From touch testing (13.27): with Gravity on, even at maximum Force the planchette can be slow to catch up with a finger. Keep today's range reachable, but allow faster.
+  - **An option for no overshoot:** the overshoot that makes vibrato should be avoidable while keeping a fast glide between notes. Today Damping prevents the vibrato but slows everything else down.
+  - **Approaches to weigh** (the user's idea first; open to others):
+    - **damping by distance:** an adjustable range so damping acts only close to the snap line, leaving the glide fast;
+    - a higher maximum Force (and Spring), maybe with a non-linear slider so the current range keeps its resolution;
+    - critical damping: a "no overshoot" switch that sets damping from the stiffness, the fastest settle without overshoot;
+    - separate controls for approach speed and settling.
+  - **Check:** the physics runs in beats (`snap-magnetic.ts` integrates over beat time, with the velocity cap in cents per beat), so gravity is slower in real time at slower tempos. That may explain part of the "slow to catch up"; consider running it in seconds.
+  - Related: 13.15 (feel preview), 13.19 (per-fret gravity), 12.1. Turning Gravity off on touch sounds "beepy" (13.20's envelopes should help).
 - [ ] **12.1 Snap-target composition + snap-to-sounding-harmony** *(L, own planning session — after 15.6 and 13.8)*
   - First define how gravity sources combine into one target set. Today Prism projection targets *replace* the others while active, guides are additive, and scale vs. chromatic are exclusive.
   - Then let the sounding bed (a drone or Prism chord) become the magnetic target: "you snap to the harmony you're actually in."
@@ -804,6 +838,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - interaction with loop wrap (8.21) and pitch bend (8.25);
     - velocity (11.2) feeding the envelope's level.
 - [ ] **13.20 ADSR envelope** *(M–L, own planning session)*
+  - **From touch testing (2026-10-04):** with Gravity off, tapping notes sounds "beepy"; an attack and release should soften it.
   - A basic Attack / Decay / Sustain / Release envelope, applied to every curve, not only MIDI. It shapes the volume lane at first, and is built so later parameters (8.4's lanes) can take one too.
   - In MIDI Gliss (13.7) the curve keeps drawing inside the envelope, through the release phase at the last pitch, until the envelope ends or a new note picks it up. With Gravity on, the new note pulls it into a glissando.
   - **Session inputs:**
