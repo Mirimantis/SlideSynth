@@ -445,9 +445,14 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
   - Play and edit on a phone or tablet with fingers.
   - **Deferred (2026-10-03):** it amounts to a whole second interface, so it waits for the redesign. Until then, keep it in mind so it doesn't get harder: see the touch note in [Housekeeping](#housekeeping).
   - **Already in place:** the canvases run on Pointer Events with `touch-action: none` (15.2), so a one-finger drag already reaches the input router.
+  - **Tested on touch (2026-10-04, an Android phone and a large Wacom Intuos, on the 13.28 test build):** far more works than expected.
+    - **Navigation mostly works:** the zoom sliders, dragging in the ruler, and playing a note to the canvas edge to scroll, with a few bugs.
+    - **Performing works.** The Tuning and Snap panels are easy to use.
+    - **Drawing and editing don't work well.**
+    - **No pinch to zoom** (decided): the zoom sliders are the way to zoom; they need a better layout instead, since they get in the way of performing on a small phone screen (13.32).
   - **Session inputs:**
-    - scope: tablets first, or phones too; Perform only, or editing as well;
-    - gestures: pinch to zoom (time and pitch), two-finger pan, long-press for the right-click menu;
+    - scope: tablets first, or phones too; Perform only, or editing as well (Perform already works);
+    - gestures: two-finger pan, long-press for the right-click menu (not pinch to zoom: decided against);
     - no hover: what replaces hover previews (Nudge's band, tool highlights, the cursor ring);
     - keyboard-only actions need on-screen controls: audition (A), swell (F), Keep (K), Shift and Alt modifiers, `[` / `]`;
     - layout at phone width: the right panel and drawers, the tool strip, the top bar; ties to 16.9's visual theme;
@@ -455,6 +460,9 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - Perform: a finger per voice (multitouch polyphony; the engine already keys phrases by voice), and touch as the instrument in 16.8's "stage" view;
     - platform limits: iOS needs a user gesture to start audio, AudioWorklet support and latency on mobile, and no Web MIDI in iOS Safari;
     - relation to 11.3 (pen pressure and tilt share the Pointer Events path).
+- [ ] **13.32 Zoom sliders out of the performer's way** *(S — added 2026-10-04)*
+  - Found testing on a phone (13.27): the zoom sliders sit over the canvas's bottom-right corner (100 px and 80 px) and get in the way of performing on a small screen. Zoom stays on the sliders (no pinch to zoom), so they need a better layout.
+  - Pull forward from 13.27: it's small, and helps the touch use that already works.
 
 ### Frets (pitch guides)
 
