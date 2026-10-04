@@ -12,7 +12,7 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 - **Phase 14 — Stabilize:** done.
 - **Phase 15 — Consolidate the architecture:** the big pieces are done (signals store, transport state machine, input router, command catalog, one snap-config builder, read-only render loop, AudioWorklet voice). Left, as background work: **15.3** break up `main.ts` (3,400 lines; the target is a few hundred), **15.4** the last panels and dialogs onto Preact, **15.8** kernel tests. They make every feature cheaper and are needed before Phase 17.
-- **Phase 16 — Simplify the interface:** the build is done (16.1–16.7). Left: the **16.8 Perform** and **16.9 Visual theme** design sessions.
+- **Phase 16 — Simplify the interface:** the build is done (16.1–16.7). Left: the **16.8 Perform**, **16.9 Visual theme** and **16.10 Small-screen layout** design sessions.
 - **Phase 17 — Portable core:** not started. Needed only before a port (VST, VCV, hardware).
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
@@ -349,6 +349,20 @@ Implementation comes first: block out every control so it works, then hold the d
   - **Ornaments:** hand-designed vector scrollwork or arabesques, to give GUI elements a unique look.
   - **Start with mockups:** two or three directions on one screen (top bar, rail, a drawer), compared side by side.
   - Builds on 16.7's tokens. The ornaments are SVG assets through the icon pipeline (PR #59).
+- [ ] **16.10 Small-screen layout** *(M–L, own planning session — added 2026-10-04; with or after 16.8 and 16.9)*
+  - A layout for phones (and other small screens) that gives the canvas as much length as it can and simplifies the panels.
+  - From testing multitouch (13.33) on a phone: the screen only has room for 3 or 4 fingers, so every pixel of canvas counts.
+  - **Wanted:**
+    - **maximize the canvas's length** (pitch travel; portrait is the phone's performing orientation);
+    - **consolidate the top bar with the left** tool strip and rail icons, into one strip;
+    - **hide the volume and parameter panes** (the Parameters Graph below the canvas);
+    - **simplify the panels**: the right panel and drawers.
+  - **Session inputs:**
+    - when it applies: screen size (`max-width` / `pointer: coarse` media queries), a manual switch, or both;
+    - what stays reachable and where: transport, Keep, Record, Snap / Gravity, the track and tone, tuning;
+    - how the hidden panes come back when wanted (a drawer, an overlay, a tab);
+    - Perform only, or editing too (13.27 decides how far editing goes on touch);
+    - fits with 16.8's "stage" view (they may be the same thing on a phone), 16.9's theme, and 13.34's piano-roll orientation.
 
 ---
 
@@ -458,7 +472,7 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - gestures: two-finger pan, long-press for the right-click menu (not pinch to zoom: decided against);
     - no hover: what replaces hover previews (Nudge's band, tool highlights, the cursor ring);
     - keyboard-only actions need on-screen controls: audition (A), swell (F), Keep (K), Shift and Alt modifiers, `[` / `]`;
-    - layout at phone width: the right panel and drawers, the tool strip, the top bar; ties to 16.9's visual theme;
+    - layout at phone width: the right panel and drawers, the tool strip, the top bar (now 16.10, Small-screen layout); ties to 16.9's visual theme;
     - hit targets: larger points and handles for a coarse pointer (`pointer: coarse`);
     - Perform: a finger per voice (multitouch polyphony; the engine already keys phrases by voice), and touch as the instrument in 16.8's "stage" view;
     - platform limits: iOS needs a user gesture to start audio, AudioWorklet support and latency on mobile, and no Web MIDI in iOS Safari;
