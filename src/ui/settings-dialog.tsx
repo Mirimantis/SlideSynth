@@ -82,8 +82,9 @@ function SettingsBody({ close, midi }: { close(): void; midi: MidiSettings }) {
             <span>
               Haptic clicks on snap lines
               <span class="settings-hint">
-                A tiny click when your finger crosses a snap line while performing, with Snap
-                on. On Android phones and tablets; iPhones and computers can’t vibrate.
+                A tiny click when your finger comes onto a note line, fret or pitch guide while
+                performing, with Snap on or off. On Android phones and tablets; iPhones and
+                computers can’t vibrate.
               </span>
             </span>
           </label>

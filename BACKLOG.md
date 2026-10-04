@@ -491,10 +491,10 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
   - On devices that can vibrate, a tiny haptic click when the **finger** (the cursor, not the planchette) crosses a snap line while performing.
   - **Notes:** the browser's Vibration API works in Chrome on Android; iOS Safari and desktops don't support it, so it's an extra where available. Very short pulses (a few ms) may be rounded up or ignored by some phones; test the shortest that's felt. A setting to turn it off. A first taste of H.3's felt detents.
   - **Done (this PR):**
-    - `snapLinesCrossed(from, to, config)` in `snap.ts` counts the snap lines between two pitches (the same lines Gravity pulls to; a line touched and then left counts once).
+    - **When it clicks** (reworked in testing: clicking on *crossing* a line missed notes the finger reached without quite crossing, and clicked over and over on a line it wavered across): a click when the finger comes within **10 px** of a line, and none again for that line until it has gone **15 px** away (`hapticStep`). Touching down on a line clicks too. The lines are the ones Y would snap to (scale notes, frets, pitch guides), **with Snap on or off** (`nearestSnapLine` in `snap.ts`). The raw cursor, not the planchette. Hovering never clicks.
     - `ui/haptics.ts`: `hapticClick(ms, now)` calls `navigator.vibrate`, at most once per 30 ms so a fast sweep is a train of clicks, not a buzz; nothing where the API is missing.
-    - In `main.ts`, every Perform pointer move while pressing (with Snap on) compares the raw cursor pitch with the last one and clicks on a crossing. Hovering never clicks.
-    - **Settings › Touch:** "Haptic clicks on snap lines" (on by default) and **Click length** (1–40 ms, default 10; letting go of the slider gives a sample click). Workspace prefs. The hint names the devices rather than detecting them: desktop Chrome has `navigator.vibrate` too, without a motor.
+    - **Settings › Touch:** "Haptic clicks on snap lines" (on by default) and **Click length** (20–40 ms, default 25: nothing shorter could be felt; letting go of the slider gives a sample click). Workspace prefs. The hint names the devices rather than detecting them: desktop Chrome has `navigator.vibrate` too, without a motor.
+    - Note: where lines are closer than 20 px (chromatic at the default zoom is 17 px a semitone), every spot is within reach of one, so each line passed clicks.
 
 ### Frets (pitch guides)
 

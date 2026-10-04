@@ -176,20 +176,16 @@ function collectSnapTargets(wy: number, config: SnapConfig, range: number): numb
 }
 
 /**
- * How many snap lines lie between two pitches: those above `from` up to and
- * including `to` (or below, going down), so a line touched and then left
- * counts once. The same lines Gravity pulls to (13.35's haptic clicks).
+ * The nearest line within `range` of `wy` that Y would snap to, or null: the
+ * same lines Gravity pulls to, whether Snap is on or not (13.35's haptic
+ * clicks work without Snap).
  */
-export function snapLinesCrossed(from: number, to: number, config: SnapConfig): number {
-  if (!config.enabled || from === to) return 0;
-  const lo = Math.min(from, to);
-  const hi = Math.max(from, to);
-  const targets = collectSnapTargets((lo + hi) / 2, config, (hi - lo) / 2 + 1e-6);
-  let n = 0;
-  for (const t of targets) {
-    if (to > from ? t > from && t <= to : t < from && t >= to) n++;
+export function nearestSnapLine(wy: number, config: SnapConfig, range: number): number | null {
+  let best: number | null = null;
+  for (const t of collectSnapTargets(wy, config, range)) {
+    if (Math.abs(t - wy) <= range && (best === null || Math.abs(t - wy) < Math.abs(best - wy))) best = t;
   }
-  return n;
+  return best;
 }
 
 /** Find the nearest snap target to `wy` and the adaptive well radius around it.

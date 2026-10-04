@@ -16,8 +16,8 @@ import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuideHandle, renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
-import { snapToGrid, findAdaptiveSnap, snapLinesCrossed, type SnapConfig } from './utils/snap';
-import { hapticClick } from './ui/haptics';
+import { snapToGrid, findAdaptiveSnap, nearestSnapLine, type SnapConfig } from './utils/snap';
+import { hapticClick, hapticStep, HAPTIC_RANGE_PX } from './ui/haptics';
 import { createInteraction, editingCurveIds, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './canvas/interaction';
 import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
@@ -1701,7 +1701,8 @@ function composeUpdatePlanchette(sy: number) {
   }
   const { cursorWorldY, snappedWorldY, snapTarget, snapConfig } = computeComposeCursorPitch(sy);
   store.setPlanchetteY('primary', cursorWorldY, snappedWorldY);
-  hapticOnCrossing(cursorWorldY, snapConfig);
+  hapticInput = { wy: cursorWorldY, config: snapConfig };
+  hapticCheck();
   // Snap-line-cross pulse — fire only when crossing between two real targets.
   // Skip when either side is null (no attractor in None-mode between-guides
   // zones) so the flash doesn't fire on every frame.
@@ -1714,24 +1715,27 @@ function composeUpdatePlanchette(sy: number) {
   updateHarmonyVoices(snappedWorldY);
 }
 
-/** The finger's (cursor's) pitch at the last move while pressing in Perform,
- *  for haptic clicks (13.35); null when not pressing. */
-let hapticPrevWy: number | null = null;
+/** The finger's (cursor's) latest pitch and the lines around it, and the line
+ *  it's on, for haptic clicks (13.35). */
+let hapticInput: { wy: number; config: SnapConfig } | null = null;
+let hapticLine: number | null = null;
 
-/** A haptic click when the finger crosses a snap line while performing
- *  (13.35): the raw cursor, not the planchette, so it marks where the lines
- *  are under the finger whatever Gravity is doing. Snap must be on: the lines
- *  are snap targets. Does nothing on a device that can't vibrate. */
-function hapticOnCrossing(cursorWorldY: number, snapConfig: SnapConfig) {
+/** A haptic click when the finger comes onto a line while performing (13.35;
+ *  see hapticStep): the raw cursor, not the planchette, so it marks where the
+ *  lines are under the finger whatever Gravity is doing. The lines are the
+ *  ones that would snap, with Snap on or off. Does nothing on a device that
+ *  can't vibrate. */
+function hapticCheck() {
   const st = store.getState();
-  if (!composeEngine.isLmbDown() || !st.hapticClicks || !st.snapEnabled) {
-    hapticPrevWy = null;
+  if (!hapticInput || !composeEngine.isLmbDown() || !st.hapticClicks) {
+    hapticLine = null;
     return;
   }
-  if (hapticPrevWy !== null && snapLinesCrossed(hapticPrevWy, cursorWorldY, snapConfig) > 0) {
-    hapticClick(st.hapticMs, performance.now());
-  }
-  hapticPrevWy = cursorWorldY;
+  const { wy, config } = hapticInput;
+  const pxPerCent = viewport.state.zoomY;
+  const step = hapticStep(wy, hapticLine, nearestSnapLine(wy, config, HAPTIC_RANGE_PX / pxPerCent), pxPerCent);
+  hapticLine = step.line;
+  if (step.click) hapticClick(st.hapticMs, performance.now());
 }
 
 /** The cursor left the pitch area: the mouse's planchettes have no pitch
@@ -2651,6 +2655,8 @@ const performInput = {
   down(e: PointerEvent) {
     composeUpdatePlanchette(e.clientY - fgCanvas.getBoundingClientRect().top);
     composeEngine.onLmbDown(performance.now());
+    // Touching down on a line clicks too (13.35).
+    hapticCheck();
     const planchette = store.getState().performance.planchettes[0];
     if (planchette?.snappedWorldY != null) {
       startComposePerformSounding(planchette.snappedWorldY);
