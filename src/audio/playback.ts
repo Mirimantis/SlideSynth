@@ -1,7 +1,7 @@
 import type { Composition } from '../types';
 import { getAudioContext, getMasterGain, ensureResumed } from './engine';
 import { createToneSynth, type ToneSynth } from './tone-synth';
-import { sampleCurve, getCurveTimeRange } from './curve-sampler';
+import { audioTimeToBeat, beatToAudioTime, curveEventsInWindow, type PlayClock } from './schedule-math';
 import { computeVoiceAssignment, assignNewCurves } from './voice-allocation';
 import { SCHEDULER_INTERVAL_MS, SCHEDULER_LOOKAHEAD_S } from '../constants';
 import { getCompositionLength } from '../model/composition';
@@ -68,11 +68,14 @@ export function createPlaybackEngine(
    *  a monotonic cursor). */
   let hookFromBeat = 0;
 
+  /** This run's beat ↔ audio-time mapping (schedule-math.ts). */
+  function clock(): PlayClock {
+    return { startAudioTime, startBeat: startBeatOffset, bpm: currentBpm };
+  }
+
   function getPositionBeats(): number {
     if (!playing) return startBeatOffset;
-    const ctx = getAudioContext();
-    const elapsedSec = ctx.currentTime - startAudioTime;
-    return startBeatOffset + elapsedSec * (currentBpm / 60);
+    return audioTimeToBeat(clock(), getAudioContext().currentTime);
   }
 
   /**
@@ -173,7 +176,7 @@ export function createPlaybackEngine(
     const ctx = getAudioContext();
     const now = ctx.currentTime;
     const scheduleUntil = now + SCHEDULER_LOOKAHEAD_S;
-    const beatsToSec = 60 / currentBpm;
+    const playClock = clock();
 
     for (const tp of trackPlaybacks) {
       const track = currentComposition.tracks.find(t => t.id === tp.trackId);
@@ -187,42 +190,15 @@ export function createPlaybackEngine(
       // Ensure track gain reflects current volume
       tp.trackGain.gain.setValueAtTime(track.volume, now);
 
-      // Convert schedule window to beats
-      const fromBeat = startBeatOffset + (tp.lastScheduledTime - startAudioTime) / beatsToSec;
-      const toBeat = startBeatOffset + (scheduleUntil - startAudioTime) / beatsToSec;
-
-      // Schedule each curve on its assigned pool voice
+      // Schedule each curve's events in (lastScheduledTime, scheduleUntil] on
+      // its assigned pool voice: samples, and silence around its ends.
       for (const curve of track.curves) {
         const voiceIndex = tp.assignment.get(curve.id);
         const synth = voiceIndex !== undefined ? tp.voices[voiceIndex] : undefined;
         if (!synth) continue;
-
-        const range = getCurveTimeRange(curve);
-        if (!range) continue;
-        if (range.end < fromBeat || range.start > toBeat) continue;
-
-        const samples = sampleCurve(curve, currentBpm, fromBeat, toBeat);
-        for (const sample of samples) {
-          // Convert sample time (absolute seconds from beat 0) to AudioContext time
-          const audioTime = startAudioTime + (sample.timeSeconds - startBeatOffset * beatsToSec);
-          if (audioTime <= tp.lastScheduledTime) continue;
-          if (audioTime > scheduleUntil) continue;
-
-          synth.setFrequency(sample.frequency, audioTime);
-          synth.setVolume(sample.volume, audioTime);
-        }
-
-        // Handle gaps: silence before and after curves
-        const curveStartSec = startAudioTime + (range.start - startBeatOffset) * beatsToSec;
-        const curveEndSec = startAudioTime + (range.end - startBeatOffset) * beatsToSec;
-
-        if (curveStartSec > tp.lastScheduledTime && curveStartSec <= scheduleUntil) {
-          // Fade in at curve start
-          synth.setVolume(0, curveStartSec - 0.005);
-        }
-        if (curveEndSec > tp.lastScheduledTime && curveEndSec <= scheduleUntil) {
-          // Fade out at curve end
-          synth.setVolume(0, curveEndSec + 0.005);
+        for (const e of curveEventsInWindow(curve, playClock, tp.lastScheduledTime, scheduleUntil)) {
+          if (e.frequency !== null) synth.setFrequency(e.frequency, e.time);
+          synth.setVolume(e.volume, e.time);
         }
       }
 
@@ -232,14 +208,8 @@ export function createPlaybackEngine(
     // Run scheduler hook (metronome etc.) over the same [hookFromBeat, toBeat)
     // window. hookFromBeat advances monotonically with scheduleUntil.
     if (schedulerHook && currentComposition) {
-      const hookToBeat = startBeatOffset + (scheduleUntil - startAudioTime) / beatsToSec;
-      const comp = currentComposition;
-      const localBeatsToSec = beatsToSec;
-      const localStartAudio = startAudioTime;
-      const localStartBeat = startBeatOffset;
-      const beatToAudioTime = (beat: number): number =>
-        localStartAudio + (beat - localStartBeat) * localBeatsToSec;
-      schedulerHook(hookFromBeat, hookToBeat, comp, beatToAudioTime);
+      const hookToBeat = audioTimeToBeat(playClock, scheduleUntil);
+      schedulerHook(hookFromBeat, hookToBeat, currentComposition, beat => beatToAudioTime(playClock, beat));
       hookFromBeat = hookToBeat;
     }
 

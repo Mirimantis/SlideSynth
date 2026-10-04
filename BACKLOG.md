@@ -17,9 +17,9 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105).
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105), 15.8 kernel tests (PR #106).
 2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
-3. **Background, whenever:** 15.8, then 15.3 and 15.4.
+3. **Background, now (decided 2026-10-04: finish before piling more on):** 15.8 done; 15.3 in four PRs (A render loop, HUDs, zoom; B perform and capture; C transport, commands, MIDI, Tune A4, track panel; D the layout template with 15.4), then the rest of 15.4.
 
 ---
 
@@ -168,10 +168,17 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - The Perf HUD's Audio row shows the path: `live: audio thread` (or `main thread` / `loading`).
     - *Measured:* main-thread cost per pitch update is a few µs either way (≈3.5 µs for a worklet message vs. ≈1–6 µs per oscillator for `setTargetAtTime`). Frame times are unchanged, so the win is in the audio, not the frame budget. Measured pitch on the real path matches the planchette exactly (C4 261.63 Hz, A4 440.00 Hz, a performed 622.2 Hz).
     - *Not done here:* moving the magnetic integrator onto the audio thread. It still runs per frame on the main thread; the worklet is the place for it.
-- [ ] **15.8 Kernel test coverage** *(M)*
+- [x] **15.8 Kernel test coverage** *(M; PR #106)*
   - Unit tests for snap (`snap.ts`), magnetic physics (`snap-magnetic.ts`), `bezier-math`, `curve-sampler` and the scheduler's timing math, plus 15.2's state machine.
   - **Status (2026-09-27):** the state machine (`transport.test.ts`) and snap-config are covered, and snap is partly covered through `tuning.test.ts`. Magnetic physics, `bezier-math`, `curve-sampler` and the scheduler still have no tests of their own; only the golden-format test reaches them.
   - These become the cross-runtime conformance suite in Phase 17.
+  - **Done (PR #106):** 48 new tests, each file headed as kernel tests.
+    - `utils/snap.test.ts`: `snapToGrid` (X grid and beat guides, the pitch grid, range clamp, pitch-line guides, pitch lines hidden, projection exclusive, pitch-guide priority), Gravity's wells (`findAdaptiveSnap`: half-gap reach on the cursor's side, the 300 ¢ cap, capture), `nearestSnapLine`, the zoom-adaptive steps.
+    - `utils/snap-magnetic.test.ts` (beside 13.36's Speed tests): starts at the cursor, spring-only follow, settling between line and cursor, exactly on the line with no spring, nothing outside the well, frame-rate behaviour, the catch-up cap, the velocity cap, reset.
+    - `utils/bezier-math.test.ts`: evaluation, subdivision, nearest point (world and screen-scaled), `findTForX`.
+    - `audio/curve-sampler.test.ts`: `evaluateCurveAtBeat`, `sampleCurve` (rate, tempo, range, frequency), `getCurveTimeRange`, and the scheduler's timing.
+    - **Scheduler:** its timing math moved out of `playback.ts` into `audio/schedule-math.ts`, pure (`PlayClock`, `beatToAudioTime` / `audioTimeToBeat`, `curveEventsInWindow`: a curve's samples and edge fades in one look-ahead window, open at its start). Same arithmetic as before; `scheduleAhead`, the position and the metronome hook use it. Tested: back-to-back windows schedule every event once, and nothing already past is rescheduled.
+    - **Found:** Gravity isn't frame-rate independent to the cent, as its comments claimed. A frame's time is split into equal sub-steps of *at most* 0.02 beats, so the step size follows the frame rate: an underdamped 250 ¢ glide differs mid-way by up to ~14 ¢ between 60 and 480 fps (it settles in the same place). Frames longer than the 0.1-beat catch-up cap (slower than 20 fps at 120 bpm) also lose time. Comments corrected; both behaviours are pinned by tests. A truly fixed step (carrying the remainder to the next frame) or moving the integrator onto the audio thread (15.7's note) would make it exact. **Decided (2026-10-04): noted only.** Nobody would notice mid-glide, and below 20 fps there are bigger problems; fix it only as part of a change that makes the architecture more efficient or stable.
 
 ---
 
