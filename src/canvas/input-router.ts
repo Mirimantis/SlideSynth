@@ -56,6 +56,22 @@ export function joinsAsFinger(activeOwner: PressOwner, pointerType: string, owne
   return activeOwner === 'perform' && pointerType === 'touch' && owner === 'perform';
 }
 
+/**
+ * Where a pointer move goes. An extra finger moves only its own voice. While a
+ * press is in progress, only that press's pointer moves anything: another
+ * pointer (a finger the performance didn't take, past the limit or under
+ * Prism Draw) used to drag the primary's planchette, and its chord, to wherever
+ * it moved. Between presses a mouse or pen hovers; a touch has no hover, so a
+ * finger that isn't playing moves nothing.
+ */
+export function routeMove(c: {
+  isFinger: boolean; activePointerId: number | null; pointerId: number; pointerType: string;
+}): 'finger' | 'press' | 'hover' | null {
+  if (c.isFinger) return 'finger';
+  if (c.activePointerId !== null) return c.pointerId === c.activePointerId ? 'press' : null;
+  return c.pointerType === 'touch' ? null : 'hover';
+}
+
 export interface GestureHandlers {
   down(e: PointerEvent): void;
   move(e: PointerEvent): void;
@@ -163,17 +179,21 @@ export function createInputRouter(cfg: InputRouterConfig): InputRouter {
   };
 
   const onMove = (e: PointerEvent) => {
-    // An extra finger moves only its own voice, never the primary's.
-    if (fingers.has(e.pointerId)) {
+    const to = routeMove({
+      isFinger: fingers.has(e.pointerId),
+      activePointerId: active?.pointerId ?? null,
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
+    });
+    if (to === 'finger') {
       cfg.perform?.finger?.move(e);
-      return;
+    } else if (to === 'press') {
+      cfg.perform?.track(e);
+      handlersFor(active!.owner)?.move(e);
+    } else if (to === 'hover') {
+      cfg.perform?.track(e);
+      if (!cfg.isPerforming()) cfg.tool.move(e);
     }
-    cfg.perform?.track(e);
-    if (active) {
-      if (e.pointerId === active.pointerId) handlersFor(active.owner)?.move(e);
-      return;
-    }
-    if (!cfg.isPerforming()) cfg.tool.move(e);
   };
 
   const onEnter = () => {

@@ -391,6 +391,7 @@
     <li>Layers are created only when you actually commit something, so a pass where you play nothing leaves no empty track behind.</li>
     <li>Each layer inherits the <strong>tone and volume</strong> of the track you're performing from, and that source track stays active — so every layer sounds like the same instrument.</li>
     <li>Layers are named <strong>Layer 1</strong>, <strong>Layer 2</strong>, and so on, and are capped at <strong>16 tracks</strong> total (the limit that still exports cleanly to MPE or a VCV poly cable). Past that, passes join the newest layer.</li>
+    <li><strong>Undo steps back a layer at a time:</strong> while recording with layers, each pass is its own undo step, so <kbd>Ctrl+Z</kbd> takes back the last layer, then the one before.</li>
     <li>With Layer off, everything commits to the selected track exactly as before.</li>
     <li>MIDI-armed recording ignores Layer mode — arming a track is already an explicit choice of where the notes go.</li>
   </ul>

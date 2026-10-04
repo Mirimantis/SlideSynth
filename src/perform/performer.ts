@@ -626,6 +626,9 @@ export function createPerformer(deps: PerformerDeps) {
         // resetting first would push a gesture held across the seam into the
         // NEXT pass's layer, and anything kept during that pass would join it.
         capture.closeLayer();
+        // And one undo step per layer: Ctrl+Z steps back a pass at a time
+        // instead of taking every layer the recording made.
+        if (store.getState().layerModeEnabled) composeEngine.newUndoStep();
       },
       onAfkTimeout: () => transport({ type: 'stop' }),
     });

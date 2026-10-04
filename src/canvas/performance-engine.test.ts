@@ -260,6 +260,20 @@ describe('performance engine — armed finalize', () => {
     engine.finalizeCurve('primary', onFirstCommit);
     expect(onFirstCommit).toHaveBeenCalledTimes(1);
   });
+
+  it('fires it again after a new undo step (each layer-mode pass)', () => {
+    const engine = createPerformanceEngine(CONFIG);
+    const onFirstCommit = vi.fn();
+    engine.startSession(0);
+    playPhrase(engine, 'primary', 0, 1000);
+    engine.finalizeCurve('primary', onFirstCommit);
+    engine.newUndoStep();
+    playPhrase(engine, 'primary', 8, 2000);
+    engine.finalizeCurve('primary', onFirstCommit);
+    playPhrase(engine, 'primary', 12, 3000);
+    engine.finalizeCurve('primary', onFirstCommit);
+    expect(onFirstCommit).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('performance engine — buffer lifecycle', () => {
