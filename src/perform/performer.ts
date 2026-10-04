@@ -635,16 +635,109 @@ export function createPerformer(deps: PerformerDeps) {
   }
 
   /** Live performance's share of canvas pointer input. */
+  // ── Prism Draw with several fingers (13.33, decided 2026-10-04) ──────
+  // The chord plays on the newest finger down. Older fingers stay held but
+  // silent; when the newest lifts, the chord goes back to the newest one still
+  // down, like a monosynth playing legato. It glides there without restarting
+  // (a recording stays one take), re-rooted at the finger's note: each finger
+  // is a new note for the Prism's per-note chord (13.21).
+
+  /** Fingers holding the chord, oldest first; the last one plays it. Outside
+   *  Prism Draw it's just the press's own pointer. */
+  let chordFingers: Array<{ pointerId: number; sy: number }> = [];
+
+  function screenY(e: PointerEvent): number {
+    return e.clientY - fgCanvas.getBoundingClientRect().top;
+  }
+
+  function isChordHolder(pointerId: number): boolean {
+    return chordFingers.length > 0 && chordFingers[chordFingers.length - 1]!.pointerId === pointerId;
+  }
+
+  /** Note where a chord finger is. True when another finger plays the chord,
+   *  so this move goes no further. */
+  function heldSilently(pointerId: number, sy: number): boolean {
+    const c = chordFingers.find(f => f.pointerId === pointerId);
+    if (!c) return false;
+    c.sy = sy;
+    return !isChordHolder(pointerId);
+  }
+
+  /** Follow the finger playing the chord to `sy`. */
+  function moveChord(sy: number) {
+    composeUpdatePlanchette(sy);
+    composeEngine.markActivity(performance.now());
+    const p = store.getState().performance.planchettes[0];
+    if (p?.snappedWorldY != null) updateComposePerformPitch(p.snappedWorldY);
+  }
+
+  /** Hand the chord to a finger at `sy`: re-rooted at its note, gliding there. */
+  function handChordTo(sy: number) {
+    heldNoteRoot = noteRootAt(store.getState(), viewport.screenToWorld(0, sy).wy);
+    moveChord(sy);
+  }
+
+  /** A newer finger takes the chord. */
+  function takeChord(e: PointerEvent) {
+    const sy = screenY(e);
+    chordFingers.push({ pointerId: e.pointerId, sy });
+    handChordTo(sy);
+  }
+
+  /** A chord finger lifted. True while others still hold the chord (it goes
+   *  back to the newest of them if this one was playing it); false when this
+   *  was the last, so the note ends. */
+  function liftChordFinger(pointerId: number): boolean {
+    const i = chordFingers.findIndex(f => f.pointerId === pointerId);
+    if (i < 0) return false;
+    const wasPlaying = i === chordFingers.length - 1;
+    chordFingers.splice(i, 1);
+    if (chordFingers.length === 0) return false;
+    if (wasPlaying) handChordTo(chordFingers[chordFingers.length - 1]!.sy);
+    return true;
+  }
+
+  /** The button (or the last chord finger) let go: end the note. */
+  function releasePress() {
+    chordFingers = [];
+    // A session that ended while the button was held has already released it.
+    if (!composeEngine.isLmbDown()) return;
+    composeEngine.onLmbUp();
+    fingerOrder = fingerOrder.filter(v => v !== 'primary');
+    // CRITICAL ORDERING: finalize BEFORE stopping synths so the planchette array
+    // (and therefore the voiceIds we finalize) still contains every active voice.
+    // syncHarmonyPlanchettes only removes harmonies when playback ends or drawMode
+    // toggles off, neither of which happens at LMB-up — so the array is stable here.
+    // Close first: the phrase must be sealed before either path claims it.
+    closeLmbPhrases();
+    if (isCapturing(store.getState().transport)) {
+      finalizeComposeRecordedCurves();
+    }
+    // Un-armed perform no longer discards the buffer — the closed phrase stays
+    // keepable for KEEP_BUFFER_MS so retrospective capture can commit it
+    // after the fact (BACKLOG 10.2). Eviction ages it out.
+    stopComposePerformSounding();
+  }
+
   const performInput = {
     /** Every move, in every mode: the rail planchette and pitch HUD follow the
      *  cursor, and an un-armed Perform play counts cursor movement as presence for its
      *  idle auto-stop. */
     track(e: PointerEvent) {
-      composeUpdatePlanchette(e.clientY - fgCanvas.getBoundingClientRect().top);
+      const sy = screenY(e);
+      if (heldSilently(e.pointerId, sy)) return;
+      composeUpdatePlanchette(sy);
       if (isComposePerformActive()) composeEngine.markActivity(performance.now());
     },
     down(e: PointerEvent) {
-      composeUpdatePlanchette(e.clientY - fgCanvas.getBoundingClientRect().top);
+      // The first finger lifted while others hold the chord: a new touch is
+      // the newest finger, so it takes the chord rather than restarting it.
+      if (composeEngine.isLmbDown() && chordFingers.length > 0) {
+        takeChord(e);
+        return;
+      }
+      chordFingers = [{ pointerId: e.pointerId, sy: screenY(e) }];
+      composeUpdatePlanchette(screenY(e));
       composeEngine.onLmbDown(performance.now());
       fingerOrder = [...fingerOrder.filter(v => v !== 'primary'), 'primary'];
       // Touching down on a line clicks too (13.35).
@@ -654,31 +747,17 @@ export function createPerformer(deps: PerformerDeps) {
         startComposePerformSounding(planchette.snappedWorldY);
       }
     },
-    move() {
+    move(e: PointerEvent) {
       // track() already moved the planchette; retune the sounding voice to it.
       // Moves arrive off-canvas too while the button is held (pointer capture).
       composeEngine.markActivity(performance.now());
+      if (!isChordHolder(e.pointerId)) return;
       const p = store.getState().performance.planchettes[0];
       if (p?.snappedWorldY != null) updateComposePerformPitch(p.snappedWorldY);
     },
-    up() {
-      // A session that ended while the button was held has already released it.
-      if (!composeEngine.isLmbDown()) return;
-      composeEngine.onLmbUp();
-      fingerOrder = fingerOrder.filter(v => v !== 'primary');
-      // CRITICAL ORDERING: finalize BEFORE stopping synths so the planchette array
-      // (and therefore the voiceIds we finalize) still contains every active voice.
-      // syncHarmonyPlanchettes only removes harmonies when playback ends or drawMode
-      // toggles off, neither of which happens at LMB-up — so the array is stable here.
-      // Close first: the phrase must be sealed before either path claims it.
-      closeLmbPhrases();
-      if (isCapturing(store.getState().transport)) {
-        finalizeComposeRecordedCurves();
-      }
-      // Un-armed perform no longer discards the buffer — the closed phrase stays
-      // keepable for KEEP_BUFFER_MS so retrospective capture can commit it
-      // after the fact (BACKLOG 10.2). Eviction ages it out.
-      stopComposePerformSounding();
+    up(e: PointerEvent) {
+      if (liftChordFinger(e.pointerId)) return;
+      releasePress();
     },
     leave() {
       if (composeEngine.isLmbDown()) return;
@@ -758,7 +837,12 @@ export function createPerformer(deps: PerformerDeps) {
   const fingerInput = {
     down(e: PointerEvent): boolean {
       const st = store.getState();
-      if (st.harmonicPrism.drawMode) return false;
+      // Prism Draw: a newer finger takes the chord instead of a voice of its own.
+      if (st.harmonicPrism.drawMode) {
+        if (!composeEngine.isLmbDown() || chordFingers.length === 0) return false;
+        takeChord(e);
+        return true;
+      }
       const voiceId = allocateFingerVoice([...fingers.values()].map(f => f.voiceId));
       const tone = getSelectedTrackTone();
       if (!voiceId || !tone) return false;
@@ -779,13 +863,23 @@ export function createPerformer(deps: PerformerDeps) {
       return true;
     },
     move(e: PointerEvent) {
+      // A finger holding the Prism chord (silently, or playing it).
+      if (chordFingers.some(c => c.pointerId === e.pointerId)) {
+        const sy = screenY(e);
+        if (!heldSilently(e.pointerId, sy)) moveChord(sy);
+        return;
+      }
       const f = fingers.get(e.pointerId);
       if (!f) return;
-      f.sy = e.clientY - fgCanvas.getBoundingClientRect().top;
+      f.sy = screenY(e);
       composeEngine.markActivity(performance.now());
       updateFinger(f);
     },
     up(e: PointerEvent) {
+      if (chordFingers.some(c => c.pointerId === e.pointerId)) {
+        if (!liftChordFinger(e.pointerId)) releasePress();
+        return;
+      }
       const f = fingers.get(e.pointerId);
       if (f) releaseFinger(e.pointerId, f, isCapturing(store.getState().transport));
     },
@@ -808,6 +902,8 @@ export function createPerformer(deps: PerformerDeps) {
    *  it when `commit`. They play again once lifted and put back. */
   function releaseAllFingers(commit: boolean) {
     for (const [pointerId, f] of [...fingers]) releaseFinger(pointerId, f, commit);
+    // The session released the chord too: fingers still holding it play nothing.
+    chordFingers = [];
   }
 
   return {
