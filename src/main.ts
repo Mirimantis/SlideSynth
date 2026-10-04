@@ -1673,7 +1673,7 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
     const attractor = adaptive.target !== null && adaptive.captured
       ? { target: adaptive.target, radius: adaptive.radius }
       : null;
-    const magneticPitch = updateMagnetic(magneticState, wy, magneticNowBeats(), st.magneticStrength, st.magneticSpringK, st.magneticDamping, attractor);
+    const magneticPitch = updateMagnetic(magneticState, wy, magneticNowBeats(), st.magneticStrength, st.magneticSpringK, st.magneticDamping, attractor, st.magneticSpeed);
     return { cursorWorldY: wy, snappedWorldY: magneticPitch, snapTarget };
   }
 

@@ -8,6 +8,7 @@ import {
   type NudgeAxes, type NudgeMode,
 } from '../model/nudge';
 import { clampRecordAccuracy, RECORD_ACCURACY_DEFAULT } from '../model/fit';
+import { clampMagneticSpeed } from '../utils/snap-magnetic';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 import {
@@ -60,6 +61,7 @@ const SNAP_VIEW_FIELDS = {
   magneticStrength: 'magneticStrength',
   magneticSpringK: 'magneticSpringK',
   magneticDamping: 'magneticDamping',
+  magneticSpeed: 'magneticSpeed',
 } as const satisfies Record<string, keyof SnapSettings>;
 
 type SnapViewKey = keyof typeof SNAP_VIEW_FIELDS;
@@ -768,6 +770,15 @@ class Store {
     const snap = this.state.composition.snap;
     if (snap.magneticDamping === clamped) return;
     snap.magneticDamping = clamped;
+    this.touch('snap');
+  }
+
+  /** Gravity's Speed (13.36). */
+  setMagneticSpeed(speed: number) {
+    const clamped = clampMagneticSpeed(speed);
+    const snap = this.state.composition.snap;
+    if (snap.magneticSpeed === clamped) return;
+    snap.magneticSpeed = clamped;
     this.touch('snap');
   }
 

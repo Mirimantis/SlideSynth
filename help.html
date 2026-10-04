@@ -784,6 +784,12 @@
                   oscillations near a snap line fade. Low values sustain vibrato
                   wobbles for longer; high values settle quickly. Too low combined
                   with high Force can swing wildly.</li>
+              <li><strong>Speed</strong> (0.25×–4×, default 1×) — how fast Gravity moves,
+                  without changing the tempo. Gravity's motion is measured in beats, so it
+                  already follows the tempo; Speed 2× feels like playing at double tempo.
+                  Fast Speed with high Damping glides quickly between notes and settles
+                  without overshoot (no vibrato), which helps keep up with a finger on a
+                  touchscreen.</li>
             </ul>
             The defaults are tuned tight, so pitch settles onto a target promptly.
             Combine strong Force with low Damping and a moderate Spring to get
@@ -793,7 +799,7 @@
     </div>
   </details>
   <p>
-    All snap-section settings (Snap toggle, Gravity on/off, its three
+    All snap-section settings (Snap toggle, Gravity on/off, its four
     sliders, plus the Tuning, Root and Scale picks) are saved with the composition file
     and restored on load, so a project's bespoke snap configuration round-trips
     cleanly.
@@ -805,7 +811,7 @@
       <p>
         The <strong>Preset</strong> dropdown at the top of the Snap section
         loads a named <em>Gravity feel</em> in one click. A preset carries only
-        the three physics values — Force, Spring and Damping — so it
+        the four physics values — Force, Spring, Damping and Speed — so it
         never changes your Tuning, Root or Scale, and never changes what Gravity
         snaps <em>to</em>, only how it gets there:
       </p>

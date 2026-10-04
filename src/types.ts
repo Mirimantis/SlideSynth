@@ -122,6 +122,7 @@ export interface SnapSettings {
   magneticStrength: number;     // 0..1
   magneticSpringK: number;      // 1..50
   magneticDamping: number;      // 0.25..15
+  magneticSpeed: number;        // 0.25..4 (13.36): multiplies the time Gravity's physics sees
 }
 
 // ── Snap guides (Phase 8.7) ────────────────────────────────────
@@ -313,6 +314,7 @@ export interface AppState {
   magneticStrength: number;
   magneticSpringK: number;
   magneticDamping: number;
+  magneticSpeed: number;
   /** Track ID currently armed for MIDI input recording (Phase 8.11). Null = no
    *  track armed. Mutually exclusive — arming a different track replaces the
    *  value. Distinct from PerformanceState.recordArmed (LMB record-arm), which

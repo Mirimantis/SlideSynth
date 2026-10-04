@@ -5,6 +5,7 @@ import {
   DEFAULT_MAGNETIC_STRENGTH, DEFAULT_MAGNETIC_SPRING_K, DEFAULT_MAGNETIC_DAMPING,
 } from '../constants';
 import { createDefaultToneLibrary } from './tone';
+import { DEFAULT_MAGNETIC_SPEED } from '../utils/snap-magnetic';
 import { createTrack } from './track';
 import { pitchPoints } from './lane';
 import { ALL_NOTES, TWELVE_EDO } from '../tuning/tuning';
@@ -25,6 +26,7 @@ export function createDefaultSnapSettings(): SnapSettings {
     magneticStrength: DEFAULT_MAGNETIC_STRENGTH,
     magneticSpringK: DEFAULT_MAGNETIC_SPRING_K,
     magneticDamping: DEFAULT_MAGNETIC_DAMPING,
+    magneticSpeed: DEFAULT_MAGNETIC_SPEED,
   };
 }
 

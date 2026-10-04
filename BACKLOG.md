@@ -751,7 +751,11 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
 - [ ] **13.15 Gravity feel preview** *(M)*
   - A small animated waveform in the Snap drawer showing what Force, Spring and Damping do: its amplitude, frequency and falloff change as you move the sliders.
   - Drive it from the real `snap-magnetic` integrator (a step response into a well), so the preview is the feel, not an illustration of it.
-- [ ] **13.36 Faster gravity, and glides without vibrato** *(M, own planning session — added 2026-10-04)*
+- [x] **13.36 Faster gravity, and glides without vibrato** *(S as built — added 2026-10-04; this PR)*
+  - **Done (this PR), solved by one setting:** testing at 240 bpm showed the physics running in beats was the slowness, so Gravity got a **Speed** multiplier (0.25×–4×, default 1×, a logarithmic slider in the Snap drawer under Damping) that scales the beat time the physics sees, and nothing else. **High Speed with high Damping gives the fast glide without overshoot** (the user's finding), so the approaches below aren't needed for now.
+    - `updateMagnetic(..., speed)` multiplies the elapsed time (and the catch-up cap); the fixed sub-step keeps it stable at any speed. Speed 2× matches double tempo exactly (tested).
+    - `SnapSettings.magneticSpeed`: saved with the composition (older files load at 1×) and in snap presets (built-ins at 1×; user presets saved before it read as 1×, and a preset matches only at its Speed).
+    - Still tempo-relative: a piece at 60 bpm with Speed 2× feels like 120. Making it tempo-independent was considered and left, since it would change every existing composition's feel.
   - From touch testing (13.27): with Gravity on, even at maximum Force the planchette can be slow to catch up with a finger. Keep today's range reachable, but allow faster.
   - **An option for no overshoot:** the overshoot that makes vibrato should be avoidable while keeping a fast glide between notes. Today Damping prevents the vibrato but slows everything else down.
   - **Approaches to weigh** (the user's idea first; open to others):
