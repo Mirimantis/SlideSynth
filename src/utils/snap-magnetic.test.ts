@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-  createMagneticState, updateMagnetic, clampMagneticSpeed, detentMagneticSpeed,
+  createMagneticState, updateMagnetic, clampMagneticSpeed, stepMagneticSpeed,
   DEFAULT_MAGNETIC_SPEED, MAGNETIC_SPEED_MAX, MAGNETIC_SPEED_MIN,
 } from './snap-magnetic';
 import { migrateSnapSettings } from '../export/json-export';
@@ -47,26 +47,20 @@ describe('Gravity Speed (13.36)', () => {
   });
 });
 
-describe('the Speed slider\'s detents', () => {
-  it('catches on round values near them', () => {
-    expect(detentMagneticSpeed(1.03)).toBe(1);
-    expect(detentMagneticSpeed(1.95)).toBe(2);
-    expect(detentMagneticSpeed(2.1)).toBe(2);
-    expect(detentMagneticSpeed(0.52)).toBe(0.5);
-    expect(detentMagneticSpeed(3.9)).toBe(4);
-  });
-
-  it('moves in tenths from 1× up and twentieths below, between detents', () => {
-    expect(detentMagneticSpeed(1.23)).toBeCloseTo(1.2, 9);
-    expect(detentMagneticSpeed(1.27)).toBeCloseTo(1.3, 9);
-    expect(detentMagneticSpeed(3.42)).toBeCloseTo(3.4, 9);
-    expect(detentMagneticSpeed(0.62)).toBeCloseTo(0.6, 9);
-    expect(detentMagneticSpeed(0.38)).toBeCloseTo(0.4, 9);
+describe('the Speed slider\'s steps', () => {
+  it('moves in tenths from 1× up and twentieths below', () => {
+    expect(stepMagneticSpeed(1.03)).toBe(1);
+    expect(stepMagneticSpeed(1.23)).toBeCloseTo(1.2, 9);
+    expect(stepMagneticSpeed(1.27)).toBeCloseTo(1.3, 9);
+    expect(stepMagneticSpeed(3.42)).toBeCloseTo(3.4, 9);
+    expect(stepMagneticSpeed(0.62)).toBeCloseTo(0.6, 9);
+    expect(stepMagneticSpeed(0.38)).toBeCloseTo(0.4, 9);
+    expect(stepMagneticSpeed(0.26)).toBe(0.25);
   });
 
   it('every slider position lands on a value that reads cleanly', () => {
     for (let v = -2; v <= 2 + 1e-9; v += 0.05) {
-      const s = detentMagneticSpeed(2 ** v);
+      const s = stepMagneticSpeed(2 ** v);
       expect(Math.abs(s * 100 - Math.round(s * 100))).toBeLessThan(1e-6);
     }
   });

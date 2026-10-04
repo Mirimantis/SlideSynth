@@ -1149,7 +1149,10 @@ body.perform-mode #canvas-container::after {
   font-family: ui-monospace, 'SF Mono', Consolas, monospace;
   font-size: 0.75rem;
   color: var(--text-dim);
-  min-width: 30px;
+  /* Fixed, so a slider doesn't change length as its value grows a digit:
+     five characters fit the longest ("0.25×", "12.5"). */
+  width: 5ch;
+  flex-shrink: 0;
   text-align: right;
 }
 
