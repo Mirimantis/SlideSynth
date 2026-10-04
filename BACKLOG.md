@@ -134,6 +134,12 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - `gravity.ts`: cursor → pitch under Snap and Gravity, the magnetic clock, haptic steps. `capture.ts`: layers, the pass log, committing, Keep and Drop last pass. `voices.ts`: the Prism voice ids (pure).
     - Three references that reached into the moved state became calls: `fingerCount()`, `releaseAllFingers(commit)`, `forgetTrack(trackId)`. Keep and Drop in the command table are wrapped (`() => keepLastPhrase()`), since the performer is made after the table.
     - The frame loop stays in `main.ts`: what it calls is now the performer's ticks.
+  - **PR C (built 2026-10-04):** `main.ts` 2,050 → 1,266 lines.
+    - `app/transport-controller.ts` (`createTransportController`): `transport(event)` and its effects, the play range, Play / Space, Record and Record next Pass, and `playEngineFrom` (a ruler scrub's resume). `transport` is now made after the performer, which gets a forwarding arrow.
+    - `commands/app-commands.ts` (`createAppCommands`): every command's handler beside the edit commands, with the helpers only they use (Escape's back-out, projection, composition edges, paste beat, replacing the composition). `applyLoopEnabled` was a plain store call; it's gone.
+    - `perform/midi.ts` (`createMidiPerformance`): live MIDI input, the device list for Settings, the arm prompt. The held-keys set is made in `main.ts` and shared with the performer.
+    - `ui/tuning-actions.ts` (the Tuning drawer's actions, keeping the audio's A4 in step), `ui/track-actions.ts` (the track list's actions, "+ Track" and "+ Tone"; `addTrackWithPickedTone` is shared with MIDI's arm-new flow, which duplicated it).
+    - Still in `main.ts` for PR D: the layout template, modes and tools (`selectTool`, `setPerformMode`, `chooseTool`), audition, the interaction callbacks, panning, the frame loop and the store bindings.
 - [ ] **15.4 Reactive UI chrome** *(L; part 1 in PR #78)*
   - Move panels, drawers, dialogs and menus onto a small reactive component layer. The recommended default is Preact + `@preact/signals`; confirm the choice at the start of this item.
   - The canvas stays imperative.
