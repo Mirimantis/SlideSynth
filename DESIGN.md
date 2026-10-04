@@ -81,8 +81,11 @@ An honest description of the code as it stands, including the problems Phase 15 
 
 ```
 src/
-├── main.ts          # ~3,100 lines (15.3 under way): DOM layout template, UI wiring, command handlers,
-│                    #   perform/record/jam wiring, the frame loop, store watches
+├── main.ts          # ~2,050 lines (15.3 under way): DOM layout template, UI wiring, command handlers,
+│                    #   the transport controller, MIDI input, the frame loop, store watches
+├── perform/         # performer (the sounding voice, Prism harmonies, extra fingers, capture each frame,
+│                    #   edge scrolling, the perform tick), gravity (cursor → pitch under Snap and Gravity,
+│                    #   haptic steps), capture (layers, pass log, Keep, Drop last pass), voices (Prism voice ids)
 ├── app/             # redraw.ts: what the next frame must draw (markBgDirty, requestRedraw)
 ├── commands/        # catalog (every command: label, keys, description), keys (chord matching),
 │                    #   registry (dispatch + keyboard), edit-commands
@@ -124,7 +127,7 @@ styles/              # theme.css (every colour, as tokens), main / panels / dial
 
 ### Known structural problems (the review's findings)
 
-1. *(Keyboard map resolved in 15.3: the command catalog and registry in `src/commands/`. Drawing moved to `canvas/scene.ts` in 15.3 PR A. Layout, perform logic and the frame loop are still in `main.ts`.)* **`main.ts` does everything** — layout HTML, wiring, keyboard map, perform logic, render loop, and inline model edits (e.g. multi-point delete in the key handler).
+1. *(Keyboard map resolved in 15.3: the command catalog and registry in `src/commands/`. Drawing moved to `canvas/scene.ts` in 15.3 PR A, perform and capture to `perform/` in PR B. Layout, the transport controller, MIDI and the frame loop are still in `main.ts`.)* **`main.ts` does everything** — layout HTML, wiring, keyboard map, perform logic, render loop, and inline model edits (e.g. multi-point delete in the key handler).
 2. *(Resolved in 15.2: the explicit state machine in `src/state/transport.ts` and one input router per canvas in `src/canvas/input-router.ts`.)* **The perform state machine is implicit.** Play / jam / record / pass-record / MIDI-arm state is spread across ~8 flags in the store, the playback engine and module-level variables, each transition function setting its own combination. Two canvas mouse handlers use two different definitions of "is the left button performing?" (`isComposePerformActive` in `main.ts` vs. `isComposePerformLocked` in `interaction.ts`) — with Lock Rail off, a Draw click during Jam both sounds a note and places a curve point.
 3. **Coarse store notification + hand-synced UI.** Every store change rebuilds the track list and both property panels via `innerHTML`, including on every mousemove of a drag. Widgets that don't subscribe drift out of sync. *(Resolved in 15.1: signals-backed store, targeted watches, render-if-changed panels.)*
 4. **Duplicated state.** Snap settings exist in both `AppState` and `composition.snap`; loop-enabled lives in the playback engine; the snap config is built in three places that disagree (the Space-hold preview ignores guides and projection). *(Snap mirrors and loop state resolved in 15.1; one snap-config builder in 15.6, `src/state/snap-config.ts`.)*

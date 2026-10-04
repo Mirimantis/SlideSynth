@@ -17,7 +17,7 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105), 15.8 kernel tests (PR #106), 15.3 part A (PR #107).
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105), 15.8 kernel tests (PR #106), 15.3 parts A (PR #107) and B (PR #108).
 2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
 3. **Background, now (decided 2026-10-04: finish before piling more on):** 15.8 done; 15.3 in four PRs (A render loop, HUDs, zoom; B perform and capture; C transport, commands, MIDI, Tune A4, track panel; D the layout template with 15.4), then the rest of 15.4.
 
@@ -129,6 +129,11 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - `app/redraw.ts`: the redraw flags as functions (`markBgDirty`, `requestRedraw`, `redrawPending`, `takeBgDirty`), replacing `main.ts`'s `bgDirty` / `fgDirty` variables, so pieces outside `main.ts` can ask for a redraw.
     - `ui/pitch-hud.ts` (and its formatting), `ui/session-overlays.ts` (count-in number, idle warning), `ui/frame-times.ts` (Perf HUD's frame window), `ui/zoom-sliders.ts`, `ui/param-graph-resize.ts`.
     - The frame loop itself (`runFrame`, `tickFrame`, `isAnimating`) stays in `main.ts` until PR B moves the perform ticks it calls.
+  - **PR B (PR #108):** `main.ts` 3,077 → 2,052 lines. Perform and capture move to `src/perform/`, as they were:
+    - `performer.ts` (`createPerformer(deps)`): the sounding voice under the button or a finger, Prism harmonies, extra fingers (13.33), MIDI note voices' commits, capture each frame, edge scrolling, the perform tick (count-in, loop wrap, idle stop), and the HUD's planchette. Its ten dependencies (viewport, canvas, preview, dynamics bus, playback, held MIDI notes, rail beat, pan bound, the perform predicate, the transport controller) are explicit; `main.ts` destructures the same names it used before.
+    - `gravity.ts`: cursor → pitch under Snap and Gravity, the magnetic clock, haptic steps. `capture.ts`: layers, the pass log, committing, Keep and Drop last pass. `voices.ts`: the Prism voice ids (pure).
+    - Three references that reached into the moved state became calls: `fingerCount()`, `releaseAllFingers(commit)`, `forgetTrack(trackId)`. Keep and Drop in the command table are wrapped (`() => keepLastPhrase()`), since the performer is made after the table.
+    - The frame loop stays in `main.ts`: what it calls is now the performer's ticks.
 - [ ] **15.4 Reactive UI chrome** *(L; part 1 in PR #78)*
   - Move panels, drawers, dialogs and menus onto a small reactive component layer. The recommended default is Preact + `@preact/signals`; confirm the choice at the start of this item.
   - The canvas stays imperative.
