@@ -44,6 +44,24 @@ export function clampMagneticSpeed(speed: unknown): number {
   return Math.max(MAGNETIC_SPEED_MIN, Math.min(MAGNETIC_SPEED_MAX, speed));
 }
 
+/** Round values the Speed slider catches on (found in testing: two decimals
+ *  made 1×, 2× and the like hard to land on). */
+export const MAGNETIC_SPEED_DETENTS: readonly number[] = [0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4];
+/** How near a detent catches, as a ratio (log2 units, about 6 %). */
+const SPEED_DETENT_REACH = 0.08;
+
+/** A Speed picked on the slider: onto a detent when it's near one;
+ *  otherwise in 0.1 steps from 1× up and 0.05 steps below, where finer
+ *  control is useful. */
+export function detentMagneticSpeed(speed: number): number {
+  const s = clampMagneticSpeed(speed);
+  for (const d of MAGNETIC_SPEED_DETENTS) {
+    if (Math.abs(Math.log2(s / d)) <= SPEED_DETENT_REACH) return d;
+  }
+  const step = s >= 1 ? 0.1 : 0.05;
+  return clampMagneticSpeed(Math.round(Math.round(s / step) * step * 100) / 100);
+}
+
 export interface MagneticState {
   pitch: number | null;           // current simulated pitch (cents)
   velocity: number;               // cents per beat

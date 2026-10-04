@@ -1,7 +1,7 @@
 import '@preact/signals'; // the panel re-renders when the store fields it reads change
 import { useState } from 'preact/hooks';
 import { store } from '../state/store';
-import { MAGNETIC_SPEED_MAX, MAGNETIC_SPEED_MIN } from '../utils/snap-magnetic';
+import { MAGNETIC_SPEED_MAX, MAGNETIC_SPEED_MIN, detentMagneticSpeed } from '../utils/snap-magnetic';
 import {
   BUILTIN_SNAP_PRESETS, loadUserSnapPresets, saveUserSnapPresets, presetMatches, snapshotPreset,
   type SnapFeel, type SnapPreset,
@@ -31,11 +31,6 @@ const CUSTOM = '__custom__';
 
 function formatDamping(d: number): string {
   return Number.isInteger(d) ? String(d) : d.toFixed(1);
-}
-
-/** Speed to two places, so the slider lands on exact 1×, 2×, 0.5×. */
-function snapSpeed(speed: number): number {
-  return Math.round(speed * 100) / 100;
 }
 
 function formatSpeed(speed: number): string {
@@ -189,7 +184,7 @@ function GravityControls() {
         id="gravity-speed" label="Speed" min={Math.log2(MAGNETIC_SPEED_MIN)} max={Math.log2(MAGNETIC_SPEED_MAX)} step={0.05}
         value={Math.log2(st.magneticSpeed)} shown={`${formatSpeed(st.magneticSpeed)}×`}
         title="How fast Gravity moves, without changing the tempo (1× follows the tempo as it is; 2× feels like double tempo). Fast with high Damping glides quickly and settles without vibrato"
-        onInput={v => store.setMagneticSpeed(snapSpeed(2 ** v))}
+        onInput={v => store.setMagneticSpeed(detentMagneticSpeed(2 ** v))}
       />
     </>
   );
