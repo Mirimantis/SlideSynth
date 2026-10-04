@@ -17,7 +17,7 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103).
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104).
 2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
 3. **Background, whenever:** 15.8, then 15.3 and 15.4.
 
@@ -463,14 +463,14 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - Perform: a finger per voice (multitouch polyphony; the engine already keys phrases by voice), and touch as the instrument in 16.8's "stage" view;
     - platform limits: iOS needs a user gesture to start audio, AudioWorklet support and latency on mobile, and no Web MIDI in iOS Safari;
     - relation to 11.3 (pen pressure and tilt share the Pointer Events path).
-- [x] **13.32 Phone layout fixes: zoom sliders, transport** *(S — added 2026-10-04; this PR)*
+- [x] **13.32 Phone layout fixes: zoom sliders, transport** *(S — added 2026-10-04; PR #104)*
   - Found testing on a phone (13.27). Pulled forward from 13.27: small, and it helps the touch use that already works.
   - **Zoom sliders on the canvas's edges** (decided): they float over the canvas's bottom-right corner and get in the way of performing on a small screen; in portrait the pitch slider lands near the middle of the screen. Move them to the edges, like scrollbars: time along the bottom, pitch down the right side, never over the canvas. Zoom stays on the sliders (no pinch to zoom).
   - **Transport in portrait:** on a phone in portrait most of the transport buttons disappear. They need to stay reachable (wrap, shrink, or move).
-  - **Done (this PR):**
+  - **Done (PR #104):**
     - The zoom sliders moved out of the canvas into strips along its edges (`#zoom-y-gutter` down the right side, `#zoom-x-gutter` along the bottom, inside a new `#canvas-row`), each slider running the strip's whole length, so they're longer (finer) as well as out of the way. `#canvas-container` is still exactly the canvas, so nothing that measures it changed. The strips are 18 px, 28 px on a touch screen (`pointer: coarse`).
     - The transport was hidden, not gone: the top bar's right zone never wrapped, so on a narrow screen it slid under the menus. The bar now wraps, and the right zone drops to its own line when there's no room (all 13 buttons reachable at 375 px wide).
-- [x] **13.37 Touch-friendly defaults** *(S — added and done 2026-10-04; this PR)*
+- [x] **13.37 Touch-friendly defaults** *(S — added and done 2026-10-04; PR #104)*
   - From touch testing, fine without touch too: the app **opens in Perform**; **Scroll canvas during playback** is on by default (an explicit saved choice is kept); a **new composition starts in 12-EDO, root C, Major** (`NEW_COMPOSITION_SCALE`). A file or MIDI import with no snap settings still gets All notes, as before.
 - [ ] **13.33 Multitouch: play several notes at once** *(M–L, own planning session — added 2026-10-04; the user's biggest touch want)*
   - Each finger on the canvas plays its own voice in Perform. Doesn't need the rest of 13.27 first.
@@ -489,10 +489,10 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - the viewport's mapping is the place to swap axes; every renderer and hit-test goes through it, but rulers, the rail, the staff labels, edge scrolling and the zoom sliders (13.32) all assume today's layout;
     - Perform only, or editing too;
     - which way it scrolls, and where the rail sits (a horizontal line, like a keyboard's edge).
-- [x] **13.35 Haptic click on snap lines** *(S — added 2026-10-04; this PR)*
+- [x] **13.35 Haptic click on snap lines** *(S — added 2026-10-04; PR #104)*
   - On devices that can vibrate, a tiny haptic click when the **finger** (the cursor, not the planchette) crosses a snap line while performing.
   - **Notes:** the browser's Vibration API works in Chrome on Android; iOS Safari and desktops don't support it, so it's an extra where available. Very short pulses (a few ms) may be rounded up or ignored by some phones; test the shortest that's felt. A setting to turn it off. A first taste of H.3's felt detents.
-  - **Done (this PR):**
+  - **Done (PR #104):**
     - **When it clicks** (reworked in testing: clicking on *crossing* a line missed notes the finger reached without quite crossing, and clicked over and over on a line it wavered across): a click when the finger comes within **10 px** of a line, and none again for that line until it has gone **15 px** away (`hapticStep`). Touching down on a line clicks too. The lines are the ones Y would snap to (scale notes, frets, pitch guides), **with Snap on or off** (`nearestSnapLine` in `snap.ts`). The raw cursor, not the planchette. Hovering never clicks.
     - `ui/haptics.ts`: `hapticClick(ms, now)` calls `navigator.vibrate`, at most once per 30 ms so a fast sweep is a train of clicks, not a buzz; nothing where the API is missing.
     - **Settings › Touch:** "Haptic clicks on snap lines" (on by default) and **Click length** (20–40 ms, default 25: nothing shorter could be felt; letting go of the slider gives a sample click). Workspace prefs. The hint names the devices rather than detecting them: desktop Chrome has `navigator.vibrate` too, without a motor.
@@ -761,8 +761,8 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
 - [ ] **13.15 Gravity feel preview** *(M)*
   - A small animated waveform in the Snap drawer showing what Force, Spring and Damping do: its amplitude, frequency and falloff change as you move the sliders.
   - Drive it from the real `snap-magnetic` integrator (a step response into a well), so the preview is the feel, not an illustration of it.
-- [x] **13.36 Faster gravity, and glides without vibrato** *(S as built — added 2026-10-04; this PR)*
-  - **Done (this PR), solved by one setting:** testing at 240 bpm showed the physics running in beats was the slowness, so Gravity got a **Speed** multiplier (0.25×–4×, default 1×, a logarithmic slider in the Snap drawer under Damping) that scales the beat time the physics sees, and nothing else. **High Speed with high Damping gives the fast glide without overshoot** (the user's finding), so the approaches below aren't needed for now.
+- [x] **13.36 Faster gravity, and glides without vibrato** *(S as built — added 2026-10-04; PR #104)*
+  - **Done (PR #104), solved by one setting:** testing at 240 bpm showed the physics running in beats was the slowness, so Gravity got a **Speed** multiplier (0.25×–4×, default 1×, a logarithmic slider in the Snap drawer under Damping) that scales the beat time the physics sees, and nothing else. **High Speed with high Damping gives the fast glide without overshoot** (the user's finding), so the approaches below aren't needed for now.
     - `updateMagnetic(..., speed)` multiplies the elapsed time (and the catch-up cap); the fixed sub-step keeps it stable at any speed. Speed 2× matches double tempo exactly (tested).
     - `SnapSettings.magneticSpeed`: saved with the composition (older files load at 1×) and in snap presets (built-ins at 1×; user presets saved before it read as 1×, and a preset matches only at its Speed).
     - **Steps** (from testing: two decimals made round values impossible to land on): 0.1 from 1× up and 0.05 below (`stepMagneticSpeed`). Detents on round values were tried and taken out: too much. The value labels of all four Gravity sliders have a fixed width, so a slider doesn't change length as its value grows a digit.
