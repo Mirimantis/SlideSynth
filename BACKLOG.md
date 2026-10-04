@@ -713,6 +713,15 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
   - **Session also owns:**
     - dense-bed resolution: nearest, weighted, or limited targets;
     - whether snapping to a drone uses the current temperament or pure JI.
+- [ ] **13.30 Prism: build the chord voice by voice** *(M, own planning session — added 2026-10-03)*
+  - Today one stacking (2nds, 3rds, 4ths, 5ths) and one quality shape every voice. Instead: set the number of voices, then for each voice its **interval**, **how many steps** of it, and its **direction** (up or down) from the root, so more complex shapes can be built (e.g. a fifth up and a major third down, or a fourth up stacked twice).
+  - **Session inputs:**
+    - the panel: a row per voice;
+    - what happens to the stacking and quality pickers: presets that fill the rows (Tertian major → M3, P5…), or gone;
+    - per-voice octave offsets (8.13) and the chord-wide direction: folded into each voice's interval and direction;
+    - intervals counted in the tuning's steps, as the Prism counts them (13.8 (b)) and from each note (13.21); names shared with 13.24's Move by list;
+    - saved chord specs and the `prismChordSpec` workspace pref: migrating today's specs to rows;
+    - knock-on: 8.12 favorites, 8.14 chord labels.
 - [ ] **8.12 Chord-spec favorites on number keys** *(M)*
   - Retune voices mid-perform without the mouse. The live-retune plumbing already exists.
   - Bind through 15.3's command registry.
@@ -738,6 +747,23 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
 - [ ] **11.5 Cursor Y-velocity as a dynamics source** *(M)*
   - The gesture's own vertical speed drives dynamics; no extra hardware.
   - **Critical:** read the raw pre-snap cursor, not the planchette. Under magnetic snap the planchette carries spring oscillation and would ring the volume at the vibrato rate.
+- [ ] **11.6 Distance from snap target as a dynamics source** *(M — added 2026-10-03)*
+  - Volume follows how close the pitch is to a snap target: on a target, **Max**; exactly halfway between two targets, **Min**. Max and Min are set as percentages.
+  - **Decide when building:**
+    - which targets: the same set Gravity pulls to (scale, frets, pitch guides), so it changes with the tuning and the Snap settings;
+    - "halfway" between the two neighbouring targets, so uneven spacing (unequal tunings, sparse scales) scales with it;
+    - the curve between Max and Min (linear, or eased near the target);
+    - the planchette or the raw cursor: under magnetic snap the planchette's spring would make a tremolo at the vibrato rate (11.5's warning). Maybe wanted here; maybe a choice;
+    - smoothing, so a fast glide doesn't zipper;
+    - recorded into the volume lane like the other sources.
+- [ ] **11.7 Looping drawn shape as a dynamics source** *(M–L, own planning session — added 2026-10-03)*
+  - A drawn volume shape that **loops** (a custom tremolo) instead of following along in time. Loop boundaries are set where the source is chosen.
+  - **Session inputs:**
+    - where the shape is drawn (the Parameters Graph, or a small editor beside the source);
+    - loop length in beats (tempo-synced) or seconds; free-running, or restarted on each note;
+    - live (feeding the bus while performing, written into recorded volume lanes) or applied at playback;
+    - **track-level:** the user expects it may only work once tracks have their own dynamics. There's no backlog item for track-level dynamics yet; 13.13 (group volume envelope) and 8.4 (lane types) are the nearest.
+    - Volume undulation is tremolo, not vibrato.
   - **Session inputs:**
     - mapping (magnitude only, or does direction matter?);
     - smoothing vs. latency;
@@ -809,6 +835,26 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
 - [ ] **8.8 FM synthesis + waveform visualizer** *(XL, own planning session)*
   - FM operators, noise, a waveform visualizer, and keyframe-animatable mixes (overlaps with 8.4's lane model).
   - Build on 15.7's AudioWorklet voice.
+- [ ] **13.29 Draw a waveform to make a tone** *(M, own planning session — added 2026-10-03)*
+  - Draw one cycle of a wave to make a custom oscillator for a tone, alongside sine, square, sawtooth and triangle.
+  - **Session inputs:**
+    - the editor: freehand, or the app's own curve tools on a one-cycle canvas; where it lives in the tone builder;
+    - playback: a Web Audio `PeriodicWave` from the drawing's harmonics (band-limited, so no aliasing up high), or a wavetable in 15.7's AudioWorklet voice;
+    - how many harmonics to keep, and a preview of the spectrum;
+    - the file: tones are saved in the composition's tone library, so the drawing (or its harmonics) goes in the `.gliss` file; WAV export renders it the same way;
+    - relation to 8.8 (waveform visualizer, keyframed mixes) and 11.7 (another drawn shape).
+
+### Builds & sharing
+- [ ] **13.28 Test builds on a subdomain** *(S–M — added 2026-10-03)*
+  - Publish a static build to a subdomain of the user's site (Namecheap Stellar Plus shared hosting), to share occasional builds with friends for testing.
+  - **Steps:**
+    - create the subdomain in cPanel, with its own folder; turn on HTTPS (AutoSSL). HTTPS is required: the AudioWorklet voice and Web MIDI only run in a secure context;
+    - turn on SSH in cPanel and add a key (Namecheap's shared hosting uses a non-standard SSH port, 21098; check in cPanel);
+    - `npm run build` makes `dist/` (`help.html` is already built alongside, in `vite.config.ts`); check the AudioWorklet file comes along, and that it all works from the subdomain's root;
+    - an `npm run deploy` script that builds and copies `dist/` over SSH (rsync, or scp). Host, user and folder in an untracked local file, never in the repo;
+    - show the build (version or commit, date) somewhere in the app, so testers can say which build they used;
+    - an `.htaccess` that keeps `index.html` uncached (asset files are hashed), and optionally password-protects the folder (cPanel's Directory Privacy) to keep it to friends.
+  - **Needs from the user:** the subdomain name, and SSH turned on.
 
 ---
 
