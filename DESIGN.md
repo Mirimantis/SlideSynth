@@ -244,7 +244,7 @@ Scrubbing the ruler is audible by default, replacing the Space-hold scrub previe
   - **Tempo** *(new, from the Transport drawer)*: BPM, time signature, and the metronome's on/off switch and volume.
   - **Snap**:
     - Gravity on/off, replacing the Magnetic switch. With Gravity off, Snap snaps instantly, as Magnetic off does today.
-    - Gravity's Force, Spring and Damping.
+    - Gravity's Force, Spring and Damping, and Speed (13.36: a multiplier on the beat time the physics runs in).
     - Presets: select, save, delete. Presets hold feel only (13.2).
     - Guides: show, lock, add X, add Y.
     - Snap on/off is not repeated in the drawer; it is the top-bar switch.

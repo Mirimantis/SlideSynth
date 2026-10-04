@@ -295,7 +295,7 @@
     <em>These features are under active development — behaviour may change.</em>
   </p>
   <p>
-    Glissandograph has two modes. <strong>Compose</strong> is the editor: the left mouse
+    Glissandograph has two modes, and opens in Perform. <strong>Compose</strong> is the editor: the left mouse
     button runs the tool you've picked (Draw, Select, Delete, Slice). <strong>Perform</strong>
     turns the canvas into an instrument: the left button <em>plays</em>. Press
     <kbd>P</kbd> or the <strong>Perform</strong> button at the bottom of the tool strip to
@@ -322,6 +322,11 @@
     <li><strong>Leaving Perform</strong>: press <kbd>P</kbd> again, <kbd>Escape</kbd>, or pick a tool (button or <kbd>D</kbd> / <kbd>V</kbd> / <kbd>X</kbd> / <kbd>C</kbd>). Playback keeps running if it was. While a recording runs you stay in Perform until it stops.</li>
     <li><strong>Scrubbing</strong> the ruler in Perform slides the content under the rail as you drag: click a beat in the ruler to bring it to the rail, then drag to move forward or back. The rail is always where Play will start.</li>
     <li>Gravity is fully live in Perform, including while stopped — the pitch settles even when you're just hovering.</li>
+    <li><strong>Touch screens:</strong> Perform works with a finger. On a phone or tablet that can
+      vibrate (Android), you feel a tiny <strong>haptic click</strong> when your finger comes onto a
+      line Gravity would pull to (a note line, fret or pitch guide) while you play, with Snap on or
+      off: a click as it gets within a few pixels, and not again until it has moved away. Turn it
+      off, or change the click's length, under <strong>Touch</strong> in Settings. iPhones and computers can't vibrate.</li>
     <li>Un-armed Perform playback auto-stops after <strong>10 minutes</strong> of inactivity (the warning popup appears 30 seconds before). Moving the mouse over the canvas counts as activity.</li>
   </ul>
 
@@ -605,7 +610,7 @@
         <li><strong>Length</strong> — derived automatically from the rightmost point in any curve and shown as <code>M:SS</code> next to the composition name. Playback stops at that point (or loops back to the start if Loop is on). With no points, playback is a no-op.</li>
         <li><strong>Canvas extent</strong> — the grid, staff, and rulers render everywhere you pan or zoom, with a generous buffer of open space past the last point so you can keep drawing outward. A memory-safe cap limits total pan range.</li>
         <li><strong>Loop</strong> (<kbd>L</kbd>) — toggle from the icon button at the right of the top bar or the hotkey. It can't change while a recording runs. When enabled, two draggable <strong>loop markers</strong> (green in, red out) appear in the ruler. Drag them to set the loop range; they snap to the beat grid and to existing curve control points. The range is saved with the composition. Markers hide when Loop is off; playback then runs through to composition end.</li>
-        <li><strong>Scroll canvas during playback</strong> (<strong>View</strong> menu) — how Compose mode shows playback. <strong>Off</strong> (default) is a static canvas with the playhead moving across it. <strong>On</strong> fixes the playhead as a rail at canvas centre and slides the canvas past it, as Perform always does; the edit tools keep working on the moving canvas. Preference persists via localStorage.</li>
+        <li><strong>Scroll canvas during playback</strong> (<strong>View</strong> menu) — how Compose mode shows playback. <strong>Off</strong> is a static canvas with the playhead moving across it. <strong>On</strong> (default) fixes the playhead as a rail at canvas centre and slides the canvas past it, as Perform always does; the edit tools keep working on the moving canvas. Preference persists via localStorage.</li>
         <li><strong>Pitch HUD</strong> — shows the pitch under the cursor (note name + cents + frequency in Hz) in the top-right of the canvas while the cursor has a meaningful Y. The Hz readout reflects the current Tune A4 setting, so A=432 etc. shifts every frequency in lockstep. Toggle it from the <strong>View</strong> menu. Preference persists via localStorage.</li>
         <li><strong>Perf HUD</strong> — passive observer in the top-left: frame ms (p50 / p99 over a rolling ~2 s), live synth / oscillator / voice counts, audio output latency, and where live voices are smoothed (<code>live: audio thread</code> normally; <code>main thread</code> if the browser can't run the audio worklet). Off by default; toggle from the <strong>View</strong> menu or press <kbd>!</kbd> (Shift+1). Useful when something feels sluggish — load a heavy composition (see <code>fixtures/stress-test.ssn</code>) and watch the numbers move.</li>
         <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording, switching to Perform first. From Idle, a 3-second count-in runs then Playback begins (turn <strong>Count-in</strong> off in the Record ▾ menu to start straight away). If Playback is already running, the countdown is skipped and recording arms immediately at the current beat. While armed, holding the left button plays the selected track's tone AND captures it as a curve; release commits the curve. Escape cancels.</li>
@@ -784,6 +789,13 @@
                   oscillations near a snap line fade. Low values sustain vibrato
                   wobbles for longer; high values settle quickly. Too low combined
                   with high Force can swing wildly.</li>
+              <li><strong>Speed</strong> (0.25×–4×, default 1×) — how fast Gravity moves,
+                  without changing the tempo. It moves in steps of 0.1× from 1× up, and 0.05×
+                  below. Gravity's motion is measured in beats, so it
+                  already follows the tempo; Speed 2× feels like playing at double tempo.
+                  Fast Speed with high Damping glides quickly between notes and settles
+                  without overshoot (no vibrato), which helps keep up with a finger on a
+                  touchscreen.</li>
             </ul>
             The defaults are tuned tight, so pitch settles onto a target promptly.
             Combine strong Force with low Damping and a moderate Spring to get
@@ -793,7 +805,7 @@
     </div>
   </details>
   <p>
-    All snap-section settings (Snap toggle, Gravity on/off, its three
+    All snap-section settings (Snap toggle, Gravity on/off, its four
     sliders, plus the Tuning, Root and Scale picks) are saved with the composition file
     and restored on load, so a project's bespoke snap configuration round-trips
     cleanly.
@@ -805,7 +817,7 @@
       <p>
         The <strong>Preset</strong> dropdown at the top of the Snap section
         loads a named <em>Gravity feel</em> in one click. A preset carries only
-        the three physics values — Force, Spring and Damping — so it
+        the four physics values — Force, Spring, Damping and Speed — so it
         never changes your Tuning, Root or Scale, and never changes what Gravity
         snaps <em>to</em>, only how it gets there:
       </p>
@@ -944,6 +956,8 @@
     <li><strong>Scale</strong> — which notes the piece uses, counted from the root;
       <strong>All notes</strong> uses every note of the tuning.</li>
   </ul>
+  <p>A new composition starts in 12-EDO, root C, <strong>Major</strong>. A file saved without these
+    settings (or a MIDI import) uses All notes.</p>
   <details>
     <summary>The pitch circle</summary>
     <div class="detail-body">
@@ -1265,8 +1279,8 @@
     <summary>Navigation controls</summary>
     <div class="detail-body">
       <ul>
-        <li><strong>Zoom Y</strong> (pitch) — vertical slider at bottom-right of canvas, or scroll wheel.</li>
-        <li><strong>Zoom X</strong> (time) — horizontal slider at bottom-right of canvas, or <kbd>Ctrl</kbd>+scroll wheel.</li>
+        <li><strong>Zoom Y</strong> (pitch) — the slider down the canvas's right edge, or scroll wheel.</li>
+        <li><strong>Zoom X</strong> (time) — the slider along the canvas's bottom edge, or <kbd>Ctrl</kbd>+scroll wheel.</li>
         <li><strong>Pan</strong> — <kbd>Alt</kbd>+click drag or middle-click drag.</li>
         <li>Zoom is centered on the cursor position.</li>
       </ul>

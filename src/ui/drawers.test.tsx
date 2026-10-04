@@ -128,6 +128,7 @@ describe('Tuning drawer (BACKLOG 13.8)', () => {
   });
 
   it('offers the Custom scale once there is one that fits', () => {
+    store.setScaleId('all'); // from All notes (a new composition starts in Major)
     expect(panel()).not.toContain('value="custom"');
     store.toggleScaleDegree(1);
     const html = panel();

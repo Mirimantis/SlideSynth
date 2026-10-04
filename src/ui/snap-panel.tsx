@@ -1,6 +1,7 @@
 import '@preact/signals'; // the panel re-renders when the store fields it reads change
 import { useState } from 'preact/hooks';
 import { store } from '../state/store';
+import { MAGNETIC_SPEED_MAX, MAGNETIC_SPEED_MIN, stepMagneticSpeed } from '../utils/snap-magnetic';
 import {
   BUILTIN_SNAP_PRESETS, loadUserSnapPresets, saveUserSnapPresets, presetMatches, snapshotPreset,
   type SnapFeel, type SnapPreset,
@@ -32,6 +33,10 @@ function formatDamping(d: number): string {
   return Number.isInteger(d) ? String(d) : d.toFixed(1);
 }
 
+function formatSpeed(speed: number): string {
+  return speed >= 10 ? speed.toFixed(0) : speed.toFixed(2).replace(/\.?0+$/, '');
+}
+
 /** Blur after a click or change, so the next key reaches the keyboard map. */
 const blur = (e: Event) => (e.currentTarget as HTMLElement).blur();
 
@@ -56,6 +61,7 @@ function PresetRow({ actions }: { actions: SnapActions }) {
     magneticStrength: st.magneticStrength,
     magneticSpringK: st.magneticSpringK,
     magneticDamping: st.magneticDamping,
+    magneticSpeed: st.magneticSpeed,
   };
   const all = [...BUILTIN_SNAP_PRESETS, ...userPresets];
   const picked = all.find(p => p.id === pickedId);
@@ -77,6 +83,7 @@ function PresetRow({ actions }: { actions: SnapActions }) {
     if (s.magneticStrength !== undefined) store.setMagneticStrength(s.magneticStrength);
     if (s.magneticSpringK !== undefined) store.setMagneticSpringK(s.magneticSpringK);
     if (s.magneticDamping !== undefined) store.setMagneticDamping(s.magneticDamping);
+    if (s.magneticSpeed !== undefined) store.setMagneticSpeed(s.magneticSpeed);
     setPickedId(preset.id);
   }
 
@@ -171,6 +178,13 @@ function GravityControls() {
         value={st.magneticDamping} shown={formatDamping(st.magneticDamping)}
         title="Velocity damping (low = long vibrato wobbles, high = quick settle)"
         onInput={v => store.setMagneticDamping(v)}
+      />
+      {/* 13.36. Logarithmic: 1× in the middle, as much travel slower as faster. */}
+      <Slider
+        id="gravity-speed" label="Speed" min={Math.log2(MAGNETIC_SPEED_MIN)} max={Math.log2(MAGNETIC_SPEED_MAX)} step={0.05}
+        value={Math.log2(st.magneticSpeed)} shown={`${formatSpeed(st.magneticSpeed)}×`}
+        title="How fast Gravity moves, without changing the tempo (1× follows the tempo as it is; 2× feels like double tempo). Fast with high Damping glides quickly and settles without vibrato"
+        onInput={v => store.setMagneticSpeed(stepMagneticSpeed(2 ** v))}
       />
     </>
   );

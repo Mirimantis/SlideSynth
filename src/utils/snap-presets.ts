@@ -1,4 +1,5 @@
 import type { SnapSettings } from '../types';
+import { clampMagneticSpeed } from './snap-magnetic';
 
 /**
  * Snap presets — named bundles of *Gravity feel* that the user can load with one
@@ -15,7 +16,7 @@ import type { SnapSettings } from '../types';
  * That's an apply-time side effect, deliberately not a stored field.
  */
 /** The three physics values a preset holds: Gravity's Force, Spring, Damping. */
-export type SnapFeel = Pick<SnapSettings, 'magneticStrength' | 'magneticSpringK' | 'magneticDamping'>;
+export type SnapFeel = Pick<SnapSettings, 'magneticStrength' | 'magneticSpringK' | 'magneticDamping' | 'magneticSpeed'>;
 
 export type SnapPresetSettings = Partial<SnapFeel>;
 
@@ -39,6 +40,7 @@ export const BUILTIN_SNAP_PRESETS: readonly SnapPreset[] = Object.freeze([
       magneticStrength: 0.85,
       magneticSpringK: 50,
       magneticDamping: 6,
+      magneticSpeed: 1,
     },
   },
   {
@@ -51,6 +53,7 @@ export const BUILTIN_SNAP_PRESETS: readonly SnapPreset[] = Object.freeze([
       magneticStrength: 0.25,
       magneticSpringK: 30,
       magneticDamping: 13,
+      magneticSpeed: 1,
     },
   },
   {
@@ -61,6 +64,7 @@ export const BUILTIN_SNAP_PRESETS: readonly SnapPreset[] = Object.freeze([
       magneticStrength: 0.45,
       magneticSpringK: 30,
       magneticDamping: 5,
+      magneticSpeed: 1,
     },
   },
   {
@@ -71,6 +75,7 @@ export const BUILTIN_SNAP_PRESETS: readonly SnapPreset[] = Object.freeze([
       magneticStrength: 1,
       magneticSpringK: 50,
       magneticDamping: 10,
+      magneticSpeed: 1,
     },
   },
   {
@@ -82,6 +87,7 @@ export const BUILTIN_SNAP_PRESETS: readonly SnapPreset[] = Object.freeze([
       magneticStrength: 0.9,
       magneticSpringK: 35,
       magneticDamping: 1.5,
+      magneticSpeed: 1,
     },
   },
 ] as const);
@@ -113,6 +119,8 @@ export function loadUserSnapPresets(): SnapPreset[] {
       if (typeof s.magneticDamping === 'number' && Number.isFinite(s.magneticDamping)) {
         settings.magneticDamping = Math.max(0.25, Math.min(15, s.magneticDamping));
       }
+      // Presets saved before Speed existed (13.36) were made at 1.
+      settings.magneticSpeed = clampMagneticSpeed(s.magneticSpeed);
       return [{ id: obj.id, name: obj.name, settings }];
     });
   } catch {
@@ -137,6 +145,7 @@ export function presetMatches(preset: SnapPreset, live: SnapFeel): boolean {
   if (s.magneticStrength !== undefined && Math.abs(s.magneticStrength - live.magneticStrength) > 1e-6) return false;
   if (s.magneticSpringK !== undefined && Math.abs(s.magneticSpringK - live.magneticSpringK) > 1e-6) return false;
   if (s.magneticDamping !== undefined && Math.abs(s.magneticDamping - live.magneticDamping) > 1e-6) return false;
+  if (s.magneticSpeed !== undefined && Math.abs(s.magneticSpeed - live.magneticSpeed) > 1e-6) return false;
   return true;
 }
 
@@ -149,6 +158,7 @@ export function snapshotPreset(name: string, live: SnapFeel): SnapPreset {
       magneticStrength: live.magneticStrength,
       magneticSpringK: live.magneticSpringK,
       magneticDamping: live.magneticDamping,
+      magneticSpeed: live.magneticSpeed,
     },
   };
 }

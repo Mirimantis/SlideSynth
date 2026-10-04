@@ -2,6 +2,7 @@ import '@preact/signals'; // the dialog re-renders when the settings it shows ch
 import type { ReadonlySignal, Signal } from '@preact/signals';
 import { store } from '../state/store';
 import { useEscapeToClose } from './menu';
+import { hapticClick, HAPTIC_MS_MAX, HAPTIC_MS_MIN } from './haptics';
 
 /**
  * Settings (BACKLOG 16.3): device and workspace preferences you set once and
@@ -68,6 +69,35 @@ function SettingsBody({ close, midi }: { close(): void; midi: MidiSettings }) {
               <span class="settings-hint">Hear the composition under the playhead while you drag the ruler.</span>
             </span>
           </label>
+        </section>
+
+        <section class="settings-section">
+          <h3>Touch</h3>
+          <label class="settings-check">
+            <input
+              type="checkbox"
+              checked={st.hapticClicks}
+              onChange={e => store.setHapticClicks((e.currentTarget as HTMLInputElement).checked)}
+            />
+            <span>
+              Haptic clicks on snap lines
+              <span class="settings-hint">
+                A tiny click when your finger comes onto a note line, fret or pitch guide while
+                performing, with Snap on or off. On Android phones and tablets; iPhones and
+                computers can’t vibrate.
+              </span>
+            </span>
+          </label>
+          <div class="settings-slider" title="How long each click lasts. Some phones skip very short ones; raise it until you feel it">
+            <label for="haptic-ms">Click length</label>
+            <input
+              type="range" id="haptic-ms" min={HAPTIC_MS_MIN} max={HAPTIC_MS_MAX} step="1" value={st.hapticMs}
+              disabled={!st.hapticClicks}
+              onInput={e => store.setHapticMs(Number((e.currentTarget as HTMLInputElement).value))}
+              onChange={() => hapticClick(store.getState().hapticMs, performance.now())}
+            />
+            <span class="settings-slider-value">{st.hapticMs} ms</span>
+          </div>
         </section>
 
         <div class="tb-actions settings-actions">

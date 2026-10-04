@@ -16,7 +16,8 @@ import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuideHandle, renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
-import { snapToGrid, findAdaptiveSnap } from './utils/snap';
+import { snapToGrid, findAdaptiveSnap, nearestSnapLine, type SnapConfig } from './utils/snap';
+import { hapticClick, hapticStep, HAPTIC_RANGE_PX } from './ui/haptics';
 import { createInteraction, editingCurveIds, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './canvas/interaction';
 import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
@@ -125,27 +126,32 @@ app.innerHTML = `
       </div>
     </div>
     <div id="center-stack">
-      <div id="canvas-container">
-        <canvas id="bg-canvas"></canvas>
-        <canvas id="fg-canvas"></canvas>
-        <div id="zoom-controls">
-          <span class="zoom-label">Zoom</span>
-          <input type="range" id="zoom-x" min="0" max="1000" value="0" step="1" title="Zoom X (time) — logarithmic" />
-          <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="0.001" title="Zoom Y (pitch)" />
-        </div>
-        <div id="pitch-hud" hidden></div>
-        <div id="perf-hud" hidden></div>
-        <div id="countdown-overlay" hidden></div>
-        <div id="afk-warning" hidden>
-          <div class="afk-warning-title">Idle. Recording will pause in</div>
-          <div class="afk-warning-countdown" id="afk-warning-countdown">0</div>
-          <div class="afk-warning-hints">
-            play something to continue recording.<br/>
-            Space or Esc to stop recording.<br/>
-            PgUp / PgDown to first / last curve.<br/>
-            Home to recenter on playhead.
+      <!-- The zoom sliders sit along the canvas's edges, like scrollbars, never
+           over it (13.32): pitch down the right side, time along the bottom. -->
+      <div id="canvas-row">
+        <div id="canvas-container">
+          <canvas id="bg-canvas"></canvas>
+          <canvas id="fg-canvas"></canvas>
+          <div id="pitch-hud" hidden></div>
+          <div id="perf-hud" hidden></div>
+          <div id="countdown-overlay" hidden></div>
+          <div id="afk-warning" hidden>
+            <div class="afk-warning-title">Idle. Recording will pause in</div>
+            <div class="afk-warning-countdown" id="afk-warning-countdown">0</div>
+            <div class="afk-warning-hints">
+              play something to continue recording.<br/>
+              Space or Esc to stop recording.<br/>
+              PgUp / PgDown to first / last curve.<br/>
+              Home to recenter on playhead.
+            </div>
           </div>
         </div>
+        <div id="zoom-y-gutter" class="zoom-gutter">
+          <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="0.001" title="Zoom pitch" aria-label="Zoom pitch" />
+        </div>
+      </div>
+      <div id="zoom-x-gutter" class="zoom-gutter">
+        <input type="range" id="zoom-x" min="0" max="1000" value="0" step="1" title="Zoom time" aria-label="Zoom time" />
       </div>
       <div id="param-container">
         <div id="param-resize-handle" title="Drag to resize the Parameters Graph"></div>
@@ -1030,7 +1036,7 @@ function applyLoopEnabled(enabled: boolean): void {
 }
 watch(() => store.getState().loopEnabled, enabled => playback.setLoop(enabled));
 
-// ── Zoom controls (on canvas) ──────────────────────────────────
+// ── Zoom controls (along the canvas's edges, 13.32) ─────────────
 const zoomX = document.getElementById('zoom-x') as HTMLInputElement;
 const zoomY = document.getElementById('zoom-y') as HTMLInputElement;
 
@@ -1634,7 +1640,7 @@ function magneticNowBeats(): number {
  *  tick can keep advancing the planchette pitch even when the mouse isn't moving. */
 let lastComposeSy: number | null = null;
 
-function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number; snapTarget: number | null } {
+function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number; snapTarget: number | null; snapConfig: SnapConfig } {
   const { wy } = viewport.screenToWorld(0, sy);
   const st = store.getState();
   // The same targets drawing uses (15.6): scale or chromatic lines, pitch
@@ -1673,14 +1679,14 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
     const attractor = adaptive.target !== null && adaptive.captured
       ? { target: adaptive.target, radius: adaptive.radius }
       : null;
-    const magneticPitch = updateMagnetic(magneticState, wy, magneticNowBeats(), st.magneticStrength, st.magneticSpringK, st.magneticDamping, attractor);
-    return { cursorWorldY: wy, snappedWorldY: magneticPitch, snapTarget };
+    const magneticPitch = updateMagnetic(magneticState, wy, magneticNowBeats(), st.magneticStrength, st.magneticSpringK, st.magneticDamping, attractor, st.magneticSpeed);
+    return { cursorWorldY: wy, snappedWorldY: magneticPitch, snapTarget, snapConfig };
   }
 
   // Non-magnetic path: instant snap (or raw cursor Y when snap is off, or no
   // attractor in None mode between guides).
   resetMagnetic(magneticState);
-  return { cursorWorldY: wy, snappedWorldY: snappedWy, snapTarget };
+  return { cursorWorldY: wy, snappedWorldY: snappedWy, snapTarget, snapConfig };
 }
 
 /** Previous snap target. Used to trigger the snap-line-cross pulse on target
@@ -1693,8 +1699,10 @@ function composeUpdatePlanchette(sy: number) {
     clearPlanchettePitches();
     return;
   }
-  const { cursorWorldY, snappedWorldY, snapTarget } = computeComposeCursorPitch(sy);
+  const { cursorWorldY, snappedWorldY, snapTarget, snapConfig } = computeComposeCursorPitch(sy);
   store.setPlanchetteY('primary', cursorWorldY, snappedWorldY);
+  hapticInput = { wy: cursorWorldY, config: snapConfig };
+  hapticCheck();
   // Snap-line-cross pulse — fire only when crossing between two real targets.
   // Skip when either side is null (no attractor in None-mode between-guides
   // zones) so the flash doesn't fire on every frame.
@@ -1705,6 +1713,29 @@ function composeUpdatePlanchette(sy: number) {
   // Drive harmony voices off the primary's snapped Y. No-op outside Prism Draw
   // perform (no harmony planchettes exist) so cheap to call unconditionally.
   updateHarmonyVoices(snappedWorldY);
+}
+
+/** The finger's (cursor's) latest pitch and the lines around it, and the line
+ *  it's on, for haptic clicks (13.35). */
+let hapticInput: { wy: number; config: SnapConfig } | null = null;
+let hapticLine: number | null = null;
+
+/** A haptic click when the finger comes onto a line while performing (13.35;
+ *  see hapticStep): the raw cursor, not the planchette, so it marks where the
+ *  lines are under the finger whatever Gravity is doing. The lines are the
+ *  ones that would snap, with Snap on or off. Does nothing on a device that
+ *  can't vibrate. */
+function hapticCheck() {
+  const st = store.getState();
+  if (!hapticInput || !composeEngine.isLmbDown() || !st.hapticClicks) {
+    hapticLine = null;
+    return;
+  }
+  const { wy, config } = hapticInput;
+  const pxPerCent = viewport.state.zoomY;
+  const step = hapticStep(wy, hapticLine, nearestSnapLine(wy, config, HAPTIC_RANGE_PX / pxPerCent), pxPerCent);
+  hapticLine = step.line;
+  if (step.click) hapticClick(st.hapticMs, performance.now());
 }
 
 /** The cursor left the pitch area: the mouse's planchettes have no pitch
@@ -2624,6 +2655,8 @@ const performInput = {
   down(e: PointerEvent) {
     composeUpdatePlanchette(e.clientY - fgCanvas.getBoundingClientRect().top);
     composeEngine.onLmbDown(performance.now());
+    // Touching down on a line clicks too (13.35).
+    hapticCheck();
     const planchette = store.getState().performance.planchettes[0];
     if (planchette?.snappedWorldY != null) {
       startComposePerformSounding(planchette.snappedWorldY);
@@ -3470,6 +3503,10 @@ resizeCanvases();
   updateZoom();
   bgDirty = true;
 }
+
+// The app opens in Perform (decided 2026-10-04, from touch testing): it's
+// ready to play at once; picking a tool goes to editing.
+setPerformMode(true);
 
 
 // ── Collapsible panel sections ──────────────────────────────────

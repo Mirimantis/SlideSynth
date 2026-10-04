@@ -78,6 +78,29 @@
   align-items: center;
 }
 
+/* A labelled slider row (13.35's Click length): label, slider, value. */
+.settings-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-left: 24px;
+  font-size: 0.85rem;
+}
+
+.settings-slider input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.settings-slider-value {
+  width: 5ch;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
 /* Which build this is (13.28), pushed to the left of Done. */
 .settings-build {
   margin-right: auto;

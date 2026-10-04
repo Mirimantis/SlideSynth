@@ -31,6 +31,28 @@ const STABLE_SUBSTEP_DT = 0.02;
  *  persisted springK/damping values. */
 const SNAPK_REFERENCE_RADIUS = 100;
 
+/** Gravity's speed (13.36): a multiplier on the time the physics sees. The
+ *  physics runs in beats, so it already follows the tempo; Speed 2 at 120 bpm
+ *  feels like 240 bpm without changing anything else. Faster with high
+ *  Damping gives a quick glide that settles without overshoot (no vibrato). */
+export const MAGNETIC_SPEED_MIN = 0.25;
+export const MAGNETIC_SPEED_MAX = 4;
+export const DEFAULT_MAGNETIC_SPEED = 1;
+
+export function clampMagneticSpeed(speed: unknown): number {
+  if (typeof speed !== 'number' || !Number.isFinite(speed)) return DEFAULT_MAGNETIC_SPEED;
+  return Math.max(MAGNETIC_SPEED_MIN, Math.min(MAGNETIC_SPEED_MAX, speed));
+}
+
+/** A Speed picked on the slider, in round steps (found in testing: two
+ *  decimals made round values hard to land on): 0.1 from 1× up, 0.05 below,
+ *  where finer control is useful. */
+export function stepMagneticSpeed(speed: number): number {
+  const s = clampMagneticSpeed(speed);
+  const step = s >= 1 ? 0.1 : 0.05;
+  return clampMagneticSpeed(Math.round(Math.round(s / step) * step * 100) / 100);
+}
+
 export interface MagneticState {
   pitch: number | null;           // current simulated pitch (cents)
   velocity: number;               // cents per beat
@@ -77,6 +99,8 @@ function snapFalloff(distance: number, radius: number): number {
  *    the cursor floats outside any well (None Key mode between guides) —
  *    physics falls back to cursor-spring only, so the particle smoothly
  *    tracks the cursor with no snap kick.
+ *  - speed: Gravity's Speed (13.36), multiplying the elapsed time. The fixed
+ *    sub-step keeps it stable at any speed; faster just takes more sub-steps.
  */
 export function updateMagnetic(
   state: MagneticState,
@@ -86,6 +110,7 @@ export function updateMagnetic(
   springK: number,
   damping: number,
   attractor: MagneticAttractor | null,
+  speed: number = DEFAULT_MAGNETIC_SPEED,
 ): number {
   // First call or after reset — start at the cursor with zero velocity. The
   // cursor-spring then carries the particle into the attractor's well, where
@@ -102,7 +127,8 @@ export function updateMagnetic(
   // Negative means a reset/rewind (just settle here). Cap the total elapsed
   // window so a long pause doesn't replay minutes of physics on resume.
   if (rawDt <= 0) return state.pitch;
-  const totalDt = Math.min(MAX_DT_BEATS, rawDt);
+  const pace = clampMagneticSpeed(speed);
+  const totalDt = Math.min(MAX_DT_BEATS * pace, rawDt * pace);
 
   // Scale snap stiffness inversely with well radius so the peak attractor
   // force (snapK * R / 4 for linear falloff) stays bounded regardless of how

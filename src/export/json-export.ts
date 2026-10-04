@@ -1,5 +1,6 @@
 import type { Composition, Lane, LanePoint, SnapSettings, ToneDefinition, UnknownEnvelope } from '../types';
 import { createDefaultSnapSettings } from '../model/composition';
+import { clampMagneticSpeed } from '../utils/snap-magnetic';
 import { LANE_SPECS } from '../model/lane';
 import { ALL_NOTES, TWELVE_EDO, getScale, type TuningRef } from '../tuning/tuning';
 
@@ -249,6 +250,8 @@ export function migrateSnapSettings(raw: unknown): SnapSettings {
   const defaults = createDefaultSnapSettings();
   if (!raw || typeof raw !== 'object') return defaults;
   const snap = { ...defaults, ...(raw as Partial<SnapSettings>) };
+  // Files from before 13.36 have no Speed: they load at 1, as they played.
+  snap.magneticSpeed = clampMagneticSpeed(snap.magneticSpeed);
   if ((raw as Partial<SnapSettings>).tuning) return snap;
 
   const legacy = raw as LegacyKeySettings;

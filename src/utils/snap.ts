@@ -175,6 +175,19 @@ function collectSnapTargets(wy: number, config: SnapConfig, range: number): numb
   return targets;
 }
 
+/**
+ * The nearest line within `range` of `wy` that Y would snap to, or null: the
+ * same lines Gravity pulls to, whether Snap is on or not (13.35's haptic
+ * clicks work without Snap).
+ */
+export function nearestSnapLine(wy: number, config: SnapConfig, range: number): number | null {
+  let best: number | null = null;
+  for (const t of collectSnapTargets(wy, config, range)) {
+    if (Math.abs(t - wy) <= range && (best === null || Math.abs(t - wy) < Math.abs(best - wy))) best = t;
+  }
+  return best;
+}
+
 /** Find the nearest snap target to `wy` and the adaptive well radius around it.
  *  Radius = half the distance to the next target on the cursor's side, so
  *  adjacent wells meet at midpoints without overlapping. Pentatonic-like sparse

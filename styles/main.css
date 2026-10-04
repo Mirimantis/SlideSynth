@@ -11,6 +11,15 @@
   --rail-width: 48px;
   --param-graph-height: 140px;
   --toolbar-height: auto;
+  /* The zoom sliders' strips along the canvas's edges (13.32): wider for a
+     finger. */
+  --zoom-gutter: 18px;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --zoom-gutter: 28px;
+  }
 }
 
 /* ── SVG icons (shape-only assets, color from currentColor) ─────── */
@@ -59,14 +68,19 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  /* On a narrow screen the right zone (transport, toggles, Settings) drops to
+     its own line instead of sliding under the menus (13.32: in portrait on a
+     phone the transport buttons were hidden). */
+  flex-wrap: wrap;
+  row-gap: 6px;
   position: relative; /* anchor for the absolutely-centered zone */
 }
 
 /* 3-zone top bar: left flows, center is absolutely centered over canvas centre,
-   right hugs the end. */
+   right hugs the end. The left zone can shrink only as far as its widest
+   group (it wraps inside), so past that the right zone wraps instead. */
 #toolbar-left {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .toolbar-zone {
@@ -77,6 +91,8 @@ body {
 
 .toolbar-zone.right {
   margin-left: auto;
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 .toolbar-row {
@@ -876,11 +892,18 @@ body.perform-mode #canvas-container::after {
   min-width: 0;
 }
 
+#canvas-row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 #canvas-container {
   position: relative;
   overflow: hidden;
   background: var(--bg);
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -948,37 +971,42 @@ body.perform-mode #canvas-container::after {
   z-index: 2;
 }
 
-/* ── Zoom controls overlay ───────────────────────────────────── */
+/* ── Zoom sliders (13.32) ─────────────────────────────────────
+   Strips along the canvas's right and bottom edges, like scrollbars, so they
+   never cover what's being played. Each slider runs the strip's length. */
 
-#zoom-controls {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
+.zoom-gutter {
   display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  pointer-events: none;
-  z-index: 5;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--bg-light);
 }
 
-#zoom-controls > * {
-  pointer-events: auto;
+#zoom-y-gutter {
+  width: var(--zoom-gutter);
+  border-left: 1px solid var(--border);
+  padding: 8px 0;
 }
 
-.zoom-label {
-  font-size: 0.7rem;
-  color: var(--text-dim);
-  margin-bottom: 2px;
+/* The time strip stops short of the pitch strip's column, so the two meet at
+   a clean corner. */
+#zoom-x-gutter {
+  height: var(--zoom-gutter);
+  border-top: 1px solid var(--border);
+  padding: 0 calc(var(--zoom-gutter) + 8px) 0 8px;
 }
 
 #zoom-x {
-  width: 100px;
+  width: 100%;
+  margin: 0;
   accent-color: var(--accent);
-  margin-bottom: 2px;
 }
 
 #zoom-y {
-  width: 80px;
+  height: 100%;
+  width: auto;
+  margin: 0;
   accent-color: var(--accent);
   writing-mode: vertical-lr;
   direction: rtl;
@@ -1149,7 +1177,10 @@ body.perform-mode #canvas-container::after {
   font-family: ui-monospace, 'SF Mono', Consolas, monospace;
   font-size: 0.75rem;
   color: var(--text-dim);
-  min-width: 30px;
+  /* Fixed, so a slider doesn't change length as its value grows a digit:
+     five characters fit the longest ("0.25×", "12.5"). */
+  width: 5ch;
+  flex-shrink: 0;
   text-align: right;
 }
 
