@@ -441,6 +441,19 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
   - The Parameters Graph below the canvas shipped in PR #58, showing the selected curve's volume lane.
   - Remaining: more lane types (pan, cutoff, per-layer mix), show/hide/solo per lane, and a lane picker.
   - Inherits the "functional curve, lane-agnostic gravity" framing from the lanes model.
+- [ ] **13.27 Mobile and touch support** *(L, own planning session — added 2026-10-03)*
+  - Play and edit on a phone or tablet with fingers.
+  - **Already in place:** the canvases run on Pointer Events with `touch-action: none` (15.2), so a one-finger drag already reaches the input router.
+  - **Session inputs:**
+    - scope: tablets first, or phones too; Perform only, or editing as well;
+    - gestures: pinch to zoom (time and pitch), two-finger pan, long-press for the right-click menu;
+    - no hover: what replaces hover previews (Nudge's band, tool highlights, the cursor ring);
+    - keyboard-only actions need on-screen controls: audition (A), swell (F), Keep (K), Shift and Alt modifiers, `[` / `]`;
+    - layout at phone width: the right panel and drawers, the tool strip, the top bar; ties to 16.9's visual theme;
+    - hit targets: larger points and handles for a coarse pointer (`pointer: coarse`);
+    - Perform: a finger per voice (multitouch polyphony; the engine already keys phrases by voice), and touch as the instrument in 16.8's "stage" view;
+    - platform limits: iOS needs a user gesture to start audio, AudioWorklet support and latency on mobile, and no Web MIDI in iOS Safari;
+    - relation to 11.3 (pen pressure and tilt share the Pointer Events path).
 
 ### Frets (pitch guides)
 
