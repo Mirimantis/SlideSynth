@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "icons": "node scripts/normalize-icons.mjs",
+    "deploy": "node scripts/deploy.mjs",
     "test": "vitest"
   },
   "devDependencies": {

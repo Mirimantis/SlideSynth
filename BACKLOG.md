@@ -17,7 +17,7 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102).
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103).
 2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
 3. **Background, whenever:** 15.8, then 15.3 and 15.4.
 
@@ -441,6 +441,20 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
   - The Parameters Graph below the canvas shipped in PR #58, showing the selected curve's volume lane.
   - Remaining: more lane types (pan, cutoff, per-layer mix), show/hide/solo per lane, and a lane picker.
   - Inherits the "functional curve, lane-agnostic gravity" framing from the lanes model.
+- [ ] **13.27 Mobile and touch support** *(L, own planning session — added 2026-10-03; DEFERRED until after the UI redesign, 16.8 and 16.9)*
+  - Play and edit on a phone or tablet with fingers.
+  - **Deferred (2026-10-03):** it amounts to a whole second interface, so it waits for the redesign. Until then, keep it in mind so it doesn't get harder: see the touch note in [Housekeeping](#housekeeping).
+  - **Already in place:** the canvases run on Pointer Events with `touch-action: none` (15.2), so a one-finger drag already reaches the input router.
+  - **Session inputs:**
+    - scope: tablets first, or phones too; Perform only, or editing as well;
+    - gestures: pinch to zoom (time and pitch), two-finger pan, long-press for the right-click menu;
+    - no hover: what replaces hover previews (Nudge's band, tool highlights, the cursor ring);
+    - keyboard-only actions need on-screen controls: audition (A), swell (F), Keep (K), Shift and Alt modifiers, `[` / `]`;
+    - layout at phone width: the right panel and drawers, the tool strip, the top bar; ties to 16.9's visual theme;
+    - hit targets: larger points and handles for a coarse pointer (`pointer: coarse`);
+    - Perform: a finger per voice (multitouch polyphony; the engine already keys phrases by voice), and touch as the instrument in 16.8's "stage" view;
+    - platform limits: iOS needs a user gesture to start audio, AudioWorklet support and latency on mobile, and no Web MIDI in iOS Safari;
+    - relation to 11.3 (pen pressure and tilt share the Pointer Events path).
 
 ### Frets (pitch guides)
 
@@ -544,7 +558,18 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - audio: a per-group gain node between the member voices and the track, or multiplying the envelope into each member's sampled volume. The first is truer to "summed output"; the second needs no graph change;
     - how it's edited: the Parameters Graph showing the group lane when the group is selected (ties into 8.4's lane picker);
     - what Ungroup does to it: bake it into the members, or discard it;
-    - copy / paste / duplicate / join semantics.
+    - copy / paste / duplicate / join semantics;
+    - how it relates to a track envelope: settled in 13.31's session.
+- [ ] **13.31 Track-level dynamics, and how volume layers relate** *(M–L, own planning session — added 2026-10-03)*
+  - Give a track its own volume envelope over time, on top of its curves' volume lanes. 11.7's looping shape would most likely live here.
+  - **First, sort out how the layers relate** (the user had assumed 13.13 and 8.4 covered it): a curve's volume lane, a group's envelope (13.13), a track's envelope (this), the track's volume slider, and the live dynamics bus (11.x). Likely they multiply, but decide which are the same mechanism (a lane owned by a curve, a group or a track) and which are separate.
+  - **Session inputs:**
+    - one "lane owned by a container" model for groups and tracks, or two features;
+    - audio: a gain node per track (and per group) driven by the envelope, or multiplied into each voice's sampled volume;
+    - editing: the Parameters Graph showing the track's lane when no curve is selected, or a lane picker (8.4);
+    - looping: a track lane that repeats over a set span (11.7) rather than running along the timeline;
+    - recording: whether live dynamics can be written to the track lane instead of the curve's;
+    - the `.gliss` file: where a track's lane is saved.
 - [ ] **13.14 Group isolation mode** *(M–L, own planning session)*
   - Explore an Adobe Illustrator-style isolation mode: enter a group (double-click it, or a button) to edit its members individually without ungrouping. Everything outside the group fades and ignores input; Esc or clicking outside exits.
   - **Session inputs:**
@@ -700,6 +725,15 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
   - **Session also owns:**
     - dense-bed resolution: nearest, weighted, or limited targets;
     - whether snapping to a drone uses the current temperament or pure JI.
+- [ ] **13.30 Prism: build the chord voice by voice** *(M, own planning session — added 2026-10-03)*
+  - Today one stacking (2nds, 3rds, 4ths, 5ths) and one quality shape every voice. Instead: set the number of voices, then for each voice its **interval**, **how many steps** of it, and its **direction** (up or down) from the root, so more complex shapes can be built (e.g. a fifth up and a major third down, or a fourth up stacked twice).
+  - **Session inputs:**
+    - the panel: a row per voice;
+    - what happens to the stacking and quality pickers: presets that fill the rows (Tertian major → M3, P5…), or gone;
+    - per-voice octave offsets (8.13) and the chord-wide direction: folded into each voice's interval and direction;
+    - intervals counted in the tuning's steps, as the Prism counts them (13.8 (b)) and from each note (13.21); names shared with 13.24's Move by list;
+    - saved chord specs and the `prismChordSpec` workspace pref: migrating today's specs to rows;
+    - knock-on: 8.12 favorites, 8.14 chord labels.
 - [ ] **8.12 Chord-spec favorites on number keys** *(M)*
   - Retune voices mid-perform without the mouse. The live-retune plumbing already exists.
   - Bind through 15.3's command registry.
@@ -725,6 +759,23 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
 - [ ] **11.5 Cursor Y-velocity as a dynamics source** *(M)*
   - The gesture's own vertical speed drives dynamics; no extra hardware.
   - **Critical:** read the raw pre-snap cursor, not the planchette. Under magnetic snap the planchette carries spring oscillation and would ring the volume at the vibrato rate.
+- [ ] **11.6 Distance from snap target as a dynamics source** *(M — added 2026-10-03)*
+  - Volume follows how close the pitch is to a snap target: on a target, **Max**; exactly halfway between two targets, **Min**. Max and Min are set as percentages.
+  - **Decide when building:**
+    - which targets: the same set Gravity pulls to (scale, frets, pitch guides), so it changes with the tuning and the Snap settings;
+    - "halfway" between the two neighbouring targets, so uneven spacing (unequal tunings, sparse scales) scales with it;
+    - the curve between Max and Min (linear, or eased near the target);
+    - the planchette or the raw cursor: under magnetic snap the planchette's spring would make a tremolo at the vibrato rate (11.5's warning). **Build both and test (2026-10-03):** one may work better, or both may be worth keeping as a choice;
+    - smoothing, so a fast glide doesn't zipper;
+    - recorded into the volume lane like the other sources.
+- [ ] **11.7 Looping drawn shape as a dynamics source** *(M–L, own planning session — added 2026-10-03)*
+  - A drawn volume shape that **loops** (a custom tremolo) instead of following along in time. Loop boundaries are set where the source is chosen.
+  - **Session inputs:**
+    - where the shape is drawn (the Parameters Graph, or a small editor beside the source);
+    - loop length in beats (tempo-synced) or seconds; free-running, or restarted on each note;
+    - live (feeding the bus while performing, written into recorded volume lanes) or applied at playback;
+    - **track-level:** it may only work once tracks have their own dynamics (13.31), so it likely comes after that session.
+    - Volume undulation is tremolo, not vibrato.
   - **Session inputs:**
     - mapping (magnitude only, or does direction matter?);
     - smoothing vs. latency;
@@ -796,6 +847,31 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
 - [ ] **8.8 FM synthesis + waveform visualizer** *(XL, own planning session)*
   - FM operators, noise, a waveform visualizer, and keyframe-animatable mixes (overlaps with 8.4's lane model).
   - Build on 15.7's AudioWorklet voice.
+- [ ] **13.29 Draw a waveform to make a tone** *(M, own planning session — added 2026-10-03)*
+  - Draw one cycle of a wave to make a custom oscillator for a tone, alongside sine, square, sawtooth and triangle.
+  - **Session inputs:**
+    - the editor: freehand, or the app's own curve tools on a one-cycle canvas; where it lives in the tone builder;
+    - playback: a Web Audio `PeriodicWave` from the drawing's harmonics (band-limited, so no aliasing up high), or a wavetable in 15.7's AudioWorklet voice;
+    - how many harmonics to keep, and a preview of the spectrum;
+    - the file: tones are saved in the composition's tone library, so the drawing (or its harmonics) goes in the `.gliss` file; WAV export renders it the same way;
+    - relation to 8.8 (waveform visualizer, keyframed mixes) and 11.7 (another drawn shape).
+
+### Builds & sharing
+- [x] **13.28 Test builds on a subdomain** *(S–M — added 2026-10-03; PR #103)*
+  - Publish a static build to a subdomain of the user's site (Namecheap Stellar Plus shared hosting), to share occasional builds with friends for testing.
+  - **Steps:**
+    - create the subdomain in cPanel, with its own folder; turn on HTTPS (AutoSSL). HTTPS is required: the AudioWorklet voice and Web MIDI only run in a secure context;
+    - turn on SSH in cPanel and add a key (Namecheap's shared hosting uses a non-standard SSH port, 21098; check in cPanel);
+    - `npm run build` makes `dist/` (`help.html` is already built alongside, in `vite.config.ts`); check the AudioWorklet file comes along, and that it all works from the subdomain's root;
+    - an `npm run deploy` script that builds and copies `dist/` over SSH (rsync, or scp). Host, user and folder in an untracked local file, never in the repo;
+    - show the build (version or commit, date) somewhere in the app, so testers can say which build they used;
+    - an `.htaccess` that keeps `index.html` uncached (asset files are hashed), and optionally password-protects the folder (cPanel's Directory Privacy) to keep it to friends.
+  - **Needs from the user:** the subdomain name, and SSH turned on.
+  - **Server side, set up 2026-10-04** (walkthrough session): subdomain `gliss.mirimantis.com` (document root `/home/mirifzxt/gliss.mirimantis.com`, its own folder) with an A record in Namecheap's PremiumDNS (the domain doesn't use the hosting's DNS, so cPanel can't add it); shell access turned on (it was off by default); a key per computer; **no automatic SSL in this cPanel**, so **acme.sh** (Let's Encrypt, webroot) issues the certificate and its `cpanel_uapi` deploy hook installs it, renewing from a cron job every 6 hours. Found on the way: the main site's certificate expired Nov 2024; the same acme.sh commands (with `public_html`) could fix it.
+  - **Done (PR #103):**
+    - `npm run deploy` (`scripts/deploy.mjs`): builds, adds `deploy/.htaccess` (HTTPS only, pages never cached) and `deploy/assets.htaccess` (hashed assets cached for good) and a `build.txt` label, then streams `dist/` as one tar over SSH (one passphrase prompt). On the server it unpacks into a staging folder, then replaces the document root's contents, keeping `.well-known`. Guards: the target must be `/home/<user>/<folder>`, never `public_html`.
+    - Settings in `deploy/deploy.env.local` (ignored by git via `*.local`); `deploy/deploy.env.example` documents them.
+    - **Build label:** version · commit (+ if uncommitted changes) · date, from `vite.config.ts` (`__BUILD_INFO__`), shown at the bottom of Settings.
 
 ---
 
@@ -911,6 +987,8 @@ Condensed record, kept so `BACKLOG x.y` references in code comments still resolv
 ## Housekeeping
 
 - Update [help.html](help.html) in the same PR as each user-visible change. It is the canonical user manual and shortcut reference.
+- **Keep touch in mind (13.27, deferred):** when building, don't make a later touch interface harder than it needs to be. Avoid features that only work by hover or only by a key (give them a button or menu entry too), keep hit targets from shrinking, and route new input through the Pointer Events input router.
 - Test hands-on in the dev server before opening a PR. The dev server is `npm run dev`, on port 5187.
+- Share a test build with `npm run deploy` (`npm.cmd run deploy` in PowerShell) to https://gliss.mirimantis.com (13.28). Commit first, so the build label has no `+`.
 - Tick items off here in the PR that ships them, with the PR number.
 - Build plans for items with a planning session go in `.claude/plans/<id>-<slug>.md` while the item is in flight. Delete them once the item ships; the PR and this file are the record.

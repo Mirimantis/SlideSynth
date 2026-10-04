@@ -75,6 +75,14 @@
 
 .settings-actions {
   justify-content: flex-end;
+  align-items: center;
+}
+
+/* Which build this is (13.28), pushed to the left of Done. */
+.settings-build {
+  margin-right: auto;
+  font-size: 0.75rem;
+  color: var(--text-dim);
 }
 
 /* ── Tone Builder ────────────────────────────────────────────── */
