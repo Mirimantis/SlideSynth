@@ -19,11 +19,13 @@ import iconLoop from '../assets/icons/loop.svg?raw';
 import iconUndo from '../assets/icons/undo.svg?raw';
 import iconRedo from '../assets/icons/redo.svg?raw';
 import iconSettings from '../assets/icons/settings.svg?raw';
+import iconFullscreen from '../assets/icons/fullscreen.svg?raw';
+import { canFullscreen, fullscreenOn } from './fullscreen';
 
 /**
  * The top bar (BACKLOG 16.3), left to right: the composition's name and
  * length, the File / Edit / View menus and Undo / Redo; the transport, the
- * Snap and Loop switches, and Settings. (Perform moved to the tool strip in
+ * Snap and Loop switches, Full screen and Settings. (Perform moved to the tool strip in
  * 16.4.) Tempo and the metronome live in the Tempo drawer instead — they're
  * set once per project.
  *
@@ -65,6 +67,11 @@ export function TopBar({ commands, menus, canUndo, canRedo, keepable }: TopBarPr
           <SnapToggle commands={commands} />
           <LoopToggle commands={commands} />
         </div>
+        {canFullscreen() && (
+          <CommandButton id="view.fullscreen" commands={commands} class="icon-toggle" pressed={fullscreenOn.value}>
+            <Icon svg={iconFullscreen} />
+          </CommandButton>
+        )}
         <CommandButton id="app.settings" commands={commands} class="icon-toggle settings-btn">
           <Icon svg={iconSettings} />
         </CommandButton>

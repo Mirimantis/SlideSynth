@@ -12,6 +12,9 @@
  * Pointer capture keeps a gesture's moves and release coming to the canvas
  * even when the pointer leaves it, which replaces the window-level listeners
  * and ends drags that used to stick when released outside the canvas.
+ *
+ * One press at a time, except in Perform on a touch screen (13.33): while a
+ * finger plays, more fingers can join, each its own gesture to the end.
  */
 
 export type PressOwner = 'perform' | 'pan' | 'tool';
@@ -43,6 +46,16 @@ export function routePress(c: PressContext): PressOwner | null {
   return c.performing ? 'perform' : 'tool';
 }
 
+/**
+ * Whether a press that comes while another is in progress joins it as an
+ * extra finger (13.33): only a touch, only while the press in progress is a
+ * performance, and only where a press of its own would perform (not on the
+ * rulers). Everything else is ignored, as before.
+ */
+export function joinsAsFinger(activeOwner: PressOwner, pointerType: string, owner: PressOwner | null): boolean {
+  return activeOwner === 'perform' && pointerType === 'touch' && owner === 'perform';
+}
+
 export interface GestureHandlers {
   down(e: PointerEvent): void;
   move(e: PointerEvent): void;
@@ -57,8 +70,14 @@ export interface InputRouterConfig {
   isRulerLocked?(): boolean;
   /** `track` sees every pointer move (the rail planchette and pitch HUD follow
    *  the cursor in every mode); `leave` fires when the pointer leaves with no
-   *  press in progress. */
-  perform?: GestureHandlers & { track(e: PointerEvent): void; leave(): void };
+   *  press in progress. `finger` takes the extra fingers of a multitouch
+   *  performance (13.33): its `down` says whether it took the finger (it
+   *  won't past the limit), and only a finger it took gets moves and an up. */
+  perform?: GestureHandlers & {
+    track(e: PointerEvent): void;
+    leave(): void;
+    finger?: { down(e: PointerEvent): boolean; move(e: PointerEvent): void; up(e: PointerEvent): void };
+  };
   pan?: GestureHandlers;
   tool: GestureHandlers & {
     enter?(): void;
@@ -76,13 +95,30 @@ export interface InputRouter {
 export function createInputRouter(cfg: InputRouterConfig): InputRouter {
   const { canvas } = cfg;
   let active: { owner: PressOwner; pointerId: number } | null = null;
+  /** Extra fingers playing beside the press in progress (13.33). They stay
+   *  until they lift, even if the press they joined ends first. */
+  const fingers = new Set<number>();
   let pointerInside = false;
+
+  function capture(e: PointerEvent): void {
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // The pointer is already gone (released in the same instant, or a
+      // synthetic event). The press still works — it just isn't captured.
+    }
+  }
 
   function handlersFor(owner: PressOwner): GestureHandlers | undefined {
     return owner === 'perform' ? cfg.perform : owner === 'pan' ? cfg.pan : cfg.tool;
   }
 
   function endGesture(e: PointerEvent): void {
+    if (fingers.delete(e.pointerId)) {
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      cfg.perform?.finger?.up(e);
+      return;
+    }
     if (!active || e.pointerId !== active.pointerId) return;
     const { owner } = active;
     active = null;
@@ -99,7 +135,7 @@ export function createInputRouter(cfg: InputRouterConfig): InputRouter {
   }
 
   const onDown = (e: PointerEvent) => {
-    if (active) return;
+    if (fingers.has(e.pointerId)) return;
     const performing = cfg.isPerforming();
     const owner = routePress({
       button: e.button,
@@ -109,21 +145,29 @@ export function createInputRouter(cfg: InputRouterConfig): InputRouter {
       rulerLocked: cfg.isRulerLocked?.() ?? false,
       toolWantsAlt: !performing && e.altKey && (cfg.tool.wantsAltPress?.(e) ?? false),
     });
+    if (active) {
+      const finger = cfg.perform?.finger;
+      if (!finger || !joinsAsFinger(active.owner, e.pointerType, owner) || !finger.down(e)) return;
+      fingers.add(e.pointerId);
+      capture(e);
+      e.preventDefault();
+      return;
+    }
     const handlers = owner ? handlersFor(owner) : undefined;
     if (!owner || !handlers) return;
     active = { owner, pointerId: e.pointerId };
-    try {
-      canvas.setPointerCapture(e.pointerId);
-    } catch {
-      // The pointer is already gone (released in the same instant, or a
-      // synthetic event). The press still works — it just isn't captured.
-    }
+    capture(e);
     // No text selection or focus shuffle from a canvas drag.
     e.preventDefault();
     handlers.down(e);
   };
 
   const onMove = (e: PointerEvent) => {
+    // An extra finger moves only its own voice, never the primary's.
+    if (fingers.has(e.pointerId)) {
+      cfg.perform?.finger?.move(e);
+      return;
+    }
     cfg.perform?.track(e);
     if (active) {
       if (e.pointerId === active.pointerId) handlersFor(active.owner)?.move(e);

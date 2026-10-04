@@ -12,12 +12,12 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 - **Phase 14 — Stabilize:** done.
 - **Phase 15 — Consolidate the architecture:** the big pieces are done (signals store, transport state machine, input router, command catalog, one snap-config builder, read-only render loop, AudioWorklet voice). Left, as background work: **15.3** break up `main.ts` (3,400 lines; the target is a few hundred), **15.4** the last panels and dialogs onto Preact, **15.8** kernel tests. They make every feature cheaper and are needed before Phase 17.
-- **Phase 16 — Simplify the interface:** the build is done (16.1–16.7). Left: the **16.8 Perform** and **16.9 Visual theme** design sessions.
+- **Phase 16 — Simplify the interface:** the build is done (16.1–16.7). Left: the **16.8 Perform**, **16.9 Visual theme** and **16.10 Small-screen layout** design sessions.
 - **Phase 17 — Portable core:** not started. Needed only before a port (VST, VCV, hardware).
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104).
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105).
 2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
 3. **Background, whenever:** 15.8, then 15.3 and 15.4.
 
@@ -349,6 +349,20 @@ Implementation comes first: block out every control so it works, then hold the d
   - **Ornaments:** hand-designed vector scrollwork or arabesques, to give GUI elements a unique look.
   - **Start with mockups:** two or three directions on one screen (top bar, rail, a drawer), compared side by side.
   - Builds on 16.7's tokens. The ornaments are SVG assets through the icon pipeline (PR #59).
+- [ ] **16.10 Small-screen layout** *(M–L, own planning session — added 2026-10-04; with or after 16.8 and 16.9)*
+  - A layout for phones (and other small screens) that gives the canvas as much length as it can and simplifies the panels.
+  - From testing multitouch (13.33) on a phone: the screen only has room for 3 or 4 fingers, so every pixel of canvas counts.
+  - **Wanted:**
+    - **maximize the canvas's length** (pitch travel; portrait is the phone's performing orientation);
+    - **consolidate the top bar with the left** tool strip and rail icons, into one strip;
+    - **hide the volume and parameter panes** (the Parameters Graph below the canvas);
+    - **simplify the panels**: the right panel and drawers.
+  - **Session inputs:**
+    - when it applies: screen size (`max-width` / `pointer: coarse` media queries), a manual switch, or both;
+    - what stays reachable and where: transport, Keep, Record, Snap / Gravity, the track and tone, tuning;
+    - how the hidden panes come back when wanted (a drawer, an overlay, a tab);
+    - Perform only, or editing too (13.27 decides how far editing goes on touch);
+    - fits with 16.8's "stage" view (they may be the same thing on a phone), 16.9's theme, and 13.34's piano-roll orientation.
 
 ---
 
@@ -458,7 +472,7 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - gestures: two-finger pan, long-press for the right-click menu (not pinch to zoom: decided against);
     - no hover: what replaces hover previews (Nudge's band, tool highlights, the cursor ring);
     - keyboard-only actions need on-screen controls: audition (A), swell (F), Keep (K), Shift and Alt modifiers, `[` / `]`;
-    - layout at phone width: the right panel and drawers, the tool strip, the top bar; ties to 16.9's visual theme;
+    - layout at phone width: the right panel and drawers, the tool strip, the top bar (now 16.10, Small-screen layout); ties to 16.9's visual theme;
     - hit targets: larger points and handles for a coarse pointer (`pointer: coarse`);
     - Perform: a finger per voice (multitouch polyphony; the engine already keys phrases by voice), and touch as the instrument in 16.8's "stage" view;
     - platform limits: iOS needs a user gesture to start audio, AudioWorklet support and latency on mobile, and no Web MIDI in iOS Safari;
@@ -472,8 +486,29 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - The transport was hidden, not gone: the top bar's right zone never wrapped, so on a narrow screen it slid under the menus. The bar now wraps, and the right zone drops to its own line when there's no room (all 13 buttons reachable at 375 px wide).
 - [x] **13.37 Touch-friendly defaults** *(S — added and done 2026-10-04; PR #104)*
   - From touch testing, fine without touch too: the app **opens in Perform**; **Scroll canvas during playback** is on by default (an explicit saved choice is kept); a **new composition starts in 12-EDO, root C, Major** (`NEW_COMPOSITION_SCALE`). A file or MIDI import with no snap settings still gets All notes, as before.
-- [ ] **13.33 Multitouch: play several notes at once** *(M–L, own planning session — added 2026-10-04; the user's biggest touch want)*
+- [x] **13.33 Multitouch: play several notes at once** *(M–L — added 2026-10-04, planned 2026-10-04; the user's biggest touch want; PR #105)*
   - Each finger on the canvas plays its own voice in Perform. Doesn't need the rest of 13.27 first.
+  - **Decided (2026-10-04), a first version to refine in testing:**
+    - **Touch only, Perform only.** The mouse and pen work as today: the first finger (or the mouse) is the `primary` voice, with everything it has now (Prism, pitch HUD, hover). Each further finger is its own voice (`touch-1`…), with its own Gravity, haptic clicks and rail marker; fingers start and stop independently. Editing (the Draw tool and the rest) ignores extra fingers.
+    - **Limit: 10 fingers** (to see how a phone copes; each is its own audio-thread voice). An eleventh is ignored.
+    - **The Prism applies only to the first finger, and Prism Draw mode ignores extra fingers.** The Prism may turn out not to suit multitouch.
+    - **Recording:** each finger's take is its own ungrouped curve, finalized when that finger lifts, like a MIDI note. Fingers can't be told apart (a lifted finger's slot is reused), so nothing is grouped by finger.
+    - **Keep** takes the last "hand": every take that overlapped in time with the newest one (all the fingers that were down together), each as its own ungrouped curve, in one undo step; pressing again steps back a hand. A Prism chord still keeps as one group. Keep may need to work more like MIDI recording; see in testing.
+    - **Edge scrolling:** any finger near the top or bottom edge scrolls, the one nearest the edge sets the speed, and fingers at both edges cancel out. Every held note glides with the view.
+    - **Pitch HUD:** the newest finger's note.
+    - **No pressure** for now (most devices don't report it); the dynamics bus (Swell) applies to every finger.
+  - **Done (PR #105):**
+    - **Router** (`input-router.ts`): while a performing press is in progress, a touch that would perform joins as an extra finger (`joinsAsFinger`), with its own pointer capture, moves and release; it never moves the primary's planchette. Mouse, pen and the rulers are unchanged.
+    - **Fingers** (`canvas/fingers.ts`, `main.ts`): each extra finger gets the lowest free voice `touch-1`…`touch-9` (`allocateFingerVoice`; the primary is the tenth), a planchette, a live voice, its own Gravity state (`computeComposeCursorPitch` takes the finger's), haptic hysteresis (`hapticFollow`) and cross flash. Gravity ticks every finger each frame. Fingers can't leave Perform mode while held. Releasing the primary now stops only its own voices (it used to stop every planchette's, which also cut held MIDI notes on an armed track).
+    - **Recording:** a finger's take is closed on lift and, while capturing, committed as its own curve (`commitFingerTake`), as its own pass in the pass log. Loop wraps and a cancelled pass seal held fingers' takes (`sealFingerTakes`); ending a session releases them.
+    - **Keep:** the engine's phrases record when they opened (`openedAtMs`), and `keepHand` keeps the newest take plus every take overlapping it, directly or through another. `commitFinalizedCurves` groups only a Prism chord (`isPrismChord`), never fingers.
+    - **Edge scrolling:** `edgeScrollStep` combines every held finger; the HUD follows the newest finger (`hudPlanchette`).
+    - Rail markers for extra fingers use the ordinary planchette colour: a voice isn't a finger, so a colour per voice would suggest an identity the fingers don't have.
+  - **Tested on a phone (2026-10-04): works very well.** The screen only fits 3 or 4 fingers, hence 16.10 (Small-screen layout).
+  - **Gestures (added after testing):** the user ran into system gestures on Android, Windows and a Wacom tablet. A page can't turn those off (they're device settings; the user turned most off there). What the app can do, done:
+    - **browser gestures off everywhere**, not only on the canvases: `overscroll-behavior: none` (pull to refresh, swipe back), `touch-action: pan-x pan-y` on the body (no pinch or double-tap zoom; panels still scroll), no text selection or long-press callout outside text fields, and no browser long-press menu (`ui/touch-guard.ts`; a mouse's right-click is untouched);
+    - **Full screen** (`view.fullscreen`, a top-bar button and View menu entry; `ui/fullscreen.ts`): hides the browser and, on a phone, the system bars, so an edge swipe shows the bars instead of leaving. Hidden where the Fullscreen API is missing (iPhone);
+    - the body's height is `100dvh`, so on a phone the app no longer runs under the browser's bars.
   - **Already in place:** the performance engine keys phrases by voice, MIDI already plays a voice per note (`midi-<note>`), and the state holds a list of planchettes (used today for the Prism's harmony voices; the mouse and touch drive only the primary one).
   - **Session inputs:**
     - a voice per pointer id: start, follow and release per finger; a voice limit;
@@ -930,16 +965,29 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - `npm run deploy` (`scripts/deploy.mjs`): builds, adds `deploy/.htaccess` (HTTPS only, pages never cached) and `deploy/assets.htaccess` (hashed assets cached for good) and a `build.txt` label, then streams `dist/` as one tar over SSH (one passphrase prompt). On the server it unpacks into a staging folder, then replaces the document root's contents, keeping `.well-known`. Guards: the target must be `/home/<user>/<folder>`, never `public_html`.
     - Settings in `deploy/deploy.env.local` (ignored by git via `*.local`); `deploy/deploy.env.example` documents them.
     - **Build label:** version · commit (+ if uncommitted changes) · date, from `vite.config.ts` (`__BUILD_INFO__`), shown at the bottom of Settings.
+- [ ] **13.38 Installable web app** *(S–M — added 2026-10-04; DEFERRED until after the UI redesign, 16.8–16.10)*
+  - Make the app installable from the browser (a PWA): added to a phone's home screen or a computer's app list, it opens in its own window with no browser bars, like an app.
+  - From multitouch testing (13.33): a web page can't turn off the device's own gestures, and the browser's bars cost canvas on a phone. Installed, the app can open full screen (`display: fullscreen` or `standalone`) and choose its orientation (portrait, for performing on a phone).
+  - **Needs:** a web app manifest (name, icons, colours, display mode, orientation), a set of app icons, and a service worker that caches the build so it opens offline. The test site (13.28) already serves it over HTTPS, which installing requires.
+  - **Watch:** the deploy's cache rules (pages never cached, hashed assets kept for good) and a service worker's cache must agree, so a new build actually arrives; show the build label (13.28) so testers can tell.
+  - The base for a store app later: the Play Store can take an installable web app as it is (Bubblewrap / PWABuilder), and a native wrapper (H.4) packages the same build.
+  - **After the redesign** (decided 2026-10-04): the manifest's icons and colours come from 16.9's theme, and the full-screen layout from 16.10.
 
 ---
 
 ## Horizon (THINKING — not ready to build)
 
-Architecture notes for these are in [DESIGN.md › Ports & hardware](DESIGN.md#ports--hardware-thinking). None starts before Phase 17. Each needs its own planning session.
+Architecture notes for these are in [DESIGN.md › Ports & hardware](DESIGN.md#ports--hardware-thinking). None starts before Phase 17, except H.4, which packages the web app as it is. Each needs its own planning session.
 
 - **H.1 VST plugin** — MPE / note-expression generator, player/performer scope.
 - **H.2 VCV Rack module** — CV source (pitch → 1 V/oct, lanes → CV, per-track gates, clock/reset), player/performer scope.
 - **H.3 Motorized-fader hardware** — gravity wells rendered as force. The first step is prototyping the detent feel on the RP2040.
+- **H.4 Native app wrapper (app stores)** — the web app inside a native shell (e.g. Capacitor) for the Play Store and App Store, for what a page can't do. Builds on 13.38. *(added 2026-10-04, from multitouch testing, 13.33)*
+  - **Android:** immersive mode (the system bars stay hidden; a swipe shows them only briefly); excluding the back-swipe from parts of the side edges (capped at about 200 dp per edge; the home swipe can't be excluded, and a phone maker's three-finger screenshot can't be touched); crisper haptic ticks than the browser's vibrate (13.35).
+  - **iPhone / iPad:** haptics at all (Safari has none, so 13.35's clicks would reach iPhones); asking iOS to defer edge gestures to a second swipe; but no Web MIDI in the app's web view, so MIDI input needs native code.
+  - **Windows:** little gained for gestures (no app can turn off the system's; that's Settings or Group Policy). A standalone app does get its own per-program entry in the Wacom driver's settings.
+  - The user can already lock a device to one app for a session: Android's screen pinning, iOS's Guided Access.
+  - Open: worth it for haptics and gestures alone, or only with a reason to be in the stores; store accounts and review; keeping the web and store builds the same.
 
 **Open questions:**
 

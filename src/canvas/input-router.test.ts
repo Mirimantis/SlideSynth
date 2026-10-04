@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { routePress, type PressContext } from './input-router';
+import { joinsAsFinger, routePress, type PressContext } from './input-router';
 
 const base: PressContext = { button: 0, altKey: false, performing: false, inRuler: false, rulerLocked: false, toolWantsAlt: false };
 const press = (over: Partial<PressContext>) => routePress({ ...base, ...over });
@@ -38,5 +38,23 @@ describe('routePress (BACKLOG 15.2)', () => {
 
   it('right button is left to the context menu', () => {
     expect(press({ button: 2 })).toBeNull();
+  });
+});
+
+describe('joinsAsFinger (13.33)', () => {
+  it('lets a second finger join a performance on a touch screen', () => {
+    expect(joinsAsFinger('perform', 'touch', 'perform')).toBe(true);
+  });
+
+  it('is touch only: not a mouse or a pen', () => {
+    expect(joinsAsFinger('perform', 'mouse', 'perform')).toBe(false);
+    expect(joinsAsFinger('perform', 'pen', 'perform')).toBe(false);
+  });
+
+  it('only joins a performance, and only where it would perform itself', () => {
+    expect(joinsAsFinger('tool', 'touch', 'tool')).toBe(false);
+    expect(joinsAsFinger('pan', 'touch', 'perform')).toBe(false);
+    expect(joinsAsFinger('perform', 'touch', 'tool')).toBe(false);   // on the rulers
+    expect(joinsAsFinger('perform', 'touch', null)).toBe(false);
   });
 });
