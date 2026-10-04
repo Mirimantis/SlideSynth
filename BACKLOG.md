@@ -172,6 +172,13 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - Unit tests for snap (`snap.ts`), magnetic physics (`snap-magnetic.ts`), `bezier-math`, `curve-sampler` and the scheduler's timing math, plus 15.2's state machine.
   - **Status (2026-09-27):** the state machine (`transport.test.ts`) and snap-config are covered, and snap is partly covered through `tuning.test.ts`. Magnetic physics, `bezier-math`, `curve-sampler` and the scheduler still have no tests of their own; only the golden-format test reaches them.
   - These become the cross-runtime conformance suite in Phase 17.
+  - **Done (2026-10-04):** 48 new tests, each file headed as kernel tests.
+    - `utils/snap.test.ts`: `snapToGrid` (X grid and beat guides, the pitch grid, range clamp, pitch-line guides, pitch lines hidden, projection exclusive, pitch-guide priority), Gravity's wells (`findAdaptiveSnap`: half-gap reach on the cursor's side, the 300 ¢ cap, capture), `nearestSnapLine`, the zoom-adaptive steps.
+    - `utils/snap-magnetic.test.ts` (beside 13.36's Speed tests): starts at the cursor, spring-only follow, settling between line and cursor, exactly on the line with no spring, nothing outside the well, frame-rate behaviour, the catch-up cap, the velocity cap, reset.
+    - `utils/bezier-math.test.ts`: evaluation, subdivision, nearest point (world and screen-scaled), `findTForX`.
+    - `audio/curve-sampler.test.ts`: `evaluateCurveAtBeat`, `sampleCurve` (rate, tempo, range, frequency), `getCurveTimeRange`, and the scheduler's timing.
+    - **Scheduler:** its timing math moved out of `playback.ts` into `audio/schedule-math.ts`, pure (`PlayClock`, `beatToAudioTime` / `audioTimeToBeat`, `curveEventsInWindow`: a curve's samples and edge fades in one look-ahead window, open at its start). Same arithmetic as before; `scheduleAhead`, the position and the metronome hook use it. Tested: back-to-back windows schedule every event once, and nothing already past is rescheduled.
+    - **Found:** Gravity isn't frame-rate independent to the cent, as its comments claimed. A frame's time is split into equal sub-steps of *at most* 0.02 beats, so the step size follows the frame rate: an underdamped 250 ¢ glide differs mid-way by up to ~14 ¢ between 60 and 480 fps (it settles in the same place). Frames longer than the 0.1-beat catch-up cap (slower than 20 fps at 120 bpm) also lose time. Comments corrected; both behaviours are pinned by tests. A truly fixed step (carrying the remainder to the next frame) or moving the integrator onto the audio thread (15.7's note) would make it exact.
 
 ---
 

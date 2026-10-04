@@ -8,20 +8,21 @@
  * (smooth, snap-less follow). At strength=1 snap lines pull hard enough to
  * support vibrato (pitch undulation) around a snap target.
  *
- * Integrator: semi-implicit Euler with a fixed STABLE_SUBSTEP_DT. Each call
- * sub-steps the elapsed time into fixed slices so behavior is identical at
- * any frame rate (60 FPS Chrome, throttled preview iframe, background tab).
+ * Integrator: semi-implicit Euler, sub-stepping the elapsed time into equal
+ * slices of at most STABLE_SUBSTEP_DT, so it stays stable and behaves nearly
+ * the same (within a few cents) at any frame rate: 60 FPS Chrome, a throttled
+ * preview iframe, a background tab.
  */
 
 const SNAP_STRENGTH_MAX = 800;      // peak snap attractor stiffness at strength=1
 const MAX_DT_BEATS = 0.1;           // cap total elapsed dt — avoids huge catch-up after a long pause
 const MAX_VELOCITY = 20000;         // cents/beat (200 ST/beat) — hard cap against numerical blowups
-/** Fixed sub-step size for the integrator. Semi-implicit Euler is stable when
+/** Largest sub-step for the integrator. Semi-implicit Euler is stable when
  *  dt*ω < 2; with ω up to ~30 (snapK + springK at default settings) we need
  *  dt below ~0.067 beats. 0.02 stays well inside that bound for all sensible
- *  parameter values, making the physics frame-rate-independent: a slow tab,
- *  preview iframe, or background throttle still gets identical settling
- *  behavior to a 60 FPS foreground Chrome tab. */
+ *  parameter values, so a slow tab, preview iframe, or background throttle
+ *  settles like a 60 FPS foreground Chrome tab (not bit for bit: a frame's
+ *  time is split into equal slices, whose size varies with the frame). */
 const STABLE_SUBSTEP_DT = 0.02;
 /** Reference radius above which snapK is scaled down. At radius=100 ¢ / 1 ST
  *  (the old fixed-falloff baseline) snapK is unchanged; wider wells get

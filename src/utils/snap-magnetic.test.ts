@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-  createMagneticState, updateMagnetic, clampMagneticSpeed, stepMagneticSpeed,
+  createMagneticState, updateMagnetic, resetMagnetic, clampMagneticSpeed, stepMagneticSpeed,
   DEFAULT_MAGNETIC_SPEED, MAGNETIC_SPEED_MAX, MAGNETIC_SPEED_MIN,
 } from './snap-magnetic';
 import { migrateSnapSettings } from '../export/json-export';
 import { loadUserSnapPresets, presetMatches, snapshotPreset, BUILTIN_SNAP_PRESETS, USER_SNAP_PRESETS_STORAGE_KEY } from './snap-presets';
+
+/** The last element (the project's lib predates Array.prototype.at). */
+const last = <T>(a: readonly T[]): T | undefined => a[a.length - 1];
 
 /** A glide from one note toward the next: the cursor jumps 500 ¢ and the
  *  planchette chases it into the target's well. Returns the pitch per frame. */
@@ -18,6 +21,108 @@ function chase(beatsPerFrame: number, speed: number, frames: number, damping = 6
   }
   return out;
 }
+
+// Kernel tests (BACKLOG 15.8): the physics every runtime must reproduce.
+describe('Gravity physics', () => {
+  /** Run `frames` updates `dt` beats apart toward a fixed cursor; returns the pitches. */
+  function run(opts: {
+    cursor: number; start?: number; strength?: number; springK?: number; damping?: number;
+    attractor?: { target: number; radius: number } | null; dt?: number; frames: number;
+  }): number[] {
+    const state = createMagneticState();
+    updateMagnetic(state, opts.start ?? opts.cursor, 0, 0, 0, 0, null);
+    const out: number[] = [];
+    const dt = opts.dt ?? 1 / 30;
+    for (let f = 1; f <= opts.frames; f++) {
+      out.push(updateMagnetic(state, opts.cursor, f * dt, opts.strength ?? 0, opts.springK ?? 50,
+        opts.damping ?? 10, opts.attractor ?? null, 1));
+    }
+    return out;
+  }
+
+  it('starts at the cursor, at rest', () => {
+    const state = createMagneticState();
+    expect(updateMagnetic(state, 6123, 5, 1, 50, 6, { target: 6100, radius: 100 })).toBe(6123);
+    expect(state.velocity).toBe(0);
+  });
+
+  it('follows the cursor on the spring alone, settling on it', () => {
+    const pitches = run({ start: 6000, cursor: 6300, frames: 300 });
+    expect(pitches[0]).toBeGreaterThan(6000);
+    expect(pitches[0]).toBeLessThan(6300);
+    expect(pitches[pitches.length - 1]).toBeCloseTo(6300, 0);
+  });
+
+  it('settles on the snap line, not the cursor, when it pulls', () => {
+    const attractor = { target: 6400, radius: 100 };
+    const pulled = run({ start: 6430, cursor: 6430, strength: 1, attractor, frames: 300 });
+    const settled = pulled[pulled.length - 1]!;
+    expect(settled).toBeLessThan(6430);
+    expect(settled).toBeGreaterThan(6400);
+    // With no strength the line does nothing.
+    const inert = run({ start: 6430, cursor: 6430, strength: 0, attractor, frames: 50 });
+    for (const p of inert) expect(p).toBeCloseTo(6430, 9);
+  });
+
+  it('settles exactly on the line when the cursor doesn’t pull (spring 0)', () => {
+    const attractor = { target: 6400, radius: 100 };
+    const pitches = run({ start: 6430, cursor: 6430, strength: 1, springK: 0, damping: 15, attractor, frames: 600 });
+    expect(pitches[pitches.length - 1]).toBeCloseTo(6400, 1);
+  });
+
+  it('doesn’t pull from outside the well', () => {
+    const attractor = { target: 6400, radius: 50 };
+    const pitches = run({ start: 6480, cursor: 6480, strength: 1, attractor, frames: 50 });
+    for (const p of pitches) expect(p).toBeCloseTo(6480, 9);
+  });
+
+  it('moves nearly the same at any frame rate, and settles in the same place', () => {
+    // 60 fps and 480 fps at 120 bpm (30 and 240 frames a beat). The sub-step
+    // follows the frame, so an underdamped glide differs mid-way by up to
+    // ~14 of its 250 cents (measured 2026-10-04); where it settles doesn't.
+    const attractor = { target: 6200, radius: 100 };
+    const glide = (framesPerBeat: number, beats: number) =>
+      run({ start: 6000, cursor: 6250, strength: 0.7, springK: 40, damping: 6, attractor, dt: 1 / framesPerBeat, frames: framesPerBeat * beats });
+    const slow = glide(30, 2);
+    const fast = glide(240, 2);
+    for (let i = 0; i < slow.length; i++) {
+      expect(Math.abs(slow[i]! - fast[(i + 1) * 8 - 1]!)).toBeLessThan(20);
+    }
+    expect(last(glide(30, 8))).toBeCloseTo(last(glide(240, 8))!, 0);
+  });
+
+  it('loses time on frames longer than 0.1 beats (slower than 20 fps at 120 bpm)', () => {
+    // The catch-up cap applies per frame, so a very slow frame rate glides slower.
+    const glide = (framesPerBeat: number) =>
+      run({ start: 6000, cursor: 6250, damping: 15, dt: 1 / framesPerBeat, frames: framesPerBeat / 2 });
+    expect(last(glide(4))!).toBeLessThan(last(glide(32))! - 10);
+  });
+
+  it('runs at most 0.1 beats of catch-up after a pause, and nothing for time going backward', () => {
+    const paused = createMagneticState();
+    const short = createMagneticState();
+    for (const s of [paused, short]) updateMagnetic(s, 6000, 0, 0, 0, 0, null);
+    expect(updateMagnetic(paused, 6500, 50, 0, 50, 10, null)).toBeCloseTo(updateMagnetic(short, 6500, 0.1, 0, 50, 10, null), 9);
+    const p = paused.pitch;
+    expect(updateMagnetic(paused, 7000, 40, 0, 50, 10, null)).toBe(p);
+  });
+
+  it('caps velocity so a wild input can’t blow up', () => {
+    const state = createMagneticState();
+    updateMagnetic(state, 0, 0, 0, 0, 0, null);
+    for (let f = 1; f <= 20; f++) updateMagnetic(state, 1e9, f * 0.1, 0, 1e6, 0, null);
+    expect(Math.abs(state.velocity)).toBeLessThanOrEqual(20000);
+    expect(Number.isFinite(state.pitch!)).toBe(true);
+  });
+
+  it('starts over from the cursor after a reset', () => {
+    const state = createMagneticState();
+    updateMagnetic(state, 6000, 0, 0, 0, 0, null);
+    updateMagnetic(state, 6500, 0.1, 0, 50, 10, null);
+    resetMagnetic(state);
+    expect(updateMagnetic(state, 7000, 0.2, 0, 50, 10, null)).toBe(7000);
+  });
+});
 
 describe('Gravity Speed (13.36)', () => {
   it('at 2× matches the same frames at double the tempo exactly', () => {
