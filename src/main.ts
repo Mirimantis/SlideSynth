@@ -1,30 +1,23 @@
 import { createViewport } from './canvas/viewport';
 import { createParamViewport } from './canvas/param-viewport';
-import { renderParamGraph } from './canvas/param-graph-renderer';
 import { createParamInteraction } from './canvas/param-interaction';
-import { displayedLane } from './model/lane';
-import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, KEEP_BUFFER_MS, MIN_ZOOM_X, MAX_ZOOM_X, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, centsToFrequency, setReferenceAHz, centsToReferenceAHz, referenceAHzToCents } from './constants';
-import { renderStaff } from './canvas/staff-renderer';
-import { renderCurves, renderDrawPreview } from './canvas/curve-renderer';
-import { renderTransformBox } from './canvas/transform-box-renderer';
-import { outlinedGroups, renderGroupOutlines } from './canvas/group-outline';
-import { renderMarquee } from './canvas/marquee-renderer';
-import { renderProjection, renderProjectionSourceHighlight, renderPrismDrawPreview } from './canvas/projection-renderer';
-import { renderNudgeBrush, renderNudgeRing } from './canvas/nudge-brush';
-import { pointsInReach } from './model/nudge';
-import { renderPlayhead } from './canvas/playhead';
-import { renderLoopMarkers } from './canvas/loop-markers';
-import { renderGuideHandle, renderGuides } from './canvas/guides';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, JAM_IDLE_TIMEOUT_MS, KEEP_BUFFER_MS, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, setReferenceAHz, centsToReferenceAHz, referenceAHzToCents } from './constants';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
-import { snapToGrid, findAdaptiveSnap, nearestSnapLine, type SnapConfig } from './utils/snap';
+import { findAdaptiveSnap, nearestSnapLine, type SnapConfig } from './utils/snap';
 import { hapticClick, hapticStep, HAPTIC_RANGE_PX } from './ui/haptics';
 import { canFullscreen, fullscreenOn, toggleFullscreen } from './ui/fullscreen';
+import { markBgDirty, requestRedraw, redrawPending, clearRedrawRequest } from './app/redraw';
+import { createScene } from './canvas/scene';
+import { createPitchHud } from './ui/pitch-hud';
+import { createSessionOverlays } from './ui/session-overlays';
+import { createFrameTimes } from './ui/frame-times';
+import { createZoomSliders } from './ui/zoom-sliders';
+import { installParamGraphResize } from './ui/param-graph-resize';
 import { installTouchGuards } from './ui/touch-guard';
-import { createInteraction, editingCurveIds, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './canvas/interaction';
+import { createInteraction, rebuildTransformBox, RULER_HEIGHT } from './canvas/interaction';
 import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
 import { createPreviewManager } from './audio/preview';
-import { renderRuler } from './canvas/ruler-renderer';
 import { openContextMenu, type ContextMenuItem } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
@@ -32,10 +25,10 @@ import { createMidiInput } from './audio/midi-input';
 import { createDynamicsBus } from './audio/dynamics-bus';
 import { createMagneticState, updateMagnetic, resetMagnetic, type MagneticState } from './utils/snap-magnetic';
 import { allocateFingerVoice, edgeScrollStep, isFingerVoice } from './canvas/fingers';
-import { renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails, renderMetronomeFlash, METRONOME_FLASH_DURATION_MS, LOOP_WRAP_FLASH_MS, PULSE_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
+import { METRONOME_FLASH_DURATION_MS, LOOP_WRAP_FLASH_MS, PULSE_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { h, render } from 'preact';
 import { signal } from '@preact/signals-core';
-import { loadTheme, themeColor } from './theme/theme';
+import { loadTheme } from './theme/theme';
 import { PropertyPanel } from './ui/property-panel';
 import { ToolPropertyPanel } from './ui/tool-property-panel';
 import { TrackList, type TrackListActions } from './ui/track-list';
@@ -57,9 +50,9 @@ import { midiToComposition } from './export/midi-import';
 import { exportWav } from './export/wav-export';
 import { store } from './state/store';
 import { history } from './state/history';
-import { createTrack, trackShown } from './model/track';
-import { getCompositionLength, measureLengthInBeats } from './model/composition';
-import { computeMultiCurveBBox, pitchPoints } from './model/curve';
+import { createTrack } from './model/track';
+import { getCompositionLength } from './model/composition';
+import { pitchPoints } from './model/curve';
 import { createGroupId } from './model/curve-groups';
 import { showToast } from './ui/toast';
 import { commandSpec, primaryShortcut, type CommandId } from './commands/catalog';
@@ -70,10 +63,9 @@ import { SnapPanel, type SnapActions } from './ui/snap-panel';
 import { PrismPanel } from './ui/prism-panel';
 import { TuningPanel, type TuningActions } from './ui/tuning-panel';
 import {
-  DEFAULT_MOVE_INTERVAL, moveIntervalShort, nearestNote, noteRootAt, pitchLabel, pitchName, prismOffsets, prismOffsetsAt,
-  resolveTuning, staffGridFor, tuningKey,
+  nearestNote, noteRootAt, prismOffsets, prismOffsetsAt, resolveTuning, staffGridFor, tuningKey,
 } from './tuning/tuning';
-import { fretLinePitch, shownGuides } from './model/frets';
+import { fretLinePitch } from './model/frets';
 import { createPerformanceEngine } from './canvas/performance-engine';
 import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
 import { createDrawerRail } from './ui/drawer';
@@ -211,129 +203,14 @@ const paramInteraction = createParamInteraction(paramCanvas, paramViewport, getS
 watch(() => store.getSelectedCurveId(), () => paramInteraction.resetSelection());
 
 // ── Parameters Graph: drag-to-resize height ────────────────────
-const PARAM_HEIGHT_KEY = 'slidesynth.paramGraphHeight';
-const PARAM_MIN_H = 60;
-function setParamGraphHeight(px: number): void {
-  document.documentElement.style.setProperty('--param-graph-height', `${Math.round(px)}px`);
-}
-// Restore a saved height before the initial canvas sizing.
-{
-  const saved = Number(localStorage.getItem(PARAM_HEIGHT_KEY));
-  if (Number.isFinite(saved) && saved >= PARAM_MIN_H && saved <= 600) setParamGraphHeight(saved);
-}
-{
-  const handle = document.getElementById('param-resize-handle')!;
-  const centerStack = document.getElementById('center-stack')!;
-  let resizing = false;
-  handle.addEventListener('mousedown', (e) => {
-    resizing = true;
-    handle.classList.add('dragging');
-    e.preventDefault();
-  });
-  window.addEventListener('mousemove', (e) => {
-    if (!resizing) return;
-    const stack = centerStack.getBoundingClientRect();
-    // Keep at least 120px of main canvas above the graph.
-    const maxH = Math.max(PARAM_MIN_H, stack.height - 120);
-    const h = Math.max(PARAM_MIN_H, Math.min(maxH, stack.bottom - e.clientY));
-    setParamGraphHeight(h);
-    resizeCanvases();
-  });
-  window.addEventListener('mouseup', () => {
-    if (!resizing) return;
-    resizing = false;
-    handle.classList.remove('dragging');
-    const cur = getComputedStyle(document.documentElement)
-      .getPropertyValue('--param-graph-height').trim();
-    const px = parseInt(cur, 10);
-    if (px) { try { localStorage.setItem(PARAM_HEIGHT_KEY, String(px)); } catch { /* ignore */ } }
-  });
-}
+installParamGraphResize(
+  document.getElementById('param-resize-handle')!,
+  document.getElementById('center-stack')!,
+  () => resizeCanvases(),
+);
 
-const pitchHud = document.getElementById('pitch-hud') as HTMLDivElement;
+const pitchHud = createPitchHud(document.getElementById('pitch-hud') as HTMLDivElement);
 
-// Fixed-width HUD slots — one <span> per field so the numbers don't shift
-// horizontally as cents flip between e.g. "+3¢" and "-12¢". Slots are created
-// once and their textContent is updated in place.
-pitchHud.innerHTML = `
-  <span class="hud-slot hud-note" id="hud-snap-name"></span>
-  <span class="hud-slot hud-cents" id="hud-snap-cents"></span>
-  <span class="hud-slot hud-hz" id="hud-snap-hz"></span>
-  <span class="hud-slot hud-sep" id="hud-sep"></span>
-  <span class="hud-slot hud-note" id="hud-raw-name"></span>
-  <span class="hud-slot hud-cents" id="hud-raw-cents"></span>
-  <span class="hud-slot hud-dyn" id="hud-dyn"></span>
-`;
-const hudSnapName = document.getElementById('hud-snap-name') as HTMLSpanElement;
-const hudSnapCents = document.getElementById('hud-snap-cents') as HTMLSpanElement;
-const hudSnapHz = document.getElementById('hud-snap-hz') as HTMLSpanElement;
-const hudSep = document.getElementById('hud-sep') as HTMLSpanElement;
-const hudRawName = document.getElementById('hud-raw-name') as HTMLSpanElement;
-const hudRawCents = document.getElementById('hud-raw-cents') as HTMLSpanElement;
-const hudDyn = document.getElementById('hud-dyn') as HTMLSpanElement;
-
-function formatCents(cents: number): string {
-  if (cents === 0) return '';
-  return `${cents > 0 ? '+' : ''}${cents}¢`;
-}
-
-/** Format Hz for the Pitch HUD: 2 decimals below 100Hz (more precision where
- *  semitones span only a couple Hz), 1 decimal otherwise. */
-function formatHz(hz: number): string {
-  if (hz < 100) return `${hz.toFixed(2)} Hz`;
-  return `${hz.toFixed(1)} Hz`;
-}
-
-/** Four-step bar for the dynamics readout, quietest to loudest. */
-const DYNAMICS_BAR_GLYPHS = ['▁', '▃', '▅', '▇'];
-
-function formatDynamics(value: number): string {
-  const clamped = Math.max(0, Math.min(1, value));
-  const filled = Math.max(1, Math.ceil(clamped * DYNAMICS_BAR_GLYPHS.length));
-  return `${DYNAMICS_BAR_GLYPHS.slice(0, filled).join('')} ${clamped.toFixed(2)}`;
-}
-
-/** Fill each HUD slot in place — no innerHTML, no text concatenation.
- *  `dynamics` is null when the bus isn't driving (fixed source), which blanks
- *  the slot so the HUD reads exactly as it did pre-bus. */
-function writePitchHud(snappedY: number | null, rawY: number | null, dynamics: number | null = null): void {
-  hudDyn.textContent = dynamics == null ? '' : formatDynamics(dynamics);
-  if (snappedY == null) {
-    hudSnapName.textContent = '';
-    hudSnapCents.textContent = '';
-    hudSnapHz.textContent = '';
-    hudSep.textContent = '';
-    hudRawName.textContent = '';
-    hudRawCents.textContent = '';
-    return;
-  }
-  // Y is cents; the HUD names the tuning's nearest note (13.8 (b)) and the
-  // signed ¢ remainder.
-  const st = store.getState();
-  const snapName = pitchName(st, snappedY);
-  hudSnapName.textContent = snapName.name;
-  hudSnapCents.textContent = formatCents(Math.round(snapName.offset));
-  // Hz reflects the current global tuning offset since centsToFrequency reads
-  // the module-level reference A4. A=432 etc. shifts every readout in lockstep.
-  hudSnapHz.textContent = formatHz(centsToFrequency(snappedY));
-
-  const hasRaw = rawY != null
-    && Math.abs(rawY - snappedY) >= 2
-    && rawY >= MIN_PITCH_CENTS - CENTS_PER_SEMITONE / 2
-    && rawY <= MAX_PITCH_CENTS + CENTS_PER_SEMITONE / 2;
-  if (hasRaw) {
-    const rawName = pitchName(st, rawY!);
-    hudSep.textContent = '·';
-    hudRawName.textContent = rawName.name;
-    hudRawCents.textContent = formatCents(Math.round(rawName.offset));
-  } else {
-    hudSep.textContent = '';
-    hudRawName.textContent = '';
-    hudRawCents.textContent = '';
-  }
-}
-
-let bgDirty = true;
 let paramW = 0;
 let paramH = 0;
 const PARAM_HANDLE_H = 7; // px; matches #param-resize-handle height + #param-canvas top
@@ -373,7 +250,7 @@ function resizeCanvases() {
   paramCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   paramViewport.setHeight(paramH);
 
-  bgDirty = true;
+  markBgDirty();
 }
 
 // ── Audio preview ──────────────────────────────────────────────
@@ -633,36 +510,7 @@ watch(() => store.getState().perfHudVisible, v => perfHud.setVisible(v));
 // Perform colours the whole app (a first cue; 16.8 designs the real one).
 watch(() => store.getState().performMode, on => document.body.classList.toggle('perform-mode', on));
 
-// Rolling frame-time buffer (~2 s at 60 fps). Push every render frame; sort a
-// copy when the HUD refreshes. Push is O(1); sort is O(n log n) over 125
-// entries — only paid when the HUD is visible.
-const FRAME_BUFFER_SIZE = 125;
-const frameTimes = new Float32Array(FRAME_BUFFER_SIZE);
-let frameTimesFilled = 0;
-let frameTimesIndex = 0;
-let lastFrameNow = 0;
-function pushFrameTime(now: number) {
-  if (lastFrameNow !== 0) {
-    frameTimes[frameTimesIndex] = now - lastFrameNow;
-    frameTimesIndex = (frameTimesIndex + 1) % FRAME_BUFFER_SIZE;
-    if (frameTimesFilled < FRAME_BUFFER_SIZE) frameTimesFilled++;
-  }
-  lastFrameNow = now;
-}
-function frameTimePercentile(p: number): number {
-  if (frameTimesFilled === 0) return 0;
-  const sorted = Array.from(frameTimes.subarray(0, frameTimesFilled)).sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.floor(p * sorted.length));
-  return sorted[idx]!;
-}
-const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement;
-const afkWarning = document.getElementById('afk-warning') as HTMLDivElement;
-const afkWarningCountdown = document.getElementById('afk-warning-countdown') as HTMLDivElement;
-/** Show the AFK warning popup once `afkTimeoutMs - 30s` of remaining time is left
- *  — i.e. after 30 seconds of inactivity. The popup races the engine's auto-stop
- *  using the same constant, so the countdown reaches 0 at the moment recording
- *  pauses. */
-const AFK_WARNING_LEAD_MS = 30_000;
+const frameTimes = createFrameTimes();
 
 /** Scroll Canvas effective value — see state/perform-mode.ts. */
 function effectiveScrollCanvas(): boolean {
@@ -701,7 +549,7 @@ function toggleScrollDuringPlayback(): void {
     viewport.clampOffset(r.width, r.height, minPanOffsetX(r.width));
   }
   updateZoom();
-  bgDirty = true;
+  markBgDirty();
 }
 
 /** Phrases the rolling buffer can keep, for the Keep button (BACKLOG 10.2).
@@ -734,7 +582,7 @@ function syncTuningToAudio() {
   setReferenceAHz(centsToReferenceAHz(store.getComposition().tuningOffsetCents));
   // Pitch HUD reads frequency on render — mark dirty so any open HUD reflects
   // the new tuning on the next frame.
-  bgDirty = true;
+  markBgDirty();
 }
 watch(() => store.getComposition().tuningOffsetCents, () => syncTuningToAudio());
 
@@ -757,7 +605,7 @@ const tuningActions: TuningActions = {
   },
   setTunedFrom(pc) { history.snapshot(); store.setTunedFrom(pc); },
   setPitchLinesVisible(visible) { history.snapshot(); store.setPitchLinesVisible(visible); },
-  setFretsVisible(visible) { store.setFretsVisible(visible); bgDirty = true; },
+  setFretsVisible(visible) { store.setFretsVisible(visible); markBgDirty(); },
   setReferenceLines(visible) { history.snapshot(); store.setReferenceLines(visible); },
   async importScl() {
     let file: { name: string; text: string };
@@ -793,7 +641,7 @@ const tuningActions: TuningActions = {
     } else {
       showToast(`${added} octave frets added, and pitch lines turned off: the frets are the grid now. Drag them to tune by ear (hold A to hear).`, 5000);
     }
-    bgDirty = true;
+    markBgDirty();
   },
   fretsToScale() {
     history.snapshot();
@@ -806,7 +654,7 @@ const tuningActions: TuningActions = {
     showToast(result.kind === 'tuning'
       ? `The octave frets are now a tuning of their own, "From frets": not all of them were on the tuning's notes.`
       : 'The octave frets are now the scale.', 5000);
-    bgDirty = true;
+    markBgDirty();
   },
   setReferenceHz(hz) {
     const cents = referenceAHzToCents(hz);
@@ -858,7 +706,7 @@ midiInput.onPitchBend((value) => {
     preview.updateDrawPitch(midiToCents(note) + liveBendCents, `midi-${note}`);
   }
   store.setMidiPitchBendOffset(liveBendCents);
-  bgDirty = true;
+  markBgDirty();
 });
 
 midiInput.onNoteOn((note, velocity) => {
@@ -916,7 +764,7 @@ midiInput.onNoteOn((note, velocity) => {
       snappedWorldY: initialY,
       lastCrossedAt: performance.now(),
     });
-    bgDirty = true;
+    markBgDirty();
   }
 });
 
@@ -1014,14 +862,14 @@ function addGuideAtViewportCenter(orientation: 'x' | 'y'): void {
   // Force the viewport to re-show the guides if they were hidden.
   store.setGuidesVisible(true);
   if (orientation === 'y') store.setFretsVisible(true);
-  bgDirty = true;
+  markBgDirty();
 }
 
 const snapActions: SnapActions = {
   askPresetName: existingNames => openPresetSaveDialog({ title: 'Save Snap Preset', existingNames }),
   confirmDeletePreset: name => confirm(`Delete user preset "${name}"?`),
   addGuide: addGuideAtViewportCenter,
-  redrawGuides: () => { bgDirty = true; },
+  redrawGuides: () => { markBgDirty(); },
   notify: showToast,
 };
 
@@ -1040,75 +888,16 @@ function applyLoopEnabled(enabled: boolean): void {
 watch(() => store.getState().loopEnabled, enabled => playback.setLoop(enabled));
 
 // ── Zoom controls (along the canvas's edges, 13.32) ─────────────
-const zoomX = document.getElementById('zoom-x') as HTMLInputElement;
-const zoomY = document.getElementById('zoom-y') as HTMLInputElement;
-
-/** Zoom X slider uses a logarithmic mapping so a single slider covers the full
- *  ~1200× range (0.5..600 px/beat) without the low-zoom end squeezing out all
- *  the useful mid-zoom resolution. */
-const ZOOM_X_LOG_STEPS = 1000;
-const ZOOM_X_LOG_RATIO = Math.log(MAX_ZOOM_X / MIN_ZOOM_X);
-function sliderPosToZoomX(pos: number): number {
-  const t = Math.max(0, Math.min(1, pos / ZOOM_X_LOG_STEPS));
-  return MIN_ZOOM_X * Math.exp(t * ZOOM_X_LOG_RATIO);
-}
-function zoomXToSliderPos(zoom: number): number {
-  const t = Math.log(zoom / MIN_ZOOM_X) / ZOOM_X_LOG_RATIO;
-  return Math.round(Math.max(0, Math.min(1, t)) * ZOOM_X_LOG_STEPS);
-}
-// Initialize slider position from current zoomX.
-zoomX.value = String(zoomXToSliderPos(viewport.state.zoomX));
-
-/** Anchor for slider zoom: center of selection bbox if any selected, else canvas center. */
-function getSliderZoomAnchor(): { sx: number; sy: number } {
-  const rect = canvasContainer.getBoundingClientRect();
-  const cx = rect.width / 2;
-  const cy = rect.height / 2;
-  const state = store.getState();
-  if (state.selectedCurveIds.size === 0) return { sx: cx, sy: cy };
-  const track = state.composition.tracks.find(t => t.id === state.selectedTrackId);
-  if (!track) return { sx: cx, sy: cy };
-  const selected = track.curves.filter(c => state.selectedCurveIds.has(c.id));
-  if (selected.length === 0) return { sx: cx, sy: cy };
-  const bbox = computeMultiCurveBBox(selected);
-  const wx = (bbox.minX + bbox.maxX) / 2;
-  const wy = (bbox.minY + bbox.maxY) / 2;
-  return viewport.worldToScreen(wx, wy);
-}
-
-zoomX.addEventListener('input', () => {
-  const target = sliderPosToZoomX(Number(zoomX.value));
-  const factor = target / viewport.state.zoomX;
-  if (factor !== 1 && isFinite(factor)) {
-    viewport.zoomXAt(factor, getSliderZoomAnchor().sx);
-  } else {
-    viewport.setZoomX(target);
-  }
-  const rect = canvasContainer.getBoundingClientRect();
-  viewport.clampOffset(rect.width, rect.height, minPanOffsetX(rect.width));
-  bgDirty = true;
+const zoomSliders = createZoomSliders({
+  zoomX: document.getElementById('zoom-x') as HTMLInputElement,
+  zoomY: document.getElementById('zoom-y') as HTMLInputElement,
+  viewport,
+  canvasContainer,
+  minPanOffsetX,
+  onZoom: markBgDirty,
 });
-zoomY.addEventListener('input', () => {
-  const target = Number(zoomY.value);
-  const factor = target / viewport.state.zoomY;
-  if (factor !== 1 && isFinite(factor)) {
-    viewport.zoomYAt(factor, getSliderZoomAnchor().sy);
-  } else {
-    viewport.setZoomY(target);
-  }
-  const rect = canvasContainer.getBoundingClientRect();
-  viewport.clampOffset(rect.width, rect.height, minPanOffsetX(rect.width));
-  bgDirty = true;
-});
-// Release focus after the user finishes adjusting so hotkeys (e.g. Space) don't
-// get captured by the range input.
-zoomX.addEventListener('change', () => zoomX.blur());
-zoomY.addEventListener('change', () => zoomY.blur());
-
 function updateZoom() {
-  zoomX.value = String(zoomXToSliderPos(viewport.state.zoomX));
-  zoomY.min = String(viewport.minZoomY);
-  zoomY.value = String(viewport.state.zoomY);
+  zoomSliders.update();
 }
 
 // After any form control commits a value (range release, checkbox toggle,
@@ -1228,7 +1017,7 @@ function setPerformMode(on: boolean): boolean {
     selectTool(st.activeTool);
   }
   updateZoom();
-  bgDirty = true;
+  markBgDirty();
   return true;
 }
 
@@ -1253,7 +1042,7 @@ function toggleProjection() {
 function scrollToBeat(beat: number) {
   const r = canvasContainer.getBoundingClientRect();
   scrollViewportToBeat(viewport, beat, r.width, r.height);
-  bgDirty = true;
+  markBgDirty();
 }
 
 /** First or last control point across all tracks, or null on an empty canvas. */
@@ -1383,7 +1172,7 @@ const commands = createCommandRegistry({
     checked: () => store.getState().pitchHudVisible,
   },
   'view.frets': {
-    run() { store.setFretsVisible(!store.getState().fretsVisible); bgDirty = true; },
+    run() { store.setFretsVisible(!store.getState().fretsVisible); markBgDirty(); },
     checked: () => store.getState().fretsVisible,
   },
   'view.perfHud': {
@@ -1575,7 +1364,7 @@ function createPanGesture(el: HTMLElement): GestureHandlers {
       // way over to the rail — matches the scrolling-play clamp.
       viewport.clampOffset(rect.width, rect.height, minPanOffsetX(rect.width));
       last = { x: e.clientX, y: e.clientY };
-      bgDirty = true;
+      markBgDirty();
     },
     up() {
       el.style.cursor = '';
@@ -1607,7 +1396,7 @@ fgCanvas.addEventListener('wheel', (e) => {
   // push beat 0 away from the rail.
   viewport.clampOffset(rect2.width, rect2.height, minPanOffsetX(rect2.width));
   updateZoom();
-  bgDirty = true;
+  markBgDirty();
 }, { passive: false });
 
 // ── Compose Perform: LMB sounding + record + planchette-for-HUD ─────
@@ -1853,7 +1642,7 @@ function tickPerformYAutoScroll() {
   // If clampOffset rejected the pan (already at the Y bound), stop here so we
   // don't waste work re-evaluating the planchette / synth pitch.
   if (viewport.state.offsetY === beforeOffsetY) return;
-  bgDirty = true;
+  markBgDirty();
   // The world Y under the (unchanged screen) fingers has shifted — re-snap and
   // re-tune every held note, so they glide with the view.
   for (const f of fingers.values()) updateFinger(f);
@@ -2148,7 +1937,7 @@ function finalizeMidiVoice(
   if (!opts.keepPlanchette) {
     store.removePerformPlanchette(voiceId);
   }
-  bgDirty = true;
+  markBgDirty();
 }
 
 /** Finalize every in-flight MIDI voice. Used on stop boundaries (Stop button,
@@ -2343,7 +2132,7 @@ function dropLastPass() {
       : `Dropped last pass (${curvesRemoved} curve${curvesRemoved === 1 ? '' : 's'})`,
     2000,
   );
-  bgDirty = true;
+  markBgDirty();
 }
 
 /**
@@ -2391,7 +2180,7 @@ function keepLastPhrase() {
       : `Kept ${finalized.length} phrases`,
     2000,
   );
-  bgDirty = true;
+  markBgDirty();
 }
 
 /** Duration of a curve's pitch lane in beats — for the keep confirmation toast. */
@@ -2601,7 +2390,7 @@ function startRolling(next: TransportState): boolean {
   if (effectiveScrollCanvas()) {
     const r = canvasContainer.getBoundingClientRect();
     scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
-    bgDirty = true;
+    markBgDirty();
   }
   return true;
 }
@@ -2765,7 +2554,7 @@ function commitFingerTake(voiceId: VoiceId) {
   if (!track) return;
   const curve = composeEngine.finalizeCurve(voiceId, () => history.snapshot());
   if (curve) commitFinalizedCurves([{ voiceId, curve }], track);
-  bgDirty = true;
+  markBgDirty();
 }
 
 /** Close every held finger's take (a loop wrap, a cancelled pass), committing
@@ -2886,72 +2675,30 @@ function hudPlanchette(state: AppState): PlanchetteState | undefined {
 
 function updatePitchHudDom(state: AppState) {
   const planchette = hudPlanchette(state);
-  const show = state.pitchHudVisible && planchette?.snappedWorldY != null;
-  if (show) {
+  if (state.pitchHudVisible && planchette?.snappedWorldY != null) {
     // Dynamics is shown whenever a live source is driving the bus, held or not,
     // so the player can see where the swell rests before they lean on it.
     const dyn = dynamics.isDriven() ? dynamics.getValue('primary') : null;
-    writePitchHud(planchette!.snappedWorldY, planchette!.cursorWorldY, dyn);
-    pitchHud.removeAttribute('hidden');
-  } else if (!pitchHud.hasAttribute('hidden')) {
-    pitchHud.setAttribute('hidden', '');
-    writePitchHud(null, null);
+    pitchHud.show(state, planchette.snappedWorldY, planchette.cursorWorldY, dyn);
+  } else {
+    pitchHud.hide();
   }
 }
 
-function updateCountdownOverlayDom(state: AppState) {
-  const t = state.transport;
-  if (t.mode !== 'countdown') {
-    if (!countdownOverlay.hasAttribute('hidden')) {
-      countdownOverlay.setAttribute('hidden', '');
-      countdownOverlay.textContent = '';
-    }
-    return;
-  }
-  const label = composeEngine.getCountdownLabel(
-    getAudioContext().currentTime,
-    performPhase(t),
-    t.countdownStartedAt,
-  );
-  if (countdownOverlay.textContent !== label) countdownOverlay.textContent = label;
-  countdownOverlay.removeAttribute('hidden');
-}
-
-/** AFK warning popup: appears once the user has been idle past
- *  `afkTimeoutMs - AFK_WARNING_LEAD_MS`, counts down the seconds remaining,
- *  and disappears as soon as activity resumes (engine resets idle to 0) or
- *  recording stops. Suppression (loop on / playhead before rightmost) is
- *  inherited automatically — `tickComposePerform` calls `markActivity` every
- *  frame in those cases, so `getIdleMs` stays near zero. */
-function updateAfkWarningDom(state: AppState) {
-  const t = state.transport;
-  const armed = isRecordArmed(t) || state.midiArmedTrackId !== null;
-  const shouldShow = (armed || isOpenEnded(t)) && isRolling(t) && playback.isPlaying();
-  if (!shouldShow) {
-    if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
-    return;
-  }
-  const idleMs = composeEngine.getIdleMs(performance.now());
-  // Mirror the timeout selection in tickComposePerform so the popup countdown
-  // races the same window the engine will actually fire on.
-  const timeoutMs = armed ? composeEngine.getAfkTimeoutMs() : JAM_IDLE_TIMEOUT_MS;
-  const remainingMs = timeoutMs - idleMs;
-  if (remainingMs > AFK_WARNING_LEAD_MS) {
-    if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
-    return;
-  }
-  // Round up so the user never sees "0" while the engine is still ticking down.
-  const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
-  const label = `${remainingSec}s`;
-  if (afkWarningCountdown.textContent !== label) afkWarningCountdown.textContent = label;
-  if (afkWarning.hasAttribute('hidden')) afkWarning.removeAttribute('hidden');
-}
+const sessionOverlays = createSessionOverlays(
+  {
+    countdown: document.getElementById('countdown-overlay') as HTMLDivElement,
+    afkWarning: document.getElementById('afk-warning') as HTMLDivElement,
+    afkCountdown: document.getElementById('afk-warning-countdown') as HTMLDivElement,
+  },
+  { engine: composeEngine, isPlaying: () => playback.isPlaying() },
+);
 
 function updatePerfHudDom(state: AppState) {
   if (!state.perfHudVisible) return;
   perfHud.refresh({
-    frameMsP50: frameTimePercentile(0.5),
-    frameMsP99: frameTimePercentile(0.99),
+    frameMsP50: frameTimes.percentile(0.5),
+    frameMsP99: frameTimes.percentile(0.99),
     synthCount: getActiveSynthCount(),
     oscillatorCount: getActiveOscillatorCount(),
     voiceCount: state.performance.planchettes.length,
@@ -2972,22 +2719,27 @@ function updatePerfHudDom(state: AppState) {
 //     canvas-only planchette and playhead values;
 //   • pointer and key input, which moves state the store doesn't hold (cursor,
 //     drags, marquee, hovered handle);
-//   • bgDirty — every viewport change already sets it.
+//   • a dirty background (markBgDirty) — every viewport change sets it.
 // "Animating" covers the transport rolling or armed, a held perform note, and
 // the tail of a pulse or flash.
 
-let fgDirty = true;
-/** Ask for a redraw on the next frame. */
-function requestRedraw(): void {
-  fgDirty = true;
-}
 effect(() => {
   store.trackAllChannels();
-  fgDirty = true;
+  requestRedraw();
 });
 let wasAnimating = false;
-/** Frames actually drawn — the observable for "idle doesn't redraw". */
-let drawCount = 0;
+
+const scene = createScene({
+  bgCtx, fgCtx, paramCtx, canvasContainer, viewport, paramViewport, interaction, paramInteraction,
+  composeEngine, playback,
+  paramSize: () => ({ w: paramW, h: paramH }),
+  getSelectedParamCurve,
+  previewActive: () => previewActive,
+  effectiveScrollCanvas,
+  planchettesAsSounding,
+  planchetteDynamicsOf,
+  metronomeFlash: () => ({ at: lastMetronomeClickAt, tier: lastMetronomeClickTier }),
+});
 
 function isAnimating(state: AppState): boolean {
   if (playback.isPlaying() || composeEngine.isLmbDown()) return true;
@@ -3009,7 +2761,7 @@ function runFrame() {
   // Frame-time sample for the Perf HUD's rolling window. Always pushed (the
   // sort cost happens only inside updatePerfHudDom when the HUD is visible)
   // so toggling the HUD on instantly has 2 s of accurate p50/p99.
-  pushFrameTime(performance.now());
+  frameTimes.push(performance.now());
   tickFrame();
   syncAudition();
 
@@ -3018,14 +2770,13 @@ function runFrame() {
   updatePerfHudDom(state);
   const animating = isAnimating(state);
   // One more frame after an animation ends clears its last faded step.
-  if (fgDirty || bgDirty || animating || wasAnimating) {
-    fgDirty = false;
+  if (redrawPending() || animating || wasAnimating) {
+    clearRedrawRequest();
     // Compose UI affordances that follow the same state the canvas draws.
     toolsLocked.value = composeEngine.isLmbDown();
     updatePitchHudDom(state);
-    updateCountdownOverlayDom(state);
-    updateAfkWarningDom(state);
-    draw();
+    sessionOverlays.update(state);
+    scene.draw();
   }
   wasAnimating = animating;
 }
@@ -3053,7 +2804,7 @@ function tickFrame() {
     const neededExtent = Math.min(MAX_CANVAS_EXTENT, playheadBeat + SCROLL_BUFFER);
     if (viewport.canvasExtent < neededExtent) viewport.canvasExtent = neededExtent;
     scrollViewportToBeat(viewport, playheadBeat, rect.width, rect.height);
-    bgDirty = true;
+    markBgDirty();
   }
 
   // Compose performance tick: countdown advance, loop-wrap detection, AFK auto-stop.
@@ -3105,372 +2856,6 @@ function reconcileDrawingCurve() {
   }
 }
 
-/** Draw both canvases from current state. Read-only (15.5). */
-function draw() {
-  drawCount++;
-  const state = store.getState();
-  const comp = state.composition;
-  const rect = canvasContainer.getBoundingClientRect();
-
-  // Background: staff grid. Stays visible during Harmonic Prism projection
-  // so the user can see where they are in the pitch spectrum; snap itself
-  // switches to echo-only targets (see snapToGrid).
-  if (bgDirty) {
-
-    const measureLen = measureLengthInBeats(comp);
-    bgCtx.clearRect(0, 0, rect.width, rect.height);
-    renderStaff(
-      bgCtx, viewport, rect.width, rect.height, measureLen,
-      state.hidePitchLines ? null : staffGridFor(state), state.referenceLines,
-    );
-    renderRuler(bgCtx, viewport, rect.width, measureLen, comp.bpm);
-    bgDirty = false;
-  }
-
-  // Foreground: curves + playhead + interaction
-  fgCtx.clearRect(0, 0, rect.width, rect.height);
-
-  // Transform box (rendered behind curves so unselected curves remain clickable)
-  const activeTrack = comp.tracks.find(t => t.id === state.selectedTrackId);
-  if (interaction.transformBox) {
-    const tb = interaction.transformBox;
-    renderTransformBox(
-      fgCtx, viewport, tb.bbox, tb.activeHandle, !!activeTrack && transformBoxHoldsGroup(tb, activeTrack),
-      state.moveInterval === DEFAULT_MOVE_INTERVAL ? null : moveIntervalShort(state.moveInterval),
-    );
-  }
-  // Groups with a hovered or selected member share an outline (16.5).
-  if (activeTrack && !isPerformInputActive(state)) {
-    renderGroupOutlines(fgCtx, viewport, outlinedGroups(activeTrack, state.selectedCurveIds, interaction.hoverGroupedCurveId));
-  }
-
-  // Harmonic Prism — resolve the projection source curve up front. (The store
-  // drops a source whose curve is deleted.)
-  let prismSource: BezierCurve | null = null;
-  if (state.harmonicPrism.projectionSourceId) {
-    const prismSrcId = state.harmonicPrism.projectionSourceId;
-    for (const track of comp.tracks) {
-      const found = track.curves.find(c => c.id === prismSrcId);
-      if (found) { prismSource = found; break; }
-    }
-  }
-
-  // Projection echoes: rendered behind curves.
-  if (prismSource) {
-    renderProjection(
-      fgCtx,
-      viewport,
-      prismSource,
-      prismOffsets(state.harmonicPrism.chordSpec, state),
-      state.harmonicPrism.projectionOctaveRange,
-      rect.width,
-      rect.height,
-    );
-  }
-
-  // Render curves for all tracks
-  const geometryVersion = store.compositionVersion();
-  for (const track of comp.tracks) {
-    // Hidden tracks, and guide tracks with the Guides switch off, aren't drawn;
-    // muted ones are, dimmed (13.10 (b)).
-    if (!trackShown(track, state.guidesVisible)) continue;
-    const tone = comp.toneLibrary.find(t => t.id === track.toneId);
-    if (!tone) continue;
-
-    const isActiveTrack = track.id === state.selectedTrackId;
-    const emptySet = new Set<string>();
-    renderCurves(
-      fgCtx, viewport, track.curves, tone,
-      isActiveTrack ? state.selectedCurveIds : emptySet,
-      isActiveTrack ? store.getSelectedCurveId() : null,
-      isActiveTrack ? state.selectedPointIndex : null,
-      isActiveTrack,
-      isActiveTrack ? state.selectedPoints : null,
-      geometryVersion,
-      // Guide tracks draw as guides, unless the Guides switch hides them all.
-      !!track.guide,
-      track.muted,
-    );
-  }
-
-  // Rainbow highlight on the projection-source curve (drawn last so it sits
-  // on top of the normal curve stroke).
-  if (prismSource) {
-    renderProjectionSourceHighlight(fgCtx, viewport, prismSource);
-  }
-
-  // The active tool's hover overlays (draw preview line, Prism chord preview,
-  // slice marker) follow the cursor only while the tool owns the pointer: not
-  // after the cursor has left the canvas, and not in Perform, where the tools
-  // get no pointer moves and the overlays would freeze where Perform began.
-  const toolHoverVisible = !state.performMode && interaction.cursorInCanvas;
-
-  // Draw preview line when in draw mode (hidden during Ctrl-select).
-  if (state.activeTool === 'draw' && interaction.cursorWorld && toolHoverVisible) {
-    // Use the drawing curve, or the single selected curve if not actively drawing
-    const singleId = store.getSelectedCurveId();
-    const previewCurve = interaction.drawingCurve
-      ?? (singleId
-        ? comp.tracks.find(t => t.id === state.selectedTrackId)
-            ?.curves.find(c => c.id === singleId)
-        : null);
-    const points = previewCurve ? pitchPoints(previewCurve) : undefined;
-    const track = comp.tracks.find(t => t.id === state.selectedTrackId);
-    const tone = track ? comp.toneLibrary.find(t => t.id === track.toneId) : null;
-    const color = tone?.color ?? themeColor('accent');
-
-    if (points && points.length > 0) {
-      const cx = interaction.cursorWorld.x;
-
-      // Find the neighboring point(s) the cursor sits between
-      const firstPt = points[0]!;
-      const lastPt = points[points.length - 1]!;
-
-      if (cx <= firstPt.position.x) {
-        // Before the first point — connect to the first point
-        renderDrawPreview(fgCtx, viewport, firstPt.position, interaction.cursorWorld, color);
-      } else if (cx >= lastPt.position.x) {
-        // After the last point — connect to the last point
-        renderDrawPreview(fgCtx, viewport, lastPt.position, interaction.cursorWorld, color);
-      } else {
-        // Between two points — connect to both neighbors
-        for (let i = 0; i < points.length - 1; i++) {
-          if (cx >= points[i]!.position.x && cx <= points[i + 1]!.position.x) {
-            renderDrawPreview(fgCtx, viewport, points[i]!.position, interaction.cursorWorld, color);
-            renderDrawPreview(fgCtx, viewport, points[i + 1]!.position, interaction.cursorWorld, color);
-            break;
-          }
-        }
-      }
-    } else if (track) {
-      // No curve yet — show standalone cursor dot for first point placement
-      const scr = viewport.worldToScreen(interaction.cursorWorld.x, interaction.cursorWorld.y);
-      fgCtx.beginPath();
-      fgCtx.arc(scr.sx, scr.sy, 4, 0, Math.PI * 2);
-      fgCtx.fillStyle = color;
-      fgCtx.globalAlpha = 0.6;
-      fgCtx.fill();
-      fgCtx.globalAlpha = 1;
-    }
-  }
-
-  // Harmonic Prism Draw mode: render the multi-planchette chord preview at the
-  // cursor. Each click will place N grouped sibling curves at these Y offsets.
-  // In Perform the rail planchettes show the chord instead.
-  if (state.activeTool === 'draw'
-      && state.harmonicPrism.drawMode
-      && interaction.cursorWorld
-      && toolHoverVisible) {
-    const snap = currentSnapConfig({
-      zoomX: viewport.state.zoomX, atBeat: interaction.cursorWorld.x, excludeCurveIds: editingCurveIds(interaction),
-    });
-    const snapped = snapToGrid(interaction.cursorWorld.x, interaction.cursorWorld.y, snap);
-    const cursorScreenX = viewport.worldToScreen(snapped.wx, 0).sx;
-    renderPrismDrawPreview(
-      fgCtx,
-      viewport,
-      cursorScreenX,
-      snapped.wy,
-      prismOffsetsAt(state.harmonicPrism.chordSpec, state, snapped.wy),
-      rect.height,
-      RULER_HEIGHT,
-    );
-  }
-
-  // The Nudge brush (13.26): over the curve being nudged, or the one hovered,
-  // moving with the cursor. During a Push the lit points are the ones being
-  // moved, by the weight they had when the stroke began. A faint ring round the
-  // cursor shows the size.
-  if (state.activeTool === 'nudge' && !state.performMode) {
-    const drag = interaction.nudgeDrag;
-    const cursor = interaction.cursorWorld;
-    if (drag) {
-      const curve = comp.tracks.flatMap(t => t.curves).find(c => c.id === drag.curveId);
-      if (curve) {
-        const push = state.nudgeMode === 'push';
-        const centerX = push ? drag.centerX + drag.dx : cursor?.x ?? drag.centerX;
-        const reach = push
-          ? pointsInReach(drag.orig.map(p => p.position.x), drag.centerX, drag.radius)
-          : pointsInReach(pitchPoints(curve).map(p => p.position.x), centerX, drag.radius);
-        renderNudgeBrush(fgCtx, viewport, curve, centerX, drag.radius, reach, RULER_HEIGHT, rect.height);
-      }
-    } else if (toolHoverVisible && interaction.nudgeHover) {
-      const hover = interaction.nudgeHover;
-      const curve = comp.tracks.flatMap(t => t.curves).find(c => c.id === hover.curveId);
-      if (curve) {
-        const reach = pointsInReach(pitchPoints(curve).map(p => p.position.x), hover.centerX, hover.radius);
-        renderNudgeBrush(fgCtx, viewport, curve, hover.centerX, hover.radius, reach, RULER_HEIGHT, rect.height);
-      }
-    }
-    if (cursor && (drag || toolHoverVisible)) {
-      const s = viewport.worldToScreen(cursor.x, cursor.y);
-      renderNudgeRing(fgCtx, s.sx, s.sy, state.nudgeSize);
-    }
-  }
-
-  // Scissors preview dot
-  if (state.activeTool === 'scissors' && interaction.scissorsPreview && toolHoverVisible) {
-    const scr = viewport.worldToScreen(interaction.scissorsPreview.x, interaction.scissorsPreview.y);
-    fgCtx.beginPath();
-    fgCtx.arc(scr.sx, scr.sy, 5, 0, Math.PI * 2);
-    fgCtx.fillStyle = themeColor('scissors-dot');
-    fgCtx.fill();
-    fgCtx.lineWidth = 1.5;
-    fgCtx.strokeStyle = themeColor('scissors-dot-edge');
-    fgCtx.stroke();
-  }
-
-  // Loop markers (behind the playhead so it stays on top)
-  if (store.getState().loopEnabled) {
-    renderLoopMarkers(fgCtx, viewport, comp.loopStartBeats, comp.loopEndBeats, rect.height);
-  }
-
-  // Snap guides — between loop markers and the playhead so the playhead always
-  // wins Z-order. Only those on show, which are the ones that pull (Guides,
-  // and Frets for frets, 13.22).
-  const guidesShown = shownGuides(state);
-  if (guidesShown.length > 0) {
-    renderGuides(
-      fgCtx, viewport, guidesShown, rect.width, rect.height, state.selectedGuideId,
-      c => pitchLabel(state, c), resolveTuning(state.tuning).period,
-    );
-  }
-  // The handle frets and beat guides are dragged out of (13.17), over the ruler's left end.
-  renderGuideHandle(fgCtx, GUIDE_HANDLE_WIDTH, RULER_HEIGHT, state.guidesLocked);
-
-  // Live recording trail: polyline of in-flight samples per voice. Drawn above
-  // committed curves but below the rail/planchette glyph so the planchette
-  // visually leads the trail. Buffers are cleared on finalize, so the trail
-  // disappears the same frame the simplified curve commits.
-  renderRecordingTrails(
-    fgCtx,
-    viewport,
-    composeEngine.getRecordingBuffers(),
-    rect.height,
-    state.harmonicPrism.drawMode,
-  );
-
-  // Playhead vs Rail.
-  // Scroll Canvas ON (or Record forcing it on): the playhead becomes a stationary rail
-  // at canvas-centre — visible in Idle too, so pressing Play starts from where the user
-  // already sees the rail (rail + planchette dot + pulse).
-  // Scroll Canvas OFF: classic moving playhead at the stored position.
-  const railVisible = effectiveScrollCanvas();
-  const freePlanchetteVisible = !playback.isPlaying()
-    && previewActive
-    && interaction.cursorInCanvas
-    && interaction.cursorWorld != null;
-  // Rail-bound planchette dot is only meaningful when an actual or potential
-  // tone is sounding/recording — Playback running, Record armed, or LMB held
-  // in Perform. In Scroll Canvas idle the rail still shows (so the user knows
-  // where Play would start), but the planchette dot is hidden so it doesn't
-  // visually promise a tone is sounding when none is.
-  const railPlanchetteVisible = railVisible
-    && !freePlanchetteVisible
-    && (state.performMode
-        || playback.isPlaying()
-        || isRecordArmed(state.transport)
-        || composeEngine.isLmbDown());
-  if (railVisible) {
-    if (freePlanchetteVisible) {
-      // Free planchette at cursor is the action location (preview tone follows cursor),
-      // so draw just the rail — skip the rail-bound planchette dot to avoid a duplicate.
-      renderRail(fgCtx, rect.width, rect.height, composeEngine.getLastLoopWrapAt());
-      // Composition+tone preview: also render a transient playhead at cursor X so the
-      // user can see where in the composition they're scrubbing. Rail still marks where
-      // a real Play would start from; this playhead disappears when preview ends.
-      if (state.drawPreviewMode === 'composition' && interaction.cursorWorld) {
-        renderPlayhead(fgCtx, viewport, interaction.cursorWorld.x, rect.height);
-      }
-    } else if (railPlanchetteVisible) {
-      renderPlanchettes(
-        fgCtx, viewport, rect.width, rect.height,
-        planchettesAsSounding(state.performance.planchettes),
-        composeEngine.getLastLoopWrapAt(),
-        state.harmonicPrism.drawMode,
-        planchetteDynamicsOf,
-      );
-    } else {
-      renderRail(fgCtx, rect.width, rect.height, composeEngine.getLastLoopWrapAt());
-    }
-  } else {
-    const playheadBeat = playback.isPlaying()
-      ? playback.getPositionBeats()
-      : state.playback.positionBeats;
-    renderPlayhead(fgCtx, viewport, playheadBeat, rect.height);
-  }
-
-  // Metronome tick flash: ring at the top of the rail / playhead. Lives briefly
-  // and fades, so the user gets a visual beat even if audio is muted or missed.
-  const flashAge = performance.now() - lastMetronomeClickAt;
-  if (lastMetronomeClickAt > 0 && flashAge < METRONOME_FLASH_DURATION_MS) {
-    const flashY = RULER_HEIGHT + 9;
-    let flashX: number;
-    if (railVisible) {
-      flashX = rect.width * RAIL_SCREEN_X_RATIO;
-    } else {
-      const playheadBeat = playback.isPlaying()
-        ? playback.getPositionBeats()
-        : state.playback.positionBeats;
-      flashX = viewport.worldToScreen(playheadBeat, 0).sx;
-    }
-    renderMetronomeFlash(fgCtx, flashX, flashY, flashAge, lastMetronomeClickTier);
-  }
-
-  // Drag-marquee rubber-band (BACKLOG 8.3) — drawn on top of everything else
-  // so it's always visible during the drag.
-  if (interaction.marquee) {
-    renderMarquee(fgCtx, viewport, interaction.marquee.startWorld, interaction.marquee.currentWorld);
-  }
-
-  // Free planchette: Idle + hold-A audition + cursor over canvas.
-  // Rendered at cursor X so the user sees exactly where they'd place / are hearing.
-  if (freePlanchetteVisible && interaction.cursorWorld) {
-    const cursorWorld = interaction.cursorWorld;
-    const cursorScreenX = viewport.worldToScreen(cursorWorld.x, 0).sx;
-    // Same snap config the preview tone is tuned with (guides and Prism
-    // echoes included), so the dot sits where the pitch you hear is (14.4).
-    const snapped = snapToGrid(0, cursorWorld.y, currentSnapConfig({ zoomX: viewport.state.zoomX, atBeat: cursorWorld.x }));
-    renderFreePlanchette(
-      fgCtx, viewport, cursorScreenX, snapped.wy,
-      cursorWorld.y, rect.height,
-    );
-  }
-
-  // ── Parameters Graph: selected curve's volume lane (X-locked to main canvas) ──
-  {
-    const selCurve = getSelectedParamCurve();
-    let paramColor = themeColor('accent');
-    if (selCurve) {
-      for (const track of comp.tracks) {
-        if (track.curves.includes(selCurve)) {
-          const tone = comp.toneLibrary.find(t => t.id === track.toneId);
-          if (tone) paramColor = tone.color;
-          break;
-        }
-      }
-    }
-    const paramPlayheadBeat = playback.isPlaying()
-      ? playback.getPositionBeats()
-      : state.playback.positionBeats;
-    const selPts = selCurve ? pitchPoints(selCurve) : undefined;
-    const pitchStart = selPts && selPts.length > 0 ? selPts[0]!.position.x : null;
-    const pitchEnd = selPts && selPts.length > 0 ? selPts[selPts.length - 1]!.position.x : null;
-    renderParamGraph(
-      paramCtx, paramViewport, viewport,
-      paramW, paramH,
-      // A curve with no volume lane shows the default it sounds with; the graph
-      // attaches it on the first edit (param-interaction.ts).
-      (selCurve ? displayedLane(selCurve, 'volume') : null) ?? null,
-      paramColor,
-      paramInteraction.selectedIndex(),
-      paramPlayheadBeat,
-      pitchStart,
-      pitchEnd,
-    );
-  }
-}
-
 /**
  * Sync derived values from the composition: canvas extent (viewport pan bound)
  * and the M:SS length display next to the title. Runs from an effect whenever
@@ -3509,7 +2894,7 @@ if (import.meta.env.DEV) {
     // Live voice counts — the observable for "removing a track stops its sound".
     getActiveSynthCount, getActiveOscillatorCount,
     // Frames drawn so far (15.5): flat while idle.
-    drawCount: () => drawCount, runFrame,
+    drawCount: () => scene.drawCount(), runFrame,
     // Live voices (15.7): drive and inspect them directly.
     preview, getAudioContext, getMasterGain,
   };
@@ -3528,7 +2913,7 @@ watch(
     const c = st.composition;
     return `${c.bpm}|${c.beatsPerMeasure}/${c.timeSignatureDenominator}|${tuningKey(st.tuning)}|${st.root}|${st.scaleId}|${st.tunedFrom}|${st.hidePitchLines}|${st.referenceLines}`;
   },
-  () => { bgDirty = true; },
+  () => { markBgDirty(); },
 );
 
 // Undo / redo / file open replace the composition object outright, so keep the
@@ -3647,7 +3032,7 @@ resizeCanvases();
     viewport.clampOffset(rect.width, rect.height);
   }
   updateZoom();
-  bgDirty = true;
+  markBgDirty();
 }
 
 // The app opens in Perform (decided 2026-10-04, from touch testing): it's

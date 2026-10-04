@@ -123,6 +123,12 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - **Render loop:** move it to a canvas module.
   - **Model edits:** inline edits in handlers (e.g. multi-point delete in the key handler) move into `model/`.
   - **Target:** `main.ts` is a bootstrap of a few hundred lines.
+  - **Plan (approved 2026-10-04):** four PRs, each changing no behaviour and tested hands-on before it opens: **A** the render loop's drawing, HUDs, zoom sliders, Parameters Graph resize; **B** perform and capture (the sounding voice, Gravity clock, edge scrolling, multitouch, Keep, layers) into a `perform/` folder; **C** the transport controller, the command handlers, MIDI input, Tune A4, the track panel; **D** the layout template as Preact components, with the rest of 15.4.
+  - **PR A (built 2026-10-04):** `main.ts` 3,692 → 3,077 lines.
+    - `canvas/scene.ts`: `draw()` moved as it was (`createScene(deps)`: the canvases, viewport, interaction, engines, and getters for what changes), read-only.
+    - `app/redraw.ts`: the redraw flags as functions (`markBgDirty`, `requestRedraw`, `redrawPending`, `takeBgDirty`), replacing `main.ts`'s `bgDirty` / `fgDirty` variables, so pieces outside `main.ts` can ask for a redraw.
+    - `ui/pitch-hud.ts` (and its formatting), `ui/session-overlays.ts` (count-in number, idle warning), `ui/frame-times.ts` (Perf HUD's frame window), `ui/zoom-sliders.ts`, `ui/param-graph-resize.ts`.
+    - The frame loop itself (`runFrame`, `tickFrame`, `isAnimating`) stays in `main.ts` until PR B moves the perform ticks it calls.
 - [ ] **15.4 Reactive UI chrome** *(L; part 1 in PR #78)*
   - Move panels, drawers, dialogs and menus onto a small reactive component layer. The recommended default is Preact + `@preact/signals`; confirm the choice at the start of this item.
   - The canvas stays imperative.
