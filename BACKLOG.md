@@ -17,7 +17,7 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104).
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105).
 2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
 3. **Background, whenever:** 15.8, then 15.3 and 15.4.
 
@@ -486,7 +486,7 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - The transport was hidden, not gone: the top bar's right zone never wrapped, so on a narrow screen it slid under the menus. The bar now wraps, and the right zone drops to its own line when there's no room (all 13 buttons reachable at 375 px wide).
 - [x] **13.37 Touch-friendly defaults** *(S — added and done 2026-10-04; PR #104)*
   - From touch testing, fine without touch too: the app **opens in Perform**; **Scroll canvas during playback** is on by default (an explicit saved choice is kept); a **new composition starts in 12-EDO, root C, Major** (`NEW_COMPOSITION_SCALE`). A file or MIDI import with no snap settings still gets All notes, as before.
-- [ ] **13.33 Multitouch: play several notes at once** *(M–L — added 2026-10-04, planned 2026-10-04; the user's biggest touch want)*
+- [x] **13.33 Multitouch: play several notes at once** *(M–L — added 2026-10-04, planned 2026-10-04; the user's biggest touch want; PR #105)*
   - Each finger on the canvas plays its own voice in Perform. Doesn't need the rest of 13.27 first.
   - **Decided (2026-10-04), a first version to refine in testing:**
     - **Touch only, Perform only.** The mouse and pen work as today: the first finger (or the mouse) is the `primary` voice, with everything it has now (Prism, pitch HUD, hover). Each further finger is its own voice (`touch-1`…), with its own Gravity, haptic clicks and rail marker; fingers start and stop independently. Editing (the Draw tool and the rest) ignores extra fingers.
@@ -497,7 +497,7 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - **Edge scrolling:** any finger near the top or bottom edge scrolls, the one nearest the edge sets the speed, and fingers at both edges cancel out. Every held note glides with the view.
     - **Pitch HUD:** the newest finger's note.
     - **No pressure** for now (most devices don't report it); the dynamics bus (Swell) applies to every finger.
-  - **Built (2026-10-04), waiting for testing on a phone:**
+  - **Done (PR #105):**
     - **Router** (`input-router.ts`): while a performing press is in progress, a touch that would perform joins as an extra finger (`joinsAsFinger`), with its own pointer capture, moves and release; it never moves the primary's planchette. Mouse, pen and the rulers are unchanged.
     - **Fingers** (`canvas/fingers.ts`, `main.ts`): each extra finger gets the lowest free voice `touch-1`…`touch-9` (`allocateFingerVoice`; the primary is the tenth), a planchette, a live voice, its own Gravity state (`computeComposeCursorPitch` takes the finger's), haptic hysteresis (`hapticFollow`) and cross flash. Gravity ticks every finger each frame. Fingers can't leave Perform mode while held. Releasing the primary now stops only its own voices (it used to stop every planchette's, which also cut held MIDI notes on an armed track).
     - **Recording:** a finger's take is closed on lift and, while capturing, committed as its own curve (`commitFingerTake`), as its own pass in the pass log. Loop wraps and a cancelled pass seal held fingers' takes (`sealFingerTakes`); ending a session releases them.
