@@ -125,27 +125,32 @@ app.innerHTML = `
       </div>
     </div>
     <div id="center-stack">
-      <div id="canvas-container">
-        <canvas id="bg-canvas"></canvas>
-        <canvas id="fg-canvas"></canvas>
-        <div id="zoom-controls">
-          <span class="zoom-label">Zoom</span>
-          <input type="range" id="zoom-x" min="0" max="1000" value="0" step="1" title="Zoom X (time) — logarithmic" />
-          <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="0.001" title="Zoom Y (pitch)" />
-        </div>
-        <div id="pitch-hud" hidden></div>
-        <div id="perf-hud" hidden></div>
-        <div id="countdown-overlay" hidden></div>
-        <div id="afk-warning" hidden>
-          <div class="afk-warning-title">Idle. Recording will pause in</div>
-          <div class="afk-warning-countdown" id="afk-warning-countdown">0</div>
-          <div class="afk-warning-hints">
-            play something to continue recording.<br/>
-            Space or Esc to stop recording.<br/>
-            PgUp / PgDown to first / last curve.<br/>
-            Home to recenter on playhead.
+      <!-- The zoom sliders sit along the canvas's edges, like scrollbars, never
+           over it (13.32): pitch down the right side, time along the bottom. -->
+      <div id="canvas-row">
+        <div id="canvas-container">
+          <canvas id="bg-canvas"></canvas>
+          <canvas id="fg-canvas"></canvas>
+          <div id="pitch-hud" hidden></div>
+          <div id="perf-hud" hidden></div>
+          <div id="countdown-overlay" hidden></div>
+          <div id="afk-warning" hidden>
+            <div class="afk-warning-title">Idle. Recording will pause in</div>
+            <div class="afk-warning-countdown" id="afk-warning-countdown">0</div>
+            <div class="afk-warning-hints">
+              play something to continue recording.<br/>
+              Space or Esc to stop recording.<br/>
+              PgUp / PgDown to first / last curve.<br/>
+              Home to recenter on playhead.
+            </div>
           </div>
         </div>
+        <div id="zoom-y-gutter" class="zoom-gutter">
+          <input type="range" id="zoom-y" min="${MIN_ZOOM_Y}" max="${MAX_ZOOM_Y}" value="${viewport.state.zoomY}" step="0.001" title="Zoom pitch" aria-label="Zoom pitch" />
+        </div>
+      </div>
+      <div id="zoom-x-gutter" class="zoom-gutter">
+        <input type="range" id="zoom-x" min="0" max="1000" value="0" step="1" title="Zoom time" aria-label="Zoom time" />
       </div>
       <div id="param-container">
         <div id="param-resize-handle" title="Drag to resize the Parameters Graph"></div>
@@ -1030,7 +1035,7 @@ function applyLoopEnabled(enabled: boolean): void {
 }
 watch(() => store.getState().loopEnabled, enabled => playback.setLoop(enabled));
 
-// ── Zoom controls (on canvas) ──────────────────────────────────
+// ── Zoom controls (along the canvas's edges, 13.32) ─────────────
 const zoomX = document.getElementById('zoom-x') as HTMLInputElement;
 const zoomY = document.getElementById('zoom-y') as HTMLInputElement;
 

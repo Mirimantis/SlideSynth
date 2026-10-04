@@ -463,10 +463,13 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - Perform: a finger per voice (multitouch polyphony; the engine already keys phrases by voice), and touch as the instrument in 16.8's "stage" view;
     - platform limits: iOS needs a user gesture to start audio, AudioWorklet support and latency on mobile, and no Web MIDI in iOS Safari;
     - relation to 11.3 (pen pressure and tilt share the Pointer Events path).
-- [ ] **13.32 Phone layout fixes: zoom sliders, transport** *(S — added 2026-10-04)*
+- [x] **13.32 Phone layout fixes: zoom sliders, transport** *(S — added 2026-10-04; this PR)*
   - Found testing on a phone (13.27). Pulled forward from 13.27: small, and it helps the touch use that already works.
   - **Zoom sliders on the canvas's edges** (decided): they float over the canvas's bottom-right corner and get in the way of performing on a small screen; in portrait the pitch slider lands near the middle of the screen. Move them to the edges, like scrollbars: time along the bottom, pitch down the right side, never over the canvas. Zoom stays on the sliders (no pinch to zoom).
   - **Transport in portrait:** on a phone in portrait most of the transport buttons disappear. They need to stay reachable (wrap, shrink, or move).
+  - **Done (this PR):**
+    - The zoom sliders moved out of the canvas into strips along its edges (`#zoom-y-gutter` down the right side, `#zoom-x-gutter` along the bottom, inside a new `#canvas-row`), each slider running the strip's whole length, so they're longer (finer) as well as out of the way. `#canvas-container` is still exactly the canvas, so nothing that measures it changed. The strips are 18 px, 28 px on a touch screen (`pointer: coarse`).
+    - The transport was hidden, not gone: the top bar's right zone never wrapped, so on a narrow screen it slid under the menus. The bar now wraps, and the right zone drops to its own line when there's no room (all 13 buttons reachable at 375 px wide).
 - [ ] **13.33 Multitouch: play several notes at once** *(M–L, own planning session — added 2026-10-04; the user's biggest touch want)*
   - Each finger on the canvas plays its own voice in Perform. Doesn't need the rest of 13.27 first.
   - **Already in place:** the performance engine keys phrases by voice, MIDI already plays a voice per note (`midi-<note>`), and the state holds a list of planchettes (used today for the Prism's harmony voices; the mouse and touch drive only the primary one).
