@@ -965,16 +965,29 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - `npm run deploy` (`scripts/deploy.mjs`): builds, adds `deploy/.htaccess` (HTTPS only, pages never cached) and `deploy/assets.htaccess` (hashed assets cached for good) and a `build.txt` label, then streams `dist/` as one tar over SSH (one passphrase prompt). On the server it unpacks into a staging folder, then replaces the document root's contents, keeping `.well-known`. Guards: the target must be `/home/<user>/<folder>`, never `public_html`.
     - Settings in `deploy/deploy.env.local` (ignored by git via `*.local`); `deploy/deploy.env.example` documents them.
     - **Build label:** version · commit (+ if uncommitted changes) · date, from `vite.config.ts` (`__BUILD_INFO__`), shown at the bottom of Settings.
+- [ ] **13.38 Installable web app** *(S–M — added 2026-10-04; DEFERRED until after the UI redesign, 16.8–16.10)*
+  - Make the app installable from the browser (a PWA): added to a phone's home screen or a computer's app list, it opens in its own window with no browser bars, like an app.
+  - From multitouch testing (13.33): a web page can't turn off the device's own gestures, and the browser's bars cost canvas on a phone. Installed, the app can open full screen (`display: fullscreen` or `standalone`) and choose its orientation (portrait, for performing on a phone).
+  - **Needs:** a web app manifest (name, icons, colours, display mode, orientation), a set of app icons, and a service worker that caches the build so it opens offline. The test site (13.28) already serves it over HTTPS, which installing requires.
+  - **Watch:** the deploy's cache rules (pages never cached, hashed assets kept for good) and a service worker's cache must agree, so a new build actually arrives; show the build label (13.28) so testers can tell.
+  - The base for a store app later: the Play Store can take an installable web app as it is (Bubblewrap / PWABuilder), and a native wrapper (H.4) packages the same build.
+  - **After the redesign** (decided 2026-10-04): the manifest's icons and colours come from 16.9's theme, and the full-screen layout from 16.10.
 
 ---
 
 ## Horizon (THINKING — not ready to build)
 
-Architecture notes for these are in [DESIGN.md › Ports & hardware](DESIGN.md#ports--hardware-thinking). None starts before Phase 17. Each needs its own planning session.
+Architecture notes for these are in [DESIGN.md › Ports & hardware](DESIGN.md#ports--hardware-thinking). None starts before Phase 17, except H.4, which packages the web app as it is. Each needs its own planning session.
 
 - **H.1 VST plugin** — MPE / note-expression generator, player/performer scope.
 - **H.2 VCV Rack module** — CV source (pitch → 1 V/oct, lanes → CV, per-track gates, clock/reset), player/performer scope.
 - **H.3 Motorized-fader hardware** — gravity wells rendered as force. The first step is prototyping the detent feel on the RP2040.
+- **H.4 Native app wrapper (app stores)** — the web app inside a native shell (e.g. Capacitor) for the Play Store and App Store, for what a page can't do. Builds on 13.38. *(added 2026-10-04, from multitouch testing, 13.33)*
+  - **Android:** immersive mode (the system bars stay hidden; a swipe shows them only briefly); excluding the back-swipe from parts of the side edges (capped at about 200 dp per edge; the home swipe can't be excluded, and a phone maker's three-finger screenshot can't be touched); crisper haptic ticks than the browser's vibrate (13.35).
+  - **iPhone / iPad:** haptics at all (Safari has none, so 13.35's clicks would reach iPhones); asking iOS to defer edge gestures to a second swipe; but no Web MIDI in the app's web view, so MIDI input needs native code.
+  - **Windows:** little gained for gestures (no app can turn off the system's; that's Settings or Group Policy). A standalone app does get its own per-program entry in the Wacom driver's settings.
+  - The user can already lock a device to one app for a session: Android's screen pinning, iOS's Guided Access.
+  - Open: worth it for haptics and gestures alone, or only with a reason to be in the stores; store accounts and review; keeping the web and store builds the same.
 
 **Open questions:**
 
