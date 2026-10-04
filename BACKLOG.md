@@ -17,7 +17,7 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102).
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103).
 2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
 3. **Background, whenever:** 15.8, then 15.3 and 15.4.
 
@@ -857,7 +857,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - relation to 8.8 (waveform visualizer, keyframed mixes) and 11.7 (another drawn shape).
 
 ### Builds & sharing
-- [ ] **13.28 Test builds on a subdomain** *(S–M — added 2026-10-03)*
+- [x] **13.28 Test builds on a subdomain** *(S–M — added 2026-10-03; PR #103)*
   - Publish a static build to a subdomain of the user's site (Namecheap Stellar Plus shared hosting), to share occasional builds with friends for testing.
   - **Steps:**
     - create the subdomain in cPanel, with its own folder; turn on HTTPS (AutoSSL). HTTPS is required: the AudioWorklet voice and Web MIDI only run in a secure context;
@@ -868,7 +868,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - an `.htaccess` that keeps `index.html` uncached (asset files are hashed), and optionally password-protects the folder (cPanel's Directory Privacy) to keep it to friends.
   - **Needs from the user:** the subdomain name, and SSH turned on.
   - **Server side, set up 2026-10-04** (walkthrough session): subdomain `gliss.mirimantis.com` (document root `/home/mirifzxt/gliss.mirimantis.com`, its own folder) with an A record in Namecheap's PremiumDNS (the domain doesn't use the hosting's DNS, so cPanel can't add it); shell access turned on (it was off by default); a key per computer; **no automatic SSL in this cPanel**, so **acme.sh** (Let's Encrypt, webroot) issues the certificate and its `cpanel_uapi` deploy hook installs it, renewing from a cron job every 6 hours. Found on the way: the main site's certificate expired Nov 2024; the same acme.sh commands (with `public_html`) could fix it.
-  - **Done (this PR):**
+  - **Done (PR #103):**
     - `npm run deploy` (`scripts/deploy.mjs`): builds, adds `deploy/.htaccess` (HTTPS only, pages never cached) and `deploy/assets.htaccess` (hashed assets cached for good) and a `build.txt` label, then streams `dist/` as one tar over SSH (one passphrase prompt). On the server it unpacks into a staging folder, then replaces the document root's contents, keeping `.well-known`. Guards: the target must be `/home/<user>/<folder>`, never `public_html`.
     - Settings in `deploy/deploy.env.local` (ignored by git via `*.local`); `deploy/deploy.env.example` documents them.
     - **Build label:** version · commit (+ if uncommitted changes) · date, from `vite.config.ts` (`__BUILD_INFO__`), shown at the bottom of Settings.
@@ -989,5 +989,6 @@ Condensed record, kept so `BACKLOG x.y` references in code comments still resolv
 - Update [help.html](help.html) in the same PR as each user-visible change. It is the canonical user manual and shortcut reference.
 - **Keep touch in mind (13.27, deferred):** when building, don't make a later touch interface harder than it needs to be. Avoid features that only work by hover or only by a key (give them a button or menu entry too), keep hit targets from shrinking, and route new input through the Pointer Events input router.
 - Test hands-on in the dev server before opening a PR. The dev server is `npm run dev`, on port 5187.
+- Share a test build with `npm run deploy` (`npm.cmd run deploy` in PowerShell) to https://gliss.mirimantis.com (13.28). Commit first, so the build label has no `+`.
 - Tick items off here in the PR that ships them, with the PR number.
 - Build plans for items with a planning session go in `.claude/plans/<id>-<slug>.md` while the item is in flight. Delete them once the item ships; the PR and this file are the record.
