@@ -17,7 +17,7 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105), 15.8 kernel tests (PR #106).
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105), 15.8 kernel tests (PR #106), 15.3 part A (PR #107).
 2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
 3. **Background, now (decided 2026-10-04: finish before piling more on):** 15.8 done; 15.3 in four PRs (A render loop, HUDs, zoom; B perform and capture; C transport, commands, MIDI, Tune A4, track panel; D the layout template with 15.4), then the rest of 15.4.
 
@@ -124,7 +124,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - **Model edits:** inline edits in handlers (e.g. multi-point delete in the key handler) move into `model/`.
   - **Target:** `main.ts` is a bootstrap of a few hundred lines.
   - **Plan (approved 2026-10-04):** four PRs, each changing no behaviour and tested hands-on before it opens: **A** the render loop's drawing, HUDs, zoom sliders, Parameters Graph resize; **B** perform and capture (the sounding voice, Gravity clock, edge scrolling, multitouch, Keep, layers) into a `perform/` folder; **C** the transport controller, the command handlers, MIDI input, Tune A4, the track panel; **D** the layout template as Preact components, with the rest of 15.4.
-  - **PR A (built 2026-10-04):** `main.ts` 3,692 → 3,077 lines.
+  - **PR A (PR #107):** `main.ts` 3,692 → 3,077 lines.
     - `canvas/scene.ts`: `draw()` moved as it was (`createScene(deps)`: the canvases, viewport, interaction, engines, and getters for what changes), read-only.
     - `app/redraw.ts`: the redraw flags as functions (`markBgDirty`, `requestRedraw`, `redrawPending`, `takeBgDirty`), replacing `main.ts`'s `bgDirty` / `fgDirty` variables, so pieces outside `main.ts` can ask for a redraw.
     - `ui/pitch-hud.ts` (and its formatting), `ui/session-overlays.ts` (count-in number, idle warning), `ui/frame-times.ts` (Perf HUD's frame window), `ui/zoom-sliders.ts`, `ui/param-graph-resize.ts`.
