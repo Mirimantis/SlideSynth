@@ -441,8 +441,9 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
   - The Parameters Graph below the canvas shipped in PR #58, showing the selected curve's volume lane.
   - Remaining: more lane types (pan, cutoff, per-layer mix), show/hide/solo per lane, and a lane picker.
   - Inherits the "functional curve, lane-agnostic gravity" framing from the lanes model.
-- [ ] **13.27 Mobile and touch support** *(L, own planning session — added 2026-10-03)*
+- [ ] **13.27 Mobile and touch support** *(L, own planning session — added 2026-10-03; DEFERRED until after the UI redesign, 16.8 and 16.9)*
   - Play and edit on a phone or tablet with fingers.
+  - **Deferred (2026-10-03):** it amounts to a whole second interface, so it waits for the redesign. Until then, keep it in mind so it doesn't get harder: see the touch note in [Housekeeping](#housekeeping).
   - **Already in place:** the canvases run on Pointer Events with `touch-action: none` (15.2), so a one-finger drag already reaches the input router.
   - **Session inputs:**
     - scope: tablets first, or phones too; Perform only, or editing as well;
@@ -557,7 +558,18 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - audio: a per-group gain node between the member voices and the track, or multiplying the envelope into each member's sampled volume. The first is truer to "summed output"; the second needs no graph change;
     - how it's edited: the Parameters Graph showing the group lane when the group is selected (ties into 8.4's lane picker);
     - what Ungroup does to it: bake it into the members, or discard it;
-    - copy / paste / duplicate / join semantics.
+    - copy / paste / duplicate / join semantics;
+    - how it relates to a track envelope: settled in 13.31's session.
+- [ ] **13.31 Track-level dynamics, and how volume layers relate** *(M–L, own planning session — added 2026-10-03)*
+  - Give a track its own volume envelope over time, on top of its curves' volume lanes. 11.7's looping shape would most likely live here.
+  - **First, sort out how the layers relate** (the user had assumed 13.13 and 8.4 covered it): a curve's volume lane, a group's envelope (13.13), a track's envelope (this), the track's volume slider, and the live dynamics bus (11.x). Likely they multiply, but decide which are the same mechanism (a lane owned by a curve, a group or a track) and which are separate.
+  - **Session inputs:**
+    - one "lane owned by a container" model for groups and tracks, or two features;
+    - audio: a gain node per track (and per group) driven by the envelope, or multiplied into each voice's sampled volume;
+    - editing: the Parameters Graph showing the track's lane when no curve is selected, or a lane picker (8.4);
+    - looping: a track lane that repeats over a set span (11.7) rather than running along the timeline;
+    - recording: whether live dynamics can be written to the track lane instead of the curve's;
+    - the `.gliss` file: where a track's lane is saved.
 - [ ] **13.14 Group isolation mode** *(M–L, own planning session)*
   - Explore an Adobe Illustrator-style isolation mode: enter a group (double-click it, or a button) to edit its members individually without ungrouping. Everything outside the group fades and ignores input; Esc or clicking outside exits.
   - **Session inputs:**
@@ -753,7 +765,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - which targets: the same set Gravity pulls to (scale, frets, pitch guides), so it changes with the tuning and the Snap settings;
     - "halfway" between the two neighbouring targets, so uneven spacing (unequal tunings, sparse scales) scales with it;
     - the curve between Max and Min (linear, or eased near the target);
-    - the planchette or the raw cursor: under magnetic snap the planchette's spring would make a tremolo at the vibrato rate (11.5's warning). Maybe wanted here; maybe a choice;
+    - the planchette or the raw cursor: under magnetic snap the planchette's spring would make a tremolo at the vibrato rate (11.5's warning). **Build both and test (2026-10-03):** one may work better, or both may be worth keeping as a choice;
     - smoothing, so a fast glide doesn't zipper;
     - recorded into the volume lane like the other sources.
 - [ ] **11.7 Looping drawn shape as a dynamics source** *(M–L, own planning session — added 2026-10-03)*
@@ -762,7 +774,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - where the shape is drawn (the Parameters Graph, or a small editor beside the source);
     - loop length in beats (tempo-synced) or seconds; free-running, or restarted on each note;
     - live (feeding the bus while performing, written into recorded volume lanes) or applied at playback;
-    - **track-level:** the user expects it may only work once tracks have their own dynamics. There's no backlog item for track-level dynamics yet; 13.13 (group volume envelope) and 8.4 (lane types) are the nearest.
+    - **track-level:** it may only work once tracks have their own dynamics (13.31), so it likely comes after that session.
     - Volume undulation is tremolo, not vibrato.
   - **Session inputs:**
     - mapping (magnitude only, or does direction matter?);
@@ -855,6 +867,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - show the build (version or commit, date) somewhere in the app, so testers can say which build they used;
     - an `.htaccess` that keeps `index.html` uncached (asset files are hashed), and optionally password-protects the folder (cPanel's Directory Privacy) to keep it to friends.
   - **Needs from the user:** the subdomain name, and SSH turned on.
+  - **Next (2026-10-03):** a session that walks the user through the cPanel side step by step (subdomain, HTTPS, SSH key, folder), then the deploy script.
 
 ---
 
@@ -970,6 +983,7 @@ Condensed record, kept so `BACKLOG x.y` references in code comments still resolv
 ## Housekeeping
 
 - Update [help.html](help.html) in the same PR as each user-visible change. It is the canonical user manual and shortcut reference.
+- **Keep touch in mind (13.27, deferred):** when building, don't make a later touch interface harder than it needs to be. Avoid features that only work by hover or only by a key (give them a button or menu entry too), keep hit targets from shrinking, and route new input through the Pointer Events input router.
 - Test hands-on in the dev server before opening a PR. The dev server is `npm run dev`, on port 5187.
 - Tick items off here in the PR that ships them, with the PR number.
 - Build plans for items with a planning session go in `.claude/plans/<id>-<slug>.md` while the item is in flight. Delete them once the item ships; the PR and this file are the record.
