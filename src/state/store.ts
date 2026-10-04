@@ -9,6 +9,7 @@ import {
 } from '../model/nudge';
 import { clampRecordAccuracy, RECORD_ACCURACY_DEFAULT } from '../model/fit';
 import { clampMagneticSpeed } from '../utils/snap-magnetic';
+import { clampHapticMs, HAPTIC_MS_DEFAULT } from '../ui/haptics';
 import { DEFAULT_ZOOM_X, DEFAULT_ZOOM_Y, MAX_PITCH_CENTS, AUTO_SMOOTH_X_RATIO } from '../constants';
 import { DEFAULT_CHORD_SPEC, type ChordSpec } from '../utils/harmonics';
 import {
@@ -106,6 +107,8 @@ const LAYER_MODE_STORAGE_KEY = 'slidesynth.layerMode';
 const PITCH_HUD_STORAGE_KEY = 'slidesynth.pitchHud';
 const COUNT_IN_STORAGE_KEY = 'slidesynth.countIn';
 const AUDIBLE_SCRUB_STORAGE_KEY = 'slidesynth.audibleScrub';
+const HAPTIC_CLICKS_STORAGE_KEY = 'slidesynth.hapticClicks';
+const HAPTIC_MS_STORAGE_KEY = 'slidesynth.hapticMs';
 const PERF_HUD_STORAGE_KEY = 'slidesynth.perfHud';
 const METRONOME_ENABLED_STORAGE_KEY = 'slidesynth.metronomeEnabled';
 const METRONOME_VOLUME_STORAGE_KEY = 'slidesynth.metronomeVolume';
@@ -297,6 +300,8 @@ function createInitialState(): RawState {
     pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
     countInEnabled: loadBoolPref(COUNT_IN_STORAGE_KEY, true),
     audibleScrub: loadBoolPref(AUDIBLE_SCRUB_STORAGE_KEY, true),
+    hapticClicks: loadBoolPref(HAPTIC_CLICKS_STORAGE_KEY, true),
+    hapticMs: clampHapticMs(loadNumberPref(HAPTIC_MS_STORAGE_KEY, HAPTIC_MS_DEFAULT)),
     perfHudVisible: loadBoolPref(PERF_HUD_STORAGE_KEY, false),
     metronomeEnabled: loadBoolPref(METRONOME_ENABLED_STORAGE_KEY, false),
     metronomeVolume: loadNumberPref(METRONOME_VOLUME_STORAGE_KEY, 0.6),
@@ -690,6 +695,22 @@ class Store {
     this.state.audibleScrub = enabled;
     saveBoolPref(AUDIBLE_SCRUB_STORAGE_KEY, enabled);
     this.touch('audibleScrub');
+  }
+
+  /** Haptic clicks on snap lines while performing (13.35). */
+  setHapticClicks(enabled: boolean) {
+    if (this.state.hapticClicks === enabled) return;
+    this.state.hapticClicks = enabled;
+    saveBoolPref(HAPTIC_CLICKS_STORAGE_KEY, enabled);
+    this.touch('hapticClicks');
+  }
+
+  setHapticMs(ms: number) {
+    const clamped = clampHapticMs(ms);
+    if (this.state.hapticMs === clamped) return;
+    this.state.hapticMs = clamped;
+    saveNumberPref(HAPTIC_MS_STORAGE_KEY, clamped);
+    this.touch('hapticMs');
   }
 
   setPerfHudVisible(visible: boolean) {

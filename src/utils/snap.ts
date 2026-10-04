@@ -175,6 +175,23 @@ function collectSnapTargets(wy: number, config: SnapConfig, range: number): numb
   return targets;
 }
 
+/**
+ * How many snap lines lie between two pitches: those above `from` up to and
+ * including `to` (or below, going down), so a line touched and then left
+ * counts once. The same lines Gravity pulls to (13.35's haptic clicks).
+ */
+export function snapLinesCrossed(from: number, to: number, config: SnapConfig): number {
+  if (!config.enabled || from === to) return 0;
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  const targets = collectSnapTargets((lo + hi) / 2, config, (hi - lo) / 2 + 1e-6);
+  let n = 0;
+  for (const t of targets) {
+    if (to > from ? t > from && t <= to : t < from && t >= to) n++;
+  }
+  return n;
+}
+
 /** Find the nearest snap target to `wy` and the adaptive well radius around it.
  *  Radius = half the distance to the next target on the cursor's side, so
  *  adjacent wells meet at midpoints without overlapping. Pentatonic-like sparse

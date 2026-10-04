@@ -16,7 +16,8 @@ import { renderPlayhead } from './canvas/playhead';
 import { renderLoopMarkers } from './canvas/loop-markers';
 import { renderGuideHandle, renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
-import { snapToGrid, findAdaptiveSnap } from './utils/snap';
+import { snapToGrid, findAdaptiveSnap, snapLinesCrossed, type SnapConfig } from './utils/snap';
+import { hapticClick } from './ui/haptics';
 import { createInteraction, editingCurveIds, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './canvas/interaction';
 import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
@@ -1639,7 +1640,7 @@ function magneticNowBeats(): number {
  *  tick can keep advancing the planchette pitch even when the mouse isn't moving. */
 let lastComposeSy: number | null = null;
 
-function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number; snapTarget: number | null } {
+function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedWorldY: number; snapTarget: number | null; snapConfig: SnapConfig } {
   const { wy } = viewport.screenToWorld(0, sy);
   const st = store.getState();
   // The same targets drawing uses (15.6): scale or chromatic lines, pitch
@@ -1679,13 +1680,13 @@ function computeComposeCursorPitch(sy: number): { cursorWorldY: number; snappedW
       ? { target: adaptive.target, radius: adaptive.radius }
       : null;
     const magneticPitch = updateMagnetic(magneticState, wy, magneticNowBeats(), st.magneticStrength, st.magneticSpringK, st.magneticDamping, attractor, st.magneticSpeed);
-    return { cursorWorldY: wy, snappedWorldY: magneticPitch, snapTarget };
+    return { cursorWorldY: wy, snappedWorldY: magneticPitch, snapTarget, snapConfig };
   }
 
   // Non-magnetic path: instant snap (or raw cursor Y when snap is off, or no
   // attractor in None mode between guides).
   resetMagnetic(magneticState);
-  return { cursorWorldY: wy, snappedWorldY: snappedWy, snapTarget };
+  return { cursorWorldY: wy, snappedWorldY: snappedWy, snapTarget, snapConfig };
 }
 
 /** Previous snap target. Used to trigger the snap-line-cross pulse on target
@@ -1698,8 +1699,9 @@ function composeUpdatePlanchette(sy: number) {
     clearPlanchettePitches();
     return;
   }
-  const { cursorWorldY, snappedWorldY, snapTarget } = computeComposeCursorPitch(sy);
+  const { cursorWorldY, snappedWorldY, snapTarget, snapConfig } = computeComposeCursorPitch(sy);
   store.setPlanchetteY('primary', cursorWorldY, snappedWorldY);
+  hapticOnCrossing(cursorWorldY, snapConfig);
   // Snap-line-cross pulse — fire only when crossing between two real targets.
   // Skip when either side is null (no attractor in None-mode between-guides
   // zones) so the flash doesn't fire on every frame.
@@ -1710,6 +1712,26 @@ function composeUpdatePlanchette(sy: number) {
   // Drive harmony voices off the primary's snapped Y. No-op outside Prism Draw
   // perform (no harmony planchettes exist) so cheap to call unconditionally.
   updateHarmonyVoices(snappedWorldY);
+}
+
+/** The finger's (cursor's) pitch at the last move while pressing in Perform,
+ *  for haptic clicks (13.35); null when not pressing. */
+let hapticPrevWy: number | null = null;
+
+/** A haptic click when the finger crosses a snap line while performing
+ *  (13.35): the raw cursor, not the planchette, so it marks where the lines
+ *  are under the finger whatever Gravity is doing. Snap must be on: the lines
+ *  are snap targets. Does nothing on a device that can't vibrate. */
+function hapticOnCrossing(cursorWorldY: number, snapConfig: SnapConfig) {
+  const st = store.getState();
+  if (!composeEngine.isLmbDown() || !st.hapticClicks || !st.snapEnabled) {
+    hapticPrevWy = null;
+    return;
+  }
+  if (hapticPrevWy !== null && snapLinesCrossed(hapticPrevWy, cursorWorldY, snapConfig) > 0) {
+    hapticClick(st.hapticMs, performance.now());
+  }
+  hapticPrevWy = cursorWorldY;
 }
 
 /** The cursor left the pitch area: the mouse's planchettes have no pitch

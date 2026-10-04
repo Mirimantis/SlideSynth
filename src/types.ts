@@ -349,6 +349,8 @@ export interface AppState {
   /** Dragging the ruler plays what's under the playhead (BACKLOG 16.3).
    *  localStorage-backed; on by default. */
   audibleScrub: boolean;
+  hapticClicks: boolean;                      // 13.35: vibrate when a finger crosses a snap line (localStorage-backed)
+  hapticMs: number;                           // 13.35: that click's length in ms (localStorage-backed)
   perfHudVisible: boolean;                    // Perf HUD user preference (localStorage-backed)
   metronomeEnabled: boolean;                  // Metronome user preference (localStorage-backed)
   metronomeVolume: number;                    // 0..1 — metronome master gain (localStorage-backed)

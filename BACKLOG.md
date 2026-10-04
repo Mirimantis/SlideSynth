@@ -487,9 +487,14 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - the viewport's mapping is the place to swap axes; every renderer and hit-test goes through it, but rulers, the rail, the staff labels, edge scrolling and the zoom sliders (13.32) all assume today's layout;
     - Perform only, or editing too;
     - which way it scrolls, and where the rail sits (a horizontal line, like a keyboard's edge).
-- [ ] **13.35 Haptic click on snap lines** *(S–M — added 2026-10-04)*
+- [x] **13.35 Haptic click on snap lines** *(S — added 2026-10-04; this PR)*
   - On devices that can vibrate, a tiny haptic click when the **finger** (the cursor, not the planchette) crosses a snap line while performing.
   - **Notes:** the browser's Vibration API works in Chrome on Android; iOS Safari and desktops don't support it, so it's an extra where available. Very short pulses (a few ms) may be rounded up or ignored by some phones; test the shortest that's felt. A setting to turn it off. A first taste of H.3's felt detents.
+  - **Done (this PR):**
+    - `snapLinesCrossed(from, to, config)` in `snap.ts` counts the snap lines between two pitches (the same lines Gravity pulls to; a line touched and then left counts once).
+    - `ui/haptics.ts`: `hapticClick(ms, now)` calls `navigator.vibrate`, at most once per 30 ms so a fast sweep is a train of clicks, not a buzz; nothing where the API is missing.
+    - In `main.ts`, every Perform pointer move while pressing (with Snap on) compares the raw cursor pitch with the last one and clicks on a crossing. Hovering never clicks.
+    - **Settings › Touch:** "Haptic clicks on snap lines" (on by default) and **Click length** (1–40 ms, default 10; letting go of the slider gives a sample click). Workspace prefs. The hint names the devices rather than detecting them: desktop Chrome has `navigator.vibrate` too, without a motor.
 
 ### Frets (pitch guides)
 
