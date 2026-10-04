@@ -1,0 +1,18 @@
+# Test builds on the web (BACKLOG 13.28). Copied into dist/ by
+# scripts/deploy.mjs; the server runs LiteSpeed, which reads Apache rules.
+
+# HTTPS only: the AudioWorklet voice and Web MIDI need a secure page. The
+# certificate renewal's challenge files stay reachable over plain HTTP.
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteCond %{REQUEST_URI} !^/\.well-known/
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# The pages (and build.txt, the build label) are checked every visit, so a
+# new build shows up at once. The files they load are cached for good by
+# assets/.htaccess: their names carry content hashes, so they never change.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|txt)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>

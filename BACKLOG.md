@@ -867,7 +867,11 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - show the build (version or commit, date) somewhere in the app, so testers can say which build they used;
     - an `.htaccess` that keeps `index.html` uncached (asset files are hashed), and optionally password-protects the folder (cPanel's Directory Privacy) to keep it to friends.
   - **Needs from the user:** the subdomain name, and SSH turned on.
-  - **Next (2026-10-03):** a session that walks the user through the cPanel side step by step (subdomain, HTTPS, SSH key, folder), then the deploy script.
+  - **Server side, set up 2026-10-04** (walkthrough session): subdomain `gliss.mirimantis.com` (document root `/home/mirifzxt/gliss.mirimantis.com`, its own folder) with an A record in Namecheap's PremiumDNS (the domain doesn't use the hosting's DNS, so cPanel can't add it); shell access turned on (it was off by default); a key per computer; **no automatic SSL in this cPanel**, so **acme.sh** (Let's Encrypt, webroot) issues the certificate and its `cpanel_uapi` deploy hook installs it, renewing from a cron job every 6 hours. Found on the way: the main site's certificate expired Nov 2024; the same acme.sh commands (with `public_html`) could fix it.
+  - **Done (this PR):**
+    - `npm run deploy` (`scripts/deploy.mjs`): builds, adds `deploy/.htaccess` (HTTPS only, pages never cached) and `deploy/assets.htaccess` (hashed assets cached for good) and a `build.txt` label, then streams `dist/` as one tar over SSH (one passphrase prompt). On the server it unpacks into a staging folder, then replaces the document root's contents, keeping `.well-known`. Guards: the target must be `/home/<user>/<folder>`, never `public_html`.
+    - Settings in `deploy/deploy.env.local` (ignored by git via `*.local`); `deploy/deploy.env.example` documents them.
+    - **Build label:** version · commit (+ if uncommitted changes) · date, from `vite.config.ts` (`__BUILD_INFO__`), shown at the bottom of Settings.
 
 ---
 

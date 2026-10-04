@@ -71,6 +71,9 @@ function SettingsBody({ close, midi }: { close(): void; midi: MidiSettings }) {
         </section>
 
         <div class="tb-actions settings-actions">
+          <span class="settings-build" title="Which build this is: version, commit and date. Mention it when reporting a problem.">
+            Build {__BUILD_INFO__}{import.meta.env.DEV ? ' (dev server)' : ''}
+          </span>
           <button class="tb-btn primary" onClick={close}>Done</button>
         </div>
       </div>
