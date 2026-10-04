@@ -504,6 +504,11 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - **Keep:** the engine's phrases record when they opened (`openedAtMs`), and `keepHand` keeps the newest take plus every take overlapping it, directly or through another. `commitFinalizedCurves` groups only a Prism chord (`isPrismChord`), never fingers.
     - **Edge scrolling:** `edgeScrollStep` combines every held finger; the HUD follows the newest finger (`hudPlanchette`).
     - Rail markers for extra fingers use the ordinary planchette colour: a voice isn't a finger, so a colour per voice would suggest an identity the fingers don't have.
+  - **Tested on a phone (2026-10-04): works very well.** The screen only fits 3 or 4 fingers, hence 16.10 (Small-screen layout).
+  - **Gestures (added after testing):** the user ran into system gestures on Android, Windows and a Wacom tablet. A page can't turn those off (they're device settings; the user turned most off there). What the app can do, done:
+    - **browser gestures off everywhere**, not only on the canvases: `overscroll-behavior: none` (pull to refresh, swipe back), `touch-action: pan-x pan-y` on the body (no pinch or double-tap zoom; panels still scroll), no text selection or long-press callout outside text fields, and no browser long-press menu (`ui/touch-guard.ts`; a mouse's right-click is untouched);
+    - **Full screen** (`view.fullscreen`, a top-bar button and View menu entry; `ui/fullscreen.ts`): hides the browser and, on a phone, the system bars, so an edge swipe shows the bars instead of leaving. Hidden where the Fullscreen API is missing (iPhone);
+    - the body's height is `100dvh`, so on a phone the app no longer runs under the browser's bars.
   - **Already in place:** the performance engine keys phrases by voice, MIDI already plays a voice per note (`midi-<note>`), and the state holds a list of planchettes (used today for the Prism's harmony voices; the mouse and touch drive only the primary one).
   - **Session inputs:**
     - a voice per pointer id: start, follow and release per finger; a voice limit;

@@ -18,6 +18,8 @@ import { renderGuideHandle, renderGuides } from './canvas/guides';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
 import { snapToGrid, findAdaptiveSnap, nearestSnapLine, type SnapConfig } from './utils/snap';
 import { hapticClick, hapticStep, HAPTIC_RANGE_PX } from './ui/haptics';
+import { canFullscreen, fullscreenOn, toggleFullscreen } from './ui/fullscreen';
+import { installTouchGuards } from './ui/touch-guard';
 import { createInteraction, editingCurveIds, rebuildTransformBox, transformBoxHoldsGroup, RULER_HEIGHT, GUIDE_HANDLE_WIDTH } from './canvas/interaction';
 import { currentSnapConfig } from './state/snap-config';
 import { createInputRouter, type GestureHandlers } from './canvas/input-router';
@@ -1391,6 +1393,11 @@ const commands = createCommandRegistry({
   'view.scrollDuringPlayback': {
     run: toggleScrollDuringPlayback,
     checked: () => store.getState().scrollCanvasEnabled,
+  },
+  'view.fullscreen': {
+    run: toggleFullscreen,
+    enabled: canFullscreen,
+    checked: () => fullscreenOn.value,
   },
   'app.settings': { run: () => { settingsOpen.value = true; } },
   'help.open': { run: () => { window.open('/help.html', '_blank'); } },
@@ -3558,7 +3565,7 @@ const MENUS: readonly MenuSpec[] = [
   {
     label: 'View',
     entries: [
-      'view.pitchHud', 'view.perfHud', 'view.scrollDuringPlayback', '-',
+      'view.pitchHud', 'view.perfHud', 'view.scrollDuringPlayback', 'view.fullscreen', '-',
       'view.frets', '-',
       'view.start', 'view.end', 'view.playhead', '-',
       'help.open',
@@ -3566,6 +3573,7 @@ const MENUS: readonly MenuSpec[] = [
   },
 ];
 render(h(TopBar, { commands, menus: MENUS, canUndo, canRedo, keepable }), toolbarContainer);
+installTouchGuards();
 render(h(TempoPanel, { actions: tempoActions }), document.getElementById('tempo-panel')!);
 render(h(SnapPanel, { actions: snapActions }), document.getElementById('snap-panel')!);
 render(h(TuningPanel, { actions: tuningActions }), document.getElementById('tuning-panel')!);

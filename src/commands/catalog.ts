@@ -116,6 +116,9 @@ export const COMMANDS = [
   { id: 'view.frets', label: 'Frets', section: 'View',
     description: 'show or hide every fret; hidden frets don’t pull (beat guides stay)' },
   { id: 'view.perfHud', label: 'Perf HUD', section: 'View', keys: ['!'], description: 'frame times, voice counts and audio latency' },
+  // No key: F11 is the browser's own, and Escape already leaves.
+  { id: 'view.fullscreen', label: 'Full screen', section: 'View',
+    description: 'fill the screen; on a phone, edge swipes show the system bars instead of leaving the app' },
   { id: 'help.open', label: 'User Manual', section: 'View', keys: ['?'] },
   { id: 'app.settings', label: 'Settings', section: 'View', description: 'MIDI input and other preferences' },
 
