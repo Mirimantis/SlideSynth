@@ -30,6 +30,9 @@ export function createDefaultSnapSettings(): SnapSettings {
   };
 }
 
+/** The scale a new composition starts in, with root C in 12-EDO. */
+export const NEW_COMPOSITION_SCALE = 'major';
+
 export function createComposition(): Composition {
   const toneLibrary = createDefaultToneLibrary();
   const firstTone = toneLibrary[0]!;
@@ -44,7 +47,10 @@ export function createComposition(): Composition {
     tracks: [createTrack('Track 1', firstTone.id)],
     loopStartBeats: 0,
     loopEndBeats: 2 * DEFAULT_BEATS_PER_MEASURE,
-    snap: createDefaultSnapSettings(),
+    // A new composition starts in C major (2026-10-04, from touch testing).
+    // The neutral settings above (All notes) stay what a file or a MIDI import
+    // without snap settings gets, so those load as they always did.
+    snap: { ...createDefaultSnapSettings(), root: 0, scaleId: NEW_COMPOSITION_SCALE },
     guides: [],
     tuningOffsetCents: 0,
   };

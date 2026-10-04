@@ -3504,6 +3504,10 @@ resizeCanvases();
   bgDirty = true;
 }
 
+// The app opens in Perform (decided 2026-10-04, from touch testing): it's
+// ready to play at once; picking a tool goes to editing.
+setPerformMode(true);
+
 
 // ── Collapsible panel sections ──────────────────────────────────
 // Each .panel-header toggles the visibility of its sibling content

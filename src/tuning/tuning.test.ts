@@ -323,6 +323,7 @@ describe('Custom scales from the pitch circle (BACKLOG 13.8 (c))', () => {
     const { store } = await import('../state/store');
     const { createComposition } = await import('../model/composition');
     store.loadComposition(createComposition());
+    store.setScaleId('all');                                       // a new composition starts in Major
     store.setRoot(2);
     store.toggleScaleDegree(3);                                    // D#: out of All notes
     expect(store.getState()).toMatchObject({ scaleId: 'custom', customScale: { size: 12 } });

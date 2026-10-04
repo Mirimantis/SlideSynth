@@ -99,8 +99,8 @@ function createInitialPrimaryPlanchette(trackId: string | null): PlanchetteState
 
 // A new key, not a migration: the old `slidesynth.scrollCanvas` (Lock Rail)
 // also meant "the left button performs while playing", which Perform mode now
-// owns (BACKLOG 16.2). Carrying it over would leave most users editing on a
-// scrolling canvas they never asked for, so the view option starts off.
+// owns (BACKLOG 16.2). The view option is on by default (2026-10-04, from
+// touch testing: the app opens in Perform, whose rail view this matches).
 const SCROLL_CANVAS_STORAGE_KEY = 'slidesynth.scrollDuringPlayback';
 try { localStorage.removeItem('slidesynth.scrollCanvas'); } catch { /* ignore */ }
 const LAYER_MODE_STORAGE_KEY = 'slidesynth.layerMode';
@@ -295,7 +295,7 @@ function createInitialState(): RawState {
     guidesVisible: loadBoolPref(GUIDES_VISIBLE_STORAGE_KEY, true),
     guidesLocked: loadBoolPref(GUIDES_LOCKED_STORAGE_KEY, false),
     fretsVisible: loadBoolPref(FRETS_VISIBLE_STORAGE_KEY, true),
-    scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, false),
+    scrollCanvasEnabled: loadBoolPref(SCROLL_CANVAS_STORAGE_KEY, true),
     layerModeEnabled: loadBoolPref(LAYER_MODE_STORAGE_KEY, false),
     pitchHudVisible: loadBoolPref(PITCH_HUD_STORAGE_KEY, true),
     countInEnabled: loadBoolPref(COUNT_IN_STORAGE_KEY, true),

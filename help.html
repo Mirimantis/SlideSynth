@@ -295,7 +295,7 @@
     <em>These features are under active development — behaviour may change.</em>
   </p>
   <p>
-    Glissandograph has two modes. <strong>Compose</strong> is the editor: the left mouse
+    Glissandograph has two modes, and opens in Perform. <strong>Compose</strong> is the editor: the left mouse
     button runs the tool you've picked (Draw, Select, Delete, Slice). <strong>Perform</strong>
     turns the canvas into an instrument: the left button <em>plays</em>. Press
     <kbd>P</kbd> or the <strong>Perform</strong> button at the bottom of the tool strip to
@@ -610,7 +610,7 @@
         <li><strong>Length</strong> — derived automatically from the rightmost point in any curve and shown as <code>M:SS</code> next to the composition name. Playback stops at that point (or loops back to the start if Loop is on). With no points, playback is a no-op.</li>
         <li><strong>Canvas extent</strong> — the grid, staff, and rulers render everywhere you pan or zoom, with a generous buffer of open space past the last point so you can keep drawing outward. A memory-safe cap limits total pan range.</li>
         <li><strong>Loop</strong> (<kbd>L</kbd>) — toggle from the icon button at the right of the top bar or the hotkey. It can't change while a recording runs. When enabled, two draggable <strong>loop markers</strong> (green in, red out) appear in the ruler. Drag them to set the loop range; they snap to the beat grid and to existing curve control points. The range is saved with the composition. Markers hide when Loop is off; playback then runs through to composition end.</li>
-        <li><strong>Scroll canvas during playback</strong> (<strong>View</strong> menu) — how Compose mode shows playback. <strong>Off</strong> (default) is a static canvas with the playhead moving across it. <strong>On</strong> fixes the playhead as a rail at canvas centre and slides the canvas past it, as Perform always does; the edit tools keep working on the moving canvas. Preference persists via localStorage.</li>
+        <li><strong>Scroll canvas during playback</strong> (<strong>View</strong> menu) — how Compose mode shows playback. <strong>Off</strong> is a static canvas with the playhead moving across it. <strong>On</strong> (default) fixes the playhead as a rail at canvas centre and slides the canvas past it, as Perform always does; the edit tools keep working on the moving canvas. Preference persists via localStorage.</li>
         <li><strong>Pitch HUD</strong> — shows the pitch under the cursor (note name + cents + frequency in Hz) in the top-right of the canvas while the cursor has a meaningful Y. The Hz readout reflects the current Tune A4 setting, so A=432 etc. shifts every frequency in lockstep. Toggle it from the <strong>View</strong> menu. Preference persists via localStorage.</li>
         <li><strong>Perf HUD</strong> — passive observer in the top-left: frame ms (p50 / p99 over a rolling ~2 s), live synth / oscillator / voice counts, audio output latency, and where live voices are smoothed (<code>live: audio thread</code> normally; <code>main thread</code> if the browser can't run the audio worklet). Off by default; toggle from the <strong>View</strong> menu or press <kbd>!</kbd> (Shift+1). Useful when something feels sluggish — load a heavy composition (see <code>fixtures/stress-test.ssn</code>) and watch the numbers move.</li>
         <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording, switching to Perform first. From Idle, a 3-second count-in runs then Playback begins (turn <strong>Count-in</strong> off in the Record ▾ menu to start straight away). If Playback is already running, the countdown is skipped and recording arms immediately at the current beat. While armed, holding the left button plays the selected track's tone AND captures it as a curve; release commits the curve. Escape cancels.</li>
@@ -956,6 +956,8 @@
     <li><strong>Scale</strong> — which notes the piece uses, counted from the root;
       <strong>All notes</strong> uses every note of the tuning.</li>
   </ul>
+  <p>A new composition starts in 12-EDO, root C, <strong>Major</strong>. A file saved without these
+    settings (or a MIDI import) uses All notes.</p>
   <details>
     <summary>The pitch circle</summary>
     <div class="detail-body">

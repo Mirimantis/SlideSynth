@@ -470,6 +470,8 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
   - **Done (this PR):**
     - The zoom sliders moved out of the canvas into strips along its edges (`#zoom-y-gutter` down the right side, `#zoom-x-gutter` along the bottom, inside a new `#canvas-row`), each slider running the strip's whole length, so they're longer (finer) as well as out of the way. `#canvas-container` is still exactly the canvas, so nothing that measures it changed. The strips are 18 px, 28 px on a touch screen (`pointer: coarse`).
     - The transport was hidden, not gone: the top bar's right zone never wrapped, so on a narrow screen it slid under the menus. The bar now wraps, and the right zone drops to its own line when there's no room (all 13 buttons reachable at 375 px wide).
+- [x] **13.37 Touch-friendly defaults** *(S — added and done 2026-10-04; this PR)*
+  - From touch testing, fine without touch too: the app **opens in Perform**; **Scroll canvas during playback** is on by default (an explicit saved choice is kept); a **new composition starts in 12-EDO, root C, Major** (`NEW_COMPOSITION_SCALE`). A file or MIDI import with no snap settings still gets All notes, as before.
 - [ ] **13.33 Multitouch: play several notes at once** *(M–L, own planning session — added 2026-10-04; the user's biggest touch want)*
   - Each finger on the canvas plays its own voice in Perform. Doesn't need the rest of 13.27 first.
   - **Already in place:** the performance engine keys phrases by voice, MIDI already plays a voice per note (`midi-<note>`), and the state holds a list of planchettes (used today for the Prism's harmony voices; the mouse and touch drive only the primary one).
