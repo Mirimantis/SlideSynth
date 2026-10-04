@@ -129,6 +129,11 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - `app/redraw.ts`: the redraw flags as functions (`markBgDirty`, `requestRedraw`, `redrawPending`, `takeBgDirty`), replacing `main.ts`'s `bgDirty` / `fgDirty` variables, so pieces outside `main.ts` can ask for a redraw.
     - `ui/pitch-hud.ts` (and its formatting), `ui/session-overlays.ts` (count-in number, idle warning), `ui/frame-times.ts` (Perf HUD's frame window), `ui/zoom-sliders.ts`, `ui/param-graph-resize.ts`.
     - The frame loop itself (`runFrame`, `tickFrame`, `isAnimating`) stays in `main.ts` until PR B moves the perform ticks it calls.
+  - **PR B (built 2026-10-04):** `main.ts` 3,077 → 2,052 lines. Perform and capture move to `src/perform/`, as they were:
+    - `performer.ts` (`createPerformer(deps)`): the sounding voice under the button or a finger, Prism harmonies, extra fingers (13.33), MIDI note voices' commits, capture each frame, edge scrolling, the perform tick (count-in, loop wrap, idle stop), and the HUD's planchette. Its ten dependencies (viewport, canvas, preview, dynamics bus, playback, held MIDI notes, rail beat, pan bound, the perform predicate, the transport controller) are explicit; `main.ts` destructures the same names it used before.
+    - `gravity.ts`: cursor → pitch under Snap and Gravity, the magnetic clock, haptic steps. `capture.ts`: layers, the pass log, committing, Keep and Drop last pass. `voices.ts`: the Prism voice ids (pure).
+    - Three references that reached into the moved state became calls: `fingerCount()`, `releaseAllFingers(commit)`, `forgetTrack(trackId)`. Keep and Drop in the command table are wrapped (`() => keepLastPhrase()`), since the performer is made after the table.
+    - The frame loop stays in `main.ts`: what it calls is now the performer's ticks.
 - [ ] **15.4 Reactive UI chrome** *(L; part 1 in PR #78)*
   - Move panels, drawers, dialogs and menus onto a small reactive component layer. The recommended default is Preact + `@preact/signals`; confirm the choice at the start of this item.
   - The canvas stays imperative.
