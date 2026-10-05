@@ -81,14 +81,16 @@ An honest description of the code as it stands, including the problems Phase 15 
 
 ```
 src/
-├── main.ts          # ~1,270 lines (15.3 under way): DOM layout template, wiring the pieces together,
-│                    #   modes and tools, audition, the frame loop, store watches
+├── main.ts          # ~350 lines: the bootstrap. Makes the pieces, hands each the others it needs,
+│                    #   renders the layout, starts the frame loop
 ├── perform/         # performer (the sounding voice, Prism harmonies, extra fingers, capture each frame,
 │                    #   edge scrolling, the perform tick), gravity (cursor → pitch under Snap and Gravity,
 │                    #   haptic steps), capture (layers, pass log, Keep, Drop last pass), voices (Prism voice ids),
 │                    #   midi (live MIDI input: a voice per held key, recording, bend, device choice)
-├── app/             # redraw.ts: what the next frame must draw (markBgDirty, requestRedraw);
-│                    #   transport-controller.ts: transport(event) → the state machine, and its effects
+├── app/             # redraw (what the next frame must draw: markBgDirty, requestRedraw), transport-controller
+│                    #   (transport(event) → the state machine, its effects; the engine follows the store),
+│                    #   frame-loop (tick, redraw when needed, the HUDs over the canvas), modes (tools, Perform,
+│                    #   scroll during playback), audition (hold A, ruler scrub), metronome (ticks and flash)
 ├── commands/        # catalog (every command: label, keys, description), keys (chord matching),
 │                    #   registry (dispatch + keyboard), edit-commands, app-commands (what every other command does)
 ├── help/            # shortcut-table (help.html's table, generated from the catalog)
@@ -103,16 +105,19 @@ src/
 │                    #   pure timing: beat ↔ audio time, a curve's events in one look-ahead window)
 ├── canvas/          # viewport, interaction (tool mouse handling, ~1,400 lines), performance-engine
 │                    #   (countdown / loop-wrap / AFK / rolling phrase buffer), scene (draws every layer from
-│                    #   the state, read-only), and one renderer per layer
+│                    #   the state, read-only), one renderer per layer, input-router + canvas-input (who owns
+│                    #   a press; the right-click menu), pan-zoom, stage (canvas sizing, the opening view)
 ├── tuning/          # tuning.ts: tunings, scales, degree names, and the pitch set the staff and snap use (13.8);
 │                    #   scl.ts: Scala .scl import and export
-├── ui/              # Preact (.tsx): top-bar, menu, tool-strip, settings-dialog, tempo-panel, snap-panel,
+├── ui/              # Preact (.tsx): layout (the whole page: rail and drawers, canvas area, side panel),
+│                    #   panel-section, top-bar, menu, tool-strip, settings-dialog, tempo-panel, snap-panel,
 │                    #   prism-panel, tuning-panel, pitch-circle, track-list, property-panel, tool-property-panel.
-│                    #   Vanilla DOM: drawer, tone builder/picker, older dialogs, HUDs (pitch-hud, perf-hud,
-│                    #   session-overlays), zoom-sliders, param-graph-resize, tuning-actions, track-actions
+│                    #   What panels do: drawer-actions, tuning-actions, track-actions. Vanilla DOM: tone
+│                    #   builder/picker, context menu, older dialogs, HUDs (pitch-hud, perf-hud, session-overlays),
+│                    #   zoom-sliders, param-graph-resize
 ├── theme/           # theme.ts: the canvas's reader for the colour tokens in styles/theme.css
 ├── export/          # json-export (.gliss envelope + migrations), wav-export, midi-import
-└── utils/           # bezier-math, snap, snap-magnetic, snap-presets, harmonics, svg helpers
+└── utils/           # bezier-math, snap, snap-magnetic, snap-presets, harmonics, svg-normalize
 
 styles/              # theme.css (every colour, as tokens), main / panels / dialogs (layout, via var())
 ```
@@ -129,7 +134,7 @@ styles/              # theme.css (every colour, as tokens), main / panels / dial
 
 ### Known structural problems (the review's findings)
 
-1. *(Keyboard map resolved in 15.3: the command catalog and registry in `src/commands/`. Drawing moved to `canvas/scene.ts` in 15.3 PR A, perform and capture to `perform/` in PR B, the transport controller, commands, MIDI, Tuning and track actions in PR C. Layout and the frame loop are still in `main.ts`.)* **`main.ts` does everything** — layout HTML, wiring, keyboard map, perform logic, render loop, and inline model edits (e.g. multi-point delete in the key handler).
+1. *(Resolved in 15.3: the command catalog and registry in `src/commands/`; drawing in `canvas/scene.ts` (PR A); perform and capture in `perform/` (PR B); the transport controller, commands, MIDI, Tuning and track actions (PR C); the layout as Preact components in `ui/layout.tsx`, and the frame loop, modes and audition in `app/` (PR D). `main.ts` is a bootstrap of about 350 lines.)* **`main.ts` does everything** — layout HTML, wiring, keyboard map, perform logic, render loop, and inline model edits (e.g. multi-point delete in the key handler).
 2. *(Resolved in 15.2: the explicit state machine in `src/state/transport.ts` and one input router per canvas in `src/canvas/input-router.ts`.)* **The perform state machine is implicit.** Play / jam / record / pass-record / MIDI-arm state is spread across ~8 flags in the store, the playback engine and module-level variables, each transition function setting its own combination. Two canvas mouse handlers use two different definitions of "is the left button performing?" (`isComposePerformActive` in `main.ts` vs. `isComposePerformLocked` in `interaction.ts`) — with Lock Rail off, a Draw click during Jam both sounds a note and places a curve point.
 3. **Coarse store notification + hand-synced UI.** Every store change rebuilds the track list and both property panels via `innerHTML`, including on every mousemove of a drag. Widgets that don't subscribe drift out of sync. *(Resolved in 15.1: signals-backed store, targeted watches, render-if-changed panels.)*
 4. **Duplicated state.** Snap settings exist in both `AppState` and `composition.snap`; loop-enabled lives in the playback engine; the snap config is built in three places that disagree (the Space-hold preview ignores guides and projection). *(Snap mirrors and loop state resolved in 15.1; one snap-config builder in 15.6, `src/state/snap-config.ts`.)*
@@ -375,7 +380,7 @@ The scale is the pitch grid; frets (13.16) are exceptions and additions on top o
 #### Consequences elsewhere
 
 - **Harmonic Prism:** Intonation's "Equal" means the current tuning's equal steps (12-EDO steps only when the tuning is 12-EDO). *(Built in 13.8 (b): each voice takes the tuning's step nearest its 12-TET interval, counted from the root. For unequal tables that's the table's own intervals from the root, since a chord's offsets must stay constant along a curve.)*
-  - **Per note** (13.21, first slice) is a second Equal: the chord counts up from the tuning's note nearest the base (`noteRootAt`) instead of from the root, and moves with the base's offset from that note. A 12-note octave table counts its notes by the semitones (a third is always four notes up); other tunings take the nearest steps as Equal does. Draw clicks take each click's note; a performed note holds the note it started on (`heldNoteRoot` in main.ts) until it ends; projection echoes stay from the root.
+  - **Per note** (13.21, first slice) is a second Equal: the chord counts up from the tuning's note nearest the base (`noteRootAt`) instead of from the root, and moves with the base's offset from that note. A 12-note octave table counts its notes by the semitones (a third is always four notes up); other tunings take the nearest steps as Equal does. Draw clicks take each click's note; a performed note holds the note it started on (`heldNoteRoot` in perform/performer.ts) until it ends; projection echoes stay from the root.
 - **Octave frets (13.18):** "Octaves" repeats every period of the tuning, which is the octave except in non-octave tunings.
 - **Files:** `scaleRoot` (0–11) becomes a degree index into the tuning. The composition version goes up, with a migration:
 

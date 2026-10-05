@@ -11,15 +11,15 @@ Sizes: XS / S / M / L / XL. Items marked **own planning session** need a design 
 A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architecture](DESIGN.md#current-architecture-as-of-2026-09-24)) paused feature work for three phases: stabilize, consolidate the architecture, simplify the interface. Where that stands:
 
 - **Phase 14 — Stabilize:** done.
-- **Phase 15 — Consolidate the architecture:** the big pieces are done (signals store, transport state machine, input router, command catalog, one snap-config builder, read-only render loop, AudioWorklet voice). Left, as background work: **15.3** break up `main.ts` (3,400 lines; the target is a few hundred), **15.4** the last panels and dialogs onto Preact, **15.8** kernel tests. They make every feature cheaper and are needed before Phase 17.
+- **Phase 15 — Consolidate the architecture:** the big pieces are done (signals store, transport state machine, input router, command catalog, one snap-config builder, read-only render loop, AudioWorklet voice). Left, as background work: **15.4** the last panels and dialogs onto Preact (15.3, breaking up `main.ts`, and 15.8, kernel tests, are done). They make every feature cheaper and are needed before Phase 17.
 - **Phase 16 — Simplify the interface:** the build is done (16.1–16.7). Left: the **16.8 Perform**, **16.9 Visual theme** and **16.10 Small-screen layout** design sessions.
 - **Phase 17 — Portable core:** not started. Needed only before a port (VST, VCV, hardware).
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105), 15.8 kernel tests (PR #106), 15.3 parts A (PR #107), B (PR #108, landed via #109) and C (PR #111), the layer-undo and Prism-finger fixes (PR #110).
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105), 15.8 kernel tests (PR #106), 15.3 parts A (PR #107), B (PR #108, landed via #109), C (PR #111) and D (PR #112), the layer-undo and Prism-finger fixes (PR #110).
 2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
-3. **Background, now (decided 2026-10-04: finish before piling more on):** 15.8 done; 15.3 in four PRs (A render loop, HUDs, zoom; B perform and capture; C transport, commands, MIDI, Tune A4, track panel; D the layout template with 15.4), then the rest of 15.4.
+3. **Background, now (decided 2026-10-04: finish before piling more on):** 15.8 and 15.3 done (15.3 in four PRs: A render loop, HUDs, zoom; B perform and capture; C transport, commands, MIDI, Tune A4, track panel; D the layout template with 15.4); next, the rest of 15.4.
 
 ---
 
@@ -105,7 +105,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
   - *Behaviour changes in part 2:*
     - Alt+left while performing pans, instead of panning and sounding a note at once.
     - Alt+left on the Parameters Graph now pans too, like the staff.
-- [ ] **15.3 Break up `main.ts`** *(L; keyboard map done in PR #77)*
+- [x] **15.3 Break up `main.ts`** *(L; keyboard map done in PR #77; the rest in four PRs, #107–#112)*
   - **Layout:** move the HTML template into components (15.4).
   - **Keyboard map:** turn it into a **command registry**, one table of named commands with their bindings. Buttons, menus, the context menu and the help.html shortcut table all read from it.
     - **Done (PR #77):**
@@ -140,6 +140,13 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - `perform/midi.ts` (`createMidiPerformance`): live MIDI input, the device list for Settings, the arm prompt. The held-keys set is made in `main.ts` and shared with the performer.
     - `ui/tuning-actions.ts` (the Tuning drawer's actions, keeping the audio's A4 in step), `ui/track-actions.ts` (the track list's actions, "+ Track" and "+ Tone"; `addTrackWithPickedTone` is shared with MIDI's arm-new flow, which duplicated it).
     - Still in `main.ts` for PR D: the layout template, modes and tools (`selectTool`, `setPerformMode`, `chooseTool`), audition, the interaction callbacks, panning, the frame loop and the store bindings.
+  - **PR D (PR #112):** `main.ts` 1,266 → 347 lines, a bootstrap: it makes the pieces, hands each the others it needs, renders the layout and starts the frame loop.
+    - `ui/layout.tsx`: the HTML template as Preact components. `App` is rendered twice: first the shell, so the canvases and HUD hosts exist before the engines that draw on them; then with the panels, once the commands and actions exist. The shape is the same both times, so Preact keeps the canvases. The panels that were rendered into hosts one by one (top bar, tool strip, the four drawers, the side panel, Settings) are now part of the tree. The menus' lists moved there too.
+    - The drawer rail (`ui/drawer.ts`) is the `Drawers` component; the collapsible side-panel sections are `PanelSection` (`ui/panel-section.tsx`), still remembered between visits. The Prism drawer's Voicing header, which the old code also made collapsible, uses it too. "+ Track" and "+ Tone" are buttons in the layout (`newTone` in `ui/track-actions.ts`).
+    - `app/`: `frame-loop.ts` (the tick, the redraw when needed, and the HUDs over the canvas), `modes.ts` (tools, Perform, scroll during playback), `audition.ts` (hold A, the ruler scrub), `metronome.ts` (ticks and the flash). The engine's store watches (composition, Loop, play range) moved into the transport controller.
+    - `canvas/`: `stage.ts` (canvas sizing, the opening view, the pan bound from the composition), `pan-zoom.ts`, `canvas-input.ts` (the input routers, a redraw on input, the right-click menu). `ui/drawer-actions.ts` (Tempo and Snap), `ui/form-focus.ts` (controls let go of focus once they commit).
+    - `utils/svg-helpers.ts` is gone: nothing used `setIcon` once the rail icons became `Icon`s.
+    - The other two sub-items: "Render loop" is done (PR A and D); "Model edits" was done in PR #77 (the Delete cascade moved to `edit-commands.ts`).
 - [ ] **15.4 Reactive UI chrome** *(L; part 1 in PR #78)*
   - Move panels, drawers, dialogs and menus onto a small reactive component layer. The recommended default is Preact + `@preact/signals`; confirm the choice at the start of this item.
   - The canvas stays imperative.
@@ -152,6 +159,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - Also in this PR, a user request: each drawer is sized to its own controls instead of full height and a shared 240px width. Height is capped at the canvas (then it scrolls); width runs from 200px up to the canvas width.
       - The Prism label column widened so "Voice 1 (root)" no longer runs into its input.
       - The Prism toggles' tooltips come from the command catalog.
+  - **15.3 PR D** moved the page layout itself, the drawer rail and the side panel's sections onto Preact.
   - **Still to migrate (2026-09-27):** the tone builder and tone picker (`ui/tone-builder.ts`, `ui/tone-picker.ts`), the context menu (`ui/context-menu.ts`), the MIDI-arm and preset-save dialogs, and the Perf HUD, which still build DOM by hand or with `innerHTML`. *(16.3 moved the top bar, menus, Settings and the Tempo drawer; 16.4 the tool strip, Snap drawer and Prism panel; 13.8 the Tuning drawer.)*
 - [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2, PR #76)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.

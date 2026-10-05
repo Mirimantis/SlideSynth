@@ -6,9 +6,13 @@
  * the effects do what the change means for audio, capture and the view.
  * Buttons, hotkeys, the count-in, loop wraps, the AFK timer and the playback
  * engine running out all dispatch events rather than setting flags.
+ *
+ * The playback engine also follows the store here: the composition, Loop and
+ * the play range.
  */
 
 import { store } from '../state/store';
+import { watch } from '../state/reactive';
 import { TRANSPORT_STOPPED, transition, isRolling, isCapturing, type TransportEvent } from '../state/transport';
 import type { TransportState } from '../types';
 import { ensureResumed, getAudioContext } from '../audio/engine';
@@ -91,8 +95,8 @@ export function createTransportController(deps: TransportControllerDeps) {
       return;
     }
 
-    // Already rolling: the clock or capture changed. The play-range watch in
-    // main.ts re-opens the range for open-ended plays and recordings.
+    // Already rolling: the clock or capture changed. The play-range watch
+    // below re-opens the range for open-ended plays and recordings.
     if (prev.clock !== next.clock) {
       // Entering Perform opens a running playback's clock: a fresh session, so
       // its idle timer starts now and the next pass opens a new layer.
@@ -242,6 +246,37 @@ export function createTransportController(deps: TransportControllerDeps) {
     }
     transport({ type: 'toggle-pass-record' });
   }
+
+  // Loop on/off (the top-bar button and L, plus Record next Pass forcing it on):
+  // the store owns the flag; the engine follows it here, and the play range
+  // below.
+  watch(() => store.getState().loopEnabled, enabled => playback.setLoop(enabled));
+
+  // Undo / redo / file open replace the composition object outright, so keep the
+  // scheduler pointed at the live one — otherwise every edit after an undo taken
+  // mid-playback would be inaudible until the next play().
+  watch(() => store.getComposition(), comp => {
+    if (playback.isPlaying()) playback.setComposition(comp);
+  });
+
+  // Keep the engine's play range in step with the transport, Loop and the loop
+  // markers, so toggling Loop, dragging a marker, or arming mid-play takes
+  // effect on the next wrap. Loop on: the markers. Loop off: plain Play ends with
+  // the content; Play in Perform and every kind of capture stay open-ended (14.7) — which
+  // is also what re-opens the range when R arms a running playback.
+  watch(
+    () => {
+      const st = store.getState();
+      const t = st.transport;
+      if (!isRolling(t)) return 'idle';
+      const c = st.composition;
+      return [st.loopEnabled, c.loopStartBeats, c.loopEndBeats, getCompositionLength(c), t.clock, t.capture].join('|');
+    },
+    () => {
+      if (!playback.isPlaying()) return;
+      playback.setPlayRange(...playRangeFor(store.getState().transport));
+    },
+  );
 
   return {
     transport,
