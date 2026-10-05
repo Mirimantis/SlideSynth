@@ -17,7 +17,7 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
-1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105), 15.8 kernel tests (PR #106), 15.3 parts A (PR #107) and B (PR #108).
+1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105), 15.8 kernel tests (PR #106), 15.3 parts A (PR #107), B (PR #108, landed via #109) and C (PR #111), the layer-undo and Prism-finger fixes (PR #110).
 2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
 3. **Background, now (decided 2026-10-04: finish before piling more on):** 15.8 done; 15.3 in four PRs (A render loop, HUDs, zoom; B perform and capture; C transport, commands, MIDI, Tune A4, track panel; D the layout template with 15.4), then the rest of 15.4.
 
@@ -134,7 +134,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
     - `gravity.ts`: cursor → pitch under Snap and Gravity, the magnetic clock, haptic steps. `capture.ts`: layers, the pass log, committing, Keep and Drop last pass. `voices.ts`: the Prism voice ids (pure).
     - Three references that reached into the moved state became calls: `fingerCount()`, `releaseAllFingers(commit)`, `forgetTrack(trackId)`. Keep and Drop in the command table are wrapped (`() => keepLastPhrase()`), since the performer is made after the table.
     - The frame loop stays in `main.ts`: what it calls is now the performer's ticks.
-  - **PR C (built 2026-10-04):** `main.ts` 2,050 → 1,266 lines.
+  - **PR C (PR #111):** `main.ts` 2,050 → 1,266 lines.
     - `app/transport-controller.ts` (`createTransportController`): `transport(event)` and its effects, the play range, Play / Space, Record and Record next Pass, and `playEngineFrom` (a ruler scrub's resume). `transport` is now made after the performer, which gets a forwarding arrow.
     - `commands/app-commands.ts` (`createAppCommands`): every command's handler beside the edit commands, with the helpers only they use (Escape's back-out, projection, composition edges, paste beat, replacing the composition). `applyLoopEnabled` was a plain store call; it's gone.
     - `perform/midi.ts` (`createMidiPerformance`): live MIDI input, the device list for Settings, the arm prompt. The held-keys set is made in `main.ts` and shared with the performer.
