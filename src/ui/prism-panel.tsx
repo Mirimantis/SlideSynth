@@ -15,6 +15,7 @@ import {
   type NumVoices,
 } from '../utils/harmonics';
 import { isTwelveEdo, resolveTuning } from '../tuning/tuning';
+import { PanelSection } from './panel-section';
 
 /**
  * The Harmonic Prism drawer: Draw and Projection switches, the chord spec and
@@ -124,10 +125,11 @@ export function PrismPanel() {
           }}
         />
       </Row>}
-      <div class="panel-header" style="margin-top:8px">Voicing</div>
-      {Array.from({ length: spec.numVoices }, (_, i) => (
-        <VoiceOctave key={i} index={i} offsets={spec.voiceOctaveOffsets} />
-      ))}
+      <PanelSection title="Voicing" headerStyle="margin-top:8px">
+        {Array.from({ length: spec.numVoices }, (_, i) => (
+          <VoiceOctave key={i} index={i} offsets={spec.voiceOctaveOffsets} />
+        ))}
+      </PanelSection>
     </>
   );
 }

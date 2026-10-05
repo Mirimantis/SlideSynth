@@ -1,8 +1,8 @@
 /**
  * What the track list's controls do (the list itself is ui/track-list.tsx),
- * and the "+ Track" and "+ Tone" buttons (split out of main.ts in 15.3).
- * Each action looks its track up by id when it runs: an undo swaps in new
- * objects.
+ * and what the "+ Track" and "+ Tone" buttons under it do (split out of
+ * main.ts in 15.3). Each action looks its track up by id when it runs: an
+ * undo swaps in new objects.
  */
 
 import { store } from '../state/store';
@@ -117,14 +117,10 @@ export function createTrackListActions(deps: { interaction: Interaction; perform
   };
 }
 
-/** The "+ Track" and "+ Tone" buttons under the track list. */
-export function installTrackButtons(addTrackBtn: HTMLElement, newToneBtn: HTMLElement): void {
-  addTrackBtn.addEventListener('click', () => { void addTrackWithPickedTone(addTrackBtn); });
-  newToneBtn.addEventListener('click', async () => {
-    const result = await openToneBuilder();
-    if (result.action === 'save') {
-      history.snapshot();
-      store.mutate(c => { c.toneLibrary.push(result.tone); });
-    }
-  });
+/** "+ Tone": build a new tone and add it to the library, as one undo step. */
+export async function newTone(): Promise<void> {
+  const result = await openToneBuilder();
+  if (result.action !== 'save') return;
+  history.snapshot();
+  store.mutate(c => { c.toneLibrary.push(result.tone); });
 }

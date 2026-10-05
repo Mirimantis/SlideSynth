@@ -68,9 +68,11 @@ describe('Harmonic Prism drawer (BACKLOG 16.4)', () => {
     expect(html).toMatch(/<option value="per-note">Per note \(19-EDO\)</);
   });
 
-  it('has one octave row per voice', () => {
+  it('has one octave row per voice, under a Voicing header that collapses them', () => {
     store.setPrismChordSpec({ numVoices: 4 });
-    expect(renderToString(<PrismPanel />).match(/class="prism-voice-oct"/g)).toHaveLength(4);
+    const html = renderToString(<PrismPanel />);
+    expect(html.match(/class="prism-voice-oct"/g)).toHaveLength(4);
+    expect(html).toMatch(/<div class="panel-header" style="margin-top:8px">Voicing<\/div><div>(.(?!panel-header))*prism-voice-oct/s);
   });
 });
 

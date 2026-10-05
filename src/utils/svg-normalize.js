@@ -4,11 +4,11 @@
  * Turns a raw SVG exported from ANY tool (Graphite, Inkscape, Illustrator, …)
  * into a shape-only icon that obeys the project's coloring contract: geometry
  * is preserved, but every baked-in color is rewritten to `currentColor` so the
- * UI can drive it from CSS. See src/utils/svg-helpers.ts for that contract.
+ * UI can drive it from CSS. See src/ui/icon.tsx for that contract.
  *
  * It is the single source of truth for cleanup, shared by:
  *   - scripts/normalize-icons.mjs  (batch-rewrites committed files: `npm run icons`)
- *   - src/utils/svg-helpers.ts     (runtime safety net at injection time)
+ *   - src/ui/icon.tsx              (runtime safety net at render time)
  *
  * Plain ESM JS (no TS syntax) so Node can import it directly; types live in the
  * sibling svg-normalize.d.ts. The transform is idempotent — running it on
