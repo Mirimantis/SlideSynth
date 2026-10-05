@@ -69,6 +69,9 @@ export interface PerformanceEngine {
    *  Time-based eviction ages the buffer out instead; clearAllPhrases() handles the hard
    *  resets (composition load). */
   startSession(now: number): void;
+  /** The next commit starts a new undo step, as at a session start. Layer
+   *  mode calls it at each loop wrap, so each pass undoes on its own. */
+  newUndoStep(): void;
   /** Full teardown: close open phrases, drop lmbDown, reset session flags. Called on stop.
    *  Retained phrases survive so "keep that" still works just after stopping. */
   stopSession(): void;
@@ -257,6 +260,10 @@ export function createPerformanceEngine(config: PerformanceEngineConfig): Perfor
       sessionHistorySnapshotted = false;
       lastTickBeat = null;
       lastActivityAt = now;
+    },
+
+    newUndoStep() {
+      sessionHistorySnapshotted = false;
     },
 
     stopSession() {
