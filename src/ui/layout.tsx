@@ -195,18 +195,20 @@ export function Drawers({ drawers, tools }: { drawers: readonly DrawerSpec[]; to
       if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
       setOpenId(null);
     };
-    // mousedown comes before the rail icon's click, so presses on the rail or
-    // in a drawer are left alone and the icon still toggles.
-    const onPress = (e: MouseEvent) => {
+    // pointerdown comes before the rail icon's click, so presses on the rail or
+    // in a drawer are left alone and the icon still toggles. (Not mousedown:
+    // the canvas's input router cancels its presses' pointerdown, so no
+    // mousedown follows a press on the canvas.)
+    const onPress = (e: PointerEvent) => {
       const t = e.target as Node | null;
       if (t && (railRef.current?.contains(t) || hostRef.current?.contains(t))) return;
       setOpenId(null);
     };
     document.addEventListener('keydown', onKey);
-    document.addEventListener('mousedown', onPress);
+    document.addEventListener('pointerdown', onPress, true);
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.removeEventListener('mousedown', onPress);
+      document.removeEventListener('pointerdown', onPress, true);
     };
   }, [openId]);
 

@@ -170,6 +170,7 @@ The target is written up in [DESIGN.md › Target architecture](DESIGN.md#target
       - A tone name with quotes or angle brackets broke the tone builder's Name field; names are now always text. (Track names in the MIDI-arm dialog were already escaped by hand.)
       - Editing a tone while its preview played re-enabled Preview and disabled Stop, though the preview kept sounding. The buttons now follow the preview, and closing the builder always stops it.
       - The tone picker left a key listener behind after a pick; opening a second picker left the first one's answer pending forever (it now answers "cancelled").
+      - *Found in testing:* a press on the canvas didn't close the right-click menu or an open drawer, only a press on the panels did (since 15.2: the input router cancels a canvas press's `pointerdown`, so no `mousedown` follows, and both listened for `mousedown`). Both now close on `pointerdown`. A click on a greyed-out menu item closes the menu too.
 - [x] **15.5 Read-only render loop + foreground dirty flag** *(M — absorbs 9.2, PR #76)*
   - The render loop currently attaches volume lanes, pins the trailing volume point during drawing, and clears a deleted Prism projection source. Move all of that into the mutation paths.
   - Add an `fgDirty` flag mirroring `bgDirty`, and cache each curve's tessellation as a `Path2D` keyed by curve identity. Idle CPU should then drop to near zero.

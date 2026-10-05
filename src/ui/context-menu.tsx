@@ -3,7 +3,8 @@ import { showDialog } from './dialog-host';
 
 /**
  * The canvas's right-click menu (BACKLOG 15.4: a Preact component since
- * then). A press outside it, Escape, resizing or leaving the window closes it.
+ * then). A press outside it or on a greyed-out item, Escape, resizing or
+ * leaving the window closes it.
  */
 
 export interface ContextMenuItem {
@@ -23,7 +24,7 @@ export function closeContextMenu(): void {
 
 /**
  * Open a context menu at the given page coordinates with the given items.
- * Disabled items don't respond to clicks. Any existing menu is closed first.
+ * Disabled items only close it. Any existing menu is closed first.
  */
 export function openContextMenu(pageX: number, pageY: number, items: readonly ContextMenuItem[]): void {
   closeContextMenu();
@@ -52,7 +53,7 @@ export function ContextMenu({ x, y, items, onClose }: {
   }, []);
 
   useEffect(() => {
-    const onDocMouseDown = (e: MouseEvent) => {
+    const onDocPointerDown = (e: PointerEvent) => {
       if (!menu.current?.contains(e.target as Node)) onClose();
     };
     const onKeyDown = (e: KeyboardEvent) => {
@@ -61,13 +62,14 @@ export function ContextMenu({ x, y, items, onClose }: {
         onClose();
       }
     };
-    // mousedown before the global handler can steal focus / start a drag.
-    document.addEventListener('mousedown', onDocMouseDown, true);
+    // pointerdown, in the capture phase: the canvas's input router cancels its
+    // presses' pointerdown, so no mousedown ever follows a press on the canvas.
+    document.addEventListener('pointerdown', onDocPointerDown, true);
     document.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('resize', onClose);
     window.addEventListener('blur', onClose);
     return () => {
-      document.removeEventListener('mousedown', onDocMouseDown, true);
+      document.removeEventListener('pointerdown', onDocPointerDown, true);
       document.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('resize', onClose);
       window.removeEventListener('blur', onClose);
@@ -80,11 +82,12 @@ export function ContextMenu({ x, y, items, onClose }: {
         <div
           key={item.label}
           class={`context-menu-item${item.disabled ? ' disabled' : ''}`}
-          onMouseDown={item.disabled ? undefined : e => {
+          onMouseDown={e => {
             e.preventDefault();
             e.stopPropagation();
             onClose();
-            item.onClick();
+            // A greyed-out item just closes the menu.
+            if (!item.disabled) item.onClick();
           }}
         >
           <span class="context-menu-label">{item.label}</span>
