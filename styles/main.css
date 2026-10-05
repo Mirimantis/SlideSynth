@@ -1299,3 +1299,22 @@ body.perform-mode #canvas-container::after {
   50% { opacity: 0.45; }
 }
 
+
+/* Toast (ui/toast.tsx): a short message at the bottom centre. */
+.slidesynth-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  background: var(--toast-bg);
+  color: var(--toast-text);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font: 13px/1.4 system-ui, sans-serif;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.5);
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.slidesynth-toast.visible { opacity: 1; }

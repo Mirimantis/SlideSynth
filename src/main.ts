@@ -39,6 +39,7 @@ import { createMidiPerformance } from './perform/midi';
 import { createAppCommands } from './commands/app-commands';
 import { createCommandRegistry } from './commands/registry';
 import { App } from './ui/layout';
+import { createCanvasHuds } from './ui/canvas-huds';
 import { createZoomSliders } from './ui/zoom-sliders';
 import { installParamGraphResize } from './ui/param-graph-resize';
 import { installTouchGuards } from './ui/touch-guard';
@@ -56,7 +57,9 @@ loadTheme();
 // The shell first, so the canvases exist; the panels come in once the
 // commands and actions they use are made (the second render, below).
 const appEl = document.getElementById('app')!;
-render(h(App, { parts: null }), appEl);
+/** What the HUDs over the canvas show: the frame loop sets it. */
+const huds = createCanvasHuds();
+render(h(App, { huds, parts: null }), appEl);
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 // ── Canvases and the view ───────────────────────────────────────
@@ -257,13 +260,7 @@ const frameLoop = createFrameLoop({
   effectiveScrollCanvas,
   syncAudition: audition.sync,
   metronomeFlash: metronome.flash,
-  huds: {
-    pitch: byId('pitch-hud'),
-    perf: byId('perf-hud'),
-    countdown: byId('countdown-overlay'),
-    afkWarning: byId('afk-warning'),
-    afkCountdown: byId('afk-warning-countdown'),
-  },
+  huds,
 });
 
 // ── Store → app bindings (BACKLOG 15.1) ─────────────────────────
@@ -292,6 +289,7 @@ history.subscribe(() => {
 
 // ── The panels (the layout's second render) ─────────────────────
 render(h(App, {
+  huds,
   parts: {
     commands, canUndo, canRedo,
     keepable: frameLoop.keepable,

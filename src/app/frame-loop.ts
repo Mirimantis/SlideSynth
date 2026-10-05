@@ -22,7 +22,7 @@
 
 import { signal, type ReadonlySignal } from '@preact/signals-core';
 import { store } from '../state/store';
-import { effect, watch } from '../state/reactive';
+import { effect } from '../state/reactive';
 import { isRecordArmed } from '../state/transport';
 import type { AppState } from '../types';
 import { MAX_CANVAS_EXTENT, SCROLL_BUFFER } from '../constants';
@@ -37,9 +37,10 @@ import type { Scene } from '../canvas/scene';
 import { scrollViewportToBeat } from '../canvas/scrolling-play';
 import { METRONOME_FLASH_DURATION_MS, LOOP_WRAP_FLASH_MS, PULSE_DURATION_MS } from '../canvas/planchette';
 import type { Performer } from '../perform/performer';
-import { createPitchHud } from '../ui/pitch-hud';
-import { createPerfHud } from '../ui/perf-hud';
-import { createSessionOverlays } from '../ui/session-overlays';
+import { pitchReadout } from '../ui/pitch-hud';
+import { perfReadout } from '../ui/perf-hud';
+import { countdownLabel, afkLabel } from '../ui/session-overlays';
+import { setReadout, type CanvasHuds } from '../ui/canvas-huds';
 import { createFrameTimes } from '../ui/frame-times';
 import type { MetronomeFlash } from './metronome';
 import { requestRedraw, redrawPending, clearRedrawRequest, markBgDirty } from './redraw';
@@ -56,27 +57,15 @@ export interface FrameLoopDeps {
   /** Keep a held A's audition in step with what it's over. */
   syncAudition(): void;
   metronomeFlash(): MetronomeFlash;
-  /** The HUD hosts over the canvas. */
-  huds: {
-    pitch: HTMLElement;
-    perf: HTMLElement;
-    countdown: HTMLElement;
-    afkWarning: HTMLElement;
-    afkCountdown: HTMLElement;
-  };
+  /** What the HUDs over the canvas show. */
+  huds: CanvasHuds;
 }
 
 export function createFrameLoop(deps: FrameLoopDeps) {
   const { scene, performer, dynamics, playback, viewport, canvasContainer, interaction } = deps;
   const composeEngine = performer.engine;
 
-  const pitchHud = createPitchHud(deps.huds.pitch);
-  const perfHud = createPerfHud(deps.huds.perf);
-  watch(() => store.getState().perfHudVisible, v => perfHud.setVisible(v));
-  const sessionOverlays = createSessionOverlays(
-    { countdown: deps.huds.countdown, afkWarning: deps.huds.afkWarning, afkCountdown: deps.huds.afkCountdown },
-    { engine: composeEngine, isPlaying: () => playback.isPlaying() },
-  );
+  const { huds } = deps;
   const frameTimes = createFrameTimes();
 
   /** Phrases the rolling buffer can keep, for the Keep button (BACKLOG 10.2).
@@ -112,15 +101,15 @@ export function createFrameLoop(deps: FrameLoopDeps) {
       // Dynamics is shown whenever a live source is driving the bus, held or not,
       // so the player can see where the swell rests before they lean on it.
       const dyn = dynamics.isDriven() ? dynamics.getValue('primary') : null;
-      pitchHud.show(state, planchette.snappedWorldY, planchette.cursorWorldY, dyn);
+      setReadout(huds.pitch, pitchReadout(state, planchette.snappedWorldY, planchette.cursorWorldY, dyn));
     } else {
-      pitchHud.hide();
+      huds.pitch.value = null;
     }
   }
 
   function updatePerfHud(state: AppState) {
     if (!state.perfHudVisible) return;
-    perfHud.refresh({
+    setReadout(huds.perf, perfReadout({
       frameMsP50: frameTimes.percentile(0.5),
       frameMsP99: frameTimes.percentile(0.99),
       synthCount: getActiveSynthCount(),
@@ -128,7 +117,7 @@ export function createFrameLoop(deps: FrameLoopDeps) {
       voiceCount: state.performance.planchettes.length,
       audioBaseLatencyMs: getAudioContext().baseLatency * 1000,
       liveVoiceMode: liveVoiceMode(),
-    });
+    }));
   }
 
   function frame() {
@@ -154,7 +143,8 @@ export function createFrameLoop(deps: FrameLoopDeps) {
       // Compose UI affordances that follow the same state the canvas draws.
       toolsLocked.value = composeEngine.isLmbDown();
       updatePitchHud(state);
-      sessionOverlays.update(state);
+      huds.countdown.value = countdownLabel(state, composeEngine, getAudioContext().currentTime);
+      huds.afk.value = afkLabel(state, composeEngine, playback.isPlaying(), performance.now());
       scene.draw();
     }
     wasAnimating = animating;

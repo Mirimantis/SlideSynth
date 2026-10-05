@@ -17,6 +17,8 @@ import { PropertyPanel } from './property-panel';
 import { ToolPropertyPanel } from './tool-property-panel';
 import { TrackList, type TrackListActions } from './track-list';
 import { PanelSection } from './panel-section';
+import { CanvasHudLayer, type CanvasHuds } from './canvas-huds';
+import { Toast } from './toast';
 import { SettingsDialog, type MidiSettings } from './settings-dialog';
 import { addTrackWithPickedTone, newTone } from './track-actions';
 import iconTempo from '../assets/icons/tempo.svg?raw';
@@ -30,7 +32,7 @@ import iconTuning from '../assets/icons/tuning.svg?raw';
  * Graph; and the side panel. It replaces main.ts's HTML template.
  *
  * main.ts renders it twice. First without `parts`: the shell, so the canvases
- * and the HUD hosts exist before the engines that draw on them are made. Then
+ * exist before the engines that draw on them are made. Then
  * with them, once the commands and actions exist, which adds the panels.
  * The tree's shape is the same both times, so Preact keeps the canvases and
  * the hosts that main.ts holds; App itself reads no signals, so it never
@@ -81,7 +83,11 @@ export interface AppParts {
   midi: MidiSettings;
 }
 
-export function App({ parts }: { parts: AppParts | null }) {
+export function App({ huds, parts }: {
+  /** What sits over the canvas; the frame loop sets it. */
+  huds: CanvasHuds;
+  parts: AppParts | null;
+}) {
   return (
     <>
       <div id="toolbar">
@@ -100,7 +106,7 @@ export function App({ parts }: { parts: AppParts | null }) {
           ]}
           tools={parts && <ToolStrip commands={parts.commands} locked={parts.toolsLocked} />}
         />
-        <Stage />
+        <Stage huds={huds} />
         <div id="property-panel">
           <PanelSection title="Tool" id="tool-prop-content">
             {parts && <ToolPropertyPanel />}
@@ -120,6 +126,7 @@ export function App({ parts }: { parts: AppParts | null }) {
         </div>
       </div>
       {parts && <SettingsDialog open={parts.settingsOpen} midi={parts.midi} />}
+      <Toast />
     </>
   );
 }
@@ -127,29 +134,17 @@ export function App({ parts }: { parts: AppParts | null }) {
 /**
  * The canvas and what sits on it (HUDs, the count-in, the idle warning), the
  * zoom sliders along its edges like scrollbars, never over it (13.32: pitch
- * down the right side, time along the bottom), and the Parameters Graph. All
- * driven imperatively: main.ts finds them by id.
+ * down the right side, time along the bottom), and the Parameters Graph. The
+ * canvases and sliders are driven imperatively: main.ts finds them by id.
  */
-function Stage() {
+function Stage({ huds }: { huds: CanvasHuds }) {
   return (
     <div id="center-stack">
       <div id="canvas-row">
         <div id="canvas-container">
           <canvas id="bg-canvas"></canvas>
           <canvas id="fg-canvas"></canvas>
-          <div id="pitch-hud" hidden></div>
-          <div id="perf-hud" hidden></div>
-          <div id="countdown-overlay" hidden></div>
-          <div id="afk-warning" hidden>
-            <div class="afk-warning-title">Idle. Recording will pause in</div>
-            <div class="afk-warning-countdown" id="afk-warning-countdown">0</div>
-            <div class="afk-warning-hints">
-              play something to continue recording.<br />
-              Space or Esc to stop recording.<br />
-              PgUp / PgDown to first / last curve.<br />
-              Home to recenter on playhead.
-            </div>
-          </div>
+          <CanvasHudLayer huds={huds} />
         </div>
         <div id="zoom-y-gutter" class="zoom-gutter">
           {/* No value here: the zoom sliders own it (ui/zoom-sliders.ts), and a
