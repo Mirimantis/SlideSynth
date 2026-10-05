@@ -1,12 +1,16 @@
 import { createViewport } from './canvas/viewport';
 import { createParamViewport } from './canvas/param-viewport';
 import { createParamInteraction } from './canvas/param-interaction';
-import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, OPEN_END_BEAT, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN, CENTS_PER_SEMITONE, midiToCents, setReferenceAHz, centsToReferenceAHz, referenceAHzToCents } from './constants';
+import { MIN_CANVAS_EXTENT, MAX_CANVAS_EXTENT, SCROLL_BUFFER, MIN_ZOOM_Y, MAX_ZOOM_Y, MIN_PITCH_CENTS, MAX_PITCH_CENTS, Y_PAN_MARGIN } from './constants';
 import { scrollViewportToBeat } from './canvas/scrolling-play';
-import { canFullscreen, fullscreenOn, toggleFullscreen } from './ui/fullscreen';
 import { markBgDirty, requestRedraw, redrawPending, clearRedrawRequest } from './app/redraw';
 import { createScene } from './canvas/scene';
 import { createPerformer } from './perform/performer';
+import { createMidiPerformance } from './perform/midi';
+import { createTransportController } from './app/transport-controller';
+import { createAppCommands } from './commands/app-commands';
+import { createTuningActions, syncTuningToAudio, CIRCLE_AUDITION_VOICE } from './ui/tuning-actions';
+import { createTrackListActions, installTrackButtons } from './ui/track-actions';
 import { createPitchHud } from './ui/pitch-hud';
 import { createSessionOverlays } from './ui/session-overlays';
 import { createFrameTimes } from './ui/frame-times';
@@ -19,7 +23,6 @@ import { createPreviewManager } from './audio/preview';
 import { openContextMenu, type ContextMenuItem } from './ui/context-menu';
 import { createPlaybackEngine } from './audio/playback';
 import { createMetronome } from './audio/metronome';
-import { createMidiInput } from './audio/midi-input';
 import { createDynamicsBus } from './audio/dynamics-bus';
 import { METRONOME_FLASH_DURATION_MS, LOOP_WRAP_FLASH_MS, PULSE_DURATION_MS, RAIL_SCREEN_X_RATIO } from './canvas/planchette';
 import { h, render } from 'preact';
@@ -27,39 +30,28 @@ import { signal } from '@preact/signals-core';
 import { loadTheme } from './theme/theme';
 import { PropertyPanel } from './ui/property-panel';
 import { ToolPropertyPanel } from './ui/tool-property-panel';
-import { TrackList, type TrackListActions } from './ui/track-list';
-import { openToneBuilder } from './ui/tone-builder';
-import { openTonePicker } from './ui/tone-picker';
+import { TrackList } from './ui/track-list';
 import { openPresetSaveDialog } from './ui/preset-save-dialog';
-import { openMidiArmDialog } from './ui/midi-arm-dialog';
 import { createPerfHud } from './ui/perf-hud';
 import { TopBar } from './ui/top-bar';
 import type { MenuSpec } from './ui/menu';
-import { SettingsDialog, type MidiDeviceInfo } from './ui/settings-dialog';
+import { SettingsDialog } from './ui/settings-dialog';
 import { TempoPanel, type TempoActions } from './ui/tempo-panel';
 import { liveVoiceMode } from './audio/live-voice';
 import { getActiveSynthCount, getActiveOscillatorCount } from './audio/tone-synth';
-import { serializeComposition, deserializeComposition, downloadFile, openFile, openBinaryFile, openTextFile, FileTooLargeError } from './export/json-export';
-import { MAX_SCL_BYTES, SclError, parseScl, toScl } from './tuning/scl';
-import { MAX_SCALE_FRETS } from './tuning/frets-scale';
-import { midiToComposition } from './export/midi-import';
-import { exportWav } from './export/wav-export';
 import { store } from './state/store';
 import { history } from './state/history';
-import { createTrack } from './model/track';
 import { getCompositionLength } from './model/composition';
-import { pitchPoints } from './model/curve';
 import { showToast } from './ui/toast';
 import { commandSpec, primaryShortcut, type CommandId } from './commands/catalog';
 import { createCommandRegistry } from './commands/registry';
-import { createEditCommands } from './commands/edit-commands';
 import { ToolStrip } from './ui/tool-strip';
 import { SnapPanel, type SnapActions } from './ui/snap-panel';
 import { PrismPanel } from './ui/prism-panel';
-import { TuningPanel, type TuningActions } from './ui/tuning-panel';
+import { TuningPanel } from './ui/tuning-panel';
 import { nearestNote, resolveTuning, staffGridFor, tuningKey } from './tuning/tuning';
 import { fretLinePitch } from './model/frets';
-import { ensureResumed, getAudioContext, getMasterGain } from './audio/engine';
+import { getAudioContext, getMasterGain } from './audio/engine';
 import { createDrawerRail } from './ui/drawer';
 import { setIcon } from './utils/svg-helpers';
 import iconTempo from './assets/icons/tempo.svg?raw';
@@ -68,8 +60,8 @@ import iconPrism from './assets/icons/prism.svg?raw';
 import iconTuning from './assets/icons/tuning.svg?raw';
 import { effectiveScrollCanvas as effectiveScrollCanvasFor, isPerformInputActive } from './state/perform-mode';
 import { effect, watch } from './state/reactive';
-import type { AppState, Composition, ToolMode, BezierCurve, TransportState } from './types';
-import { TRANSPORT_STOPPED, transition, type TransportEvent, isRolling, isRecordArmed, isCapturing, forcesScrollView } from './state/transport';
+import type { AppState, ToolMode, BezierCurve } from './types';
+import { isRolling, isRecordArmed, forcesScrollView } from './state/transport';
 
 // ── Theme (BACKLOG 16.7) ────────────────────────────────────────
 // The canvas draws with the same tokens as the stylesheets (styles/theme.css).
@@ -270,8 +262,6 @@ window.addEventListener('blur', () => dynamics.setSwellHeld(false));
 let auditionHeld = false;
 /** Voice for a dragged fret's pitch — separate from the Draw voices. */
 const GUIDE_AUDITION_VOICE = 'guide-audition';
-/** Voice for a pitch-circle degree held down in the Tuning drawer (13.8 (c)). */
-const CIRCLE_AUDITION_VOICE = 'circle-audition';
 
 function activeTone() {
   const st = store.getState();
@@ -343,13 +333,11 @@ function syncAudition() {
   }
 }
 
-/** Space: pause playback (a recording stops instead), cancel a count-in, or
- *  start playing. */
-function playPause() {
-  const t = store.getState().transport;
-  if (isRolling(t)) transport({ type: 'pause' });
-  else if (t.mode === 'countdown') transport({ type: 'escape' });
-  else play();
+/** Centre the view on a beat. */
+function scrollToBeat(beat: number) {
+  const r = canvasContainer.getBoundingClientRect();
+  scrollViewportToBeat(viewport, beat, r.width, r.height);
+  markBgDirty();
 }
 
 // ── Interaction ─────────────────────────────────────────────────
@@ -393,7 +381,7 @@ const interaction = createInteraction(fgCanvas, viewport, {
       }
       // Resume through the same range logic as Play, so a scrub during
       // looped playback keeps looping.
-      if (scrubWasPlaying) playEngineFrom(store.getState().transport, beats);
+      if (scrubWasPlaying) transportController.playEngineFrom(store.getState().transport, beats);
     }
   },
   onCursorMove(worldX, worldY, _screenY) {
@@ -435,7 +423,7 @@ const playback = createPlaybackEngine((beats) => {
   // The engine ran out of range (end of content, Loop off): end the session.
   // Ignored while a transport change is being applied — starting or stopping
   // the engine reports positions too, and those aren't the engine running out.
-  if (!applyingTransport && !playback.isPlaying() && isRolling(store.getState().transport)) {
+  if (!transportController.isApplying() && !playback.isPlaying() && isRolling(store.getState().transport)) {
     transport({ type: 'stop' });
   }
 });
@@ -560,276 +548,16 @@ const tempoActions: TempoActions = {
   },
 };
 
-// ── Tune A4 (BACKLOG 8.27) ──────────────────────────────────────
-// Pitch-shifts the entire staff by changing the reference frequency for A4.
-// Persisted as cents-offset relative to A=440 in the composition; the audio
-// module's `currentReferenceAHz` is the runtime source of truth that
-// noteToFrequency reads (sync via syncTuningToAudio below).
-/** Push the composition's tuningOffsetCents into the audio module. Runs on
- *  startup, composition load, undo / redo and edits (the watch below); the
- *  Tuning drawer shows it from the store. */
-function syncTuningToAudio() {
-  setReferenceAHz(centsToReferenceAHz(store.getComposition().tuningOffsetCents));
-  // Pitch HUD reads frequency on render — mark dirty so any open HUD reflects
-  // the new tuning on the next frame.
-  markBgDirty();
-}
-watch(() => store.getComposition().tuningOffsetCents, () => syncTuningToAudio());
+// ── Tune A4 (BACKLOG 8.27) and the Tuning drawer (13.8) ─────────
+syncTuningToAudio();
+const tuningActions = createTuningActions({ preview, activeTone });
 
-/** The Tuning drawer's edits (BACKLOG 13.8): each is one undo step. */
-const tuningActions: TuningActions = {
-  setTuning(ref) { history.snapshot(); store.setTuning(ref); },
-  setRoot(degree) { history.snapshot(); store.setRoot(degree); },
-  setScale(scaleId) { history.snapshot(); store.setScaleId(scaleId); },
-  toggleScaleDegree(degree) { history.snapshot(); store.toggleScaleDegree(degree); },
-  audition(cents) {
-    // The pitch circle's press-to-hear (13.8 (c)). Nothing sounds while a
-    // recording is armed: the take owns the audio.
-    const tone = activeTone();
-    if (cents === null || !tone || isRecordArmed(store.getState().transport)) {
-      if (preview.isDrawPreviewActive(CIRCLE_AUDITION_VOICE)) preview.stopDrawPreview(CIRCLE_AUDITION_VOICE);
-      return;
-    }
-    if (preview.isDrawPreviewActive(CIRCLE_AUDITION_VOICE)) preview.updateDrawPitch(cents, CIRCLE_AUDITION_VOICE);
-    else preview.startDrawPreview(tone, cents, CIRCLE_AUDITION_VOICE);
-  },
-  setTunedFrom(pc) { history.snapshot(); store.setTunedFrom(pc); },
-  setPitchLinesVisible(visible) { history.snapshot(); store.setPitchLinesVisible(visible); },
-  setFretsVisible(visible) { store.setFretsVisible(visible); markBgDirty(); },
-  setReferenceLines(visible) { history.snapshot(); store.setReferenceLines(visible); },
-  async importScl() {
-    let file: { name: string; text: string };
-    try {
-      file = await openTextFile('.scl', MAX_SCL_BYTES);
-    } catch (e) {
-      if (e instanceof FileTooLargeError) showToast('That file is too large to be a .scl tuning.', 4000);
-      return;
-    }
-    try {
-      const ref = parseScl(file.text, file.name);
-      history.snapshot();
-      store.importTuning(ref);
-      showToast(`Imported ${ref.name}: ${ref.degrees.length} notes.`);
-    } catch (e) {
-      if (!(e instanceof SclError)) throw e;
-      showToast(`Couldn't read ${file.name}: ${e.message}.`, 5000);
-    }
-  },
-  exportScl() {
-    const { text, fileName } = toScl(store.getState());
-    downloadFile(text, fileName, 'text/plain');
-  },
-  scaleToFrets() {
-    history.snapshot();
-    const added = store.addScaleFrets();
-    if (added === null) {
-      history.dropLastSnapshot();
-      showToast(`That's too many notes for frets (${MAX_SCALE_FRETS} at most). Choose a scale first.`, 4000);
-    } else if (added === 0) {
-      history.dropLastSnapshot();
-      showToast('Every note of the scale already has an octave fret.');
-    } else {
-      showToast(`${added} octave frets added, and pitch lines turned off: the frets are the grid now. Drag them to tune by ear (hold A to hear).`, 5000);
-    }
-    markBgDirty();
-  },
-  fretsToScale() {
-    history.snapshot();
-    const result = store.applyFretsAsScale();
-    if (!result) {
-      history.dropLastSnapshot();
-      showToast('There are no octave frets to make a scale from.');
-      return;
-    }
-    showToast(result.kind === 'tuning'
-      ? `The octave frets are now a tuning of their own, "From frets": not all of them were on the tuning's notes.`
-      : 'The octave frets are now the scale.', 5000);
-    markBgDirty();
-  },
-  setReferenceHz(hz) {
-    const cents = referenceAHzToCents(hz);
-    if (Math.abs(cents - store.getComposition().tuningOffsetCents) < 1e-6) return;
-    history.snapshot();
-    store.setTuningOffsetCents(cents);
-  },
-};
-
-// ── Live MIDI input ─────────────────────────────────────────────
-const midiInput = createMidiInput();
+// ── Settings, and MIDI keys held ────────────────────────────────
 /** The Settings dialog (BACKLOG 16.3): open or closed. */
 const settingsOpen = signal(false);
-/** MIDI inputs for the Settings dialog, refreshed when devices come and go. */
-const midiDevices = signal<readonly MidiDeviceInfo[]>([]);
-const midiActiveId = signal<string | null>(null);
-
-// One-shot guard for the "you have MIDI but no track is armed" toast. Reset
-// when the user changes device or disarms a track, so the hint can fire again
-// the next time the user falls into the same state.
-let midiArmHintShown = false;
-
-function refreshMidiDeviceList() {
-  midiDevices.value = midiInput.getDevices().map(d => ({ id: d.id, name: d.name || d.manufacturer || d.id }));
-  midiActiveId.value = midiInput.getActiveDeviceId();
-}
-
-midiInput.onDevicesChanged(refreshMidiDeviceList);
-
-// Live MIDI pitch-bend state (BACKLOG 8.25). Range hardcoded to ±2 semitones
-// (GM standard); RPN sniffing on the wire isn't worth doing — almost no
-// controllers send it. The offset persists across loop wraps and across
-// noteOn/noteOff because it's just module state, so the held-key planchette
-// continues at the bent pitch through a wrap (mirrors 8.21).
-const LIVE_BEND_RANGE_SEMITONES = 2;
-let liveBendCents = 0;
-// Track currently-held MIDI keys so the bend handler can re-tune every active
-// preview synth without scanning the audio engine. Voice id is `midi-${note}`.
+/** MIDI keys held now: live MIDI input (perform/midi.ts) adds and removes
+ *  them, and the performer's swell shapes them too. */
 const heldMidiNotes = new Set<number>();
-
-midiInput.onPitchBend((value) => {
-  liveBendCents = (value / 8192) * LIVE_BEND_RANGE_SEMITONES * CENTS_PER_SEMITONE;
-  // Bending counts as activity for the perform-engine AFK gate, mirroring
-  // noteOn/noteOff. A user holding a note and working the wheel is performing.
-  composeEngine.markActivity(performance.now());
-  // Audio: re-tune every active MIDI preview synth so what's heard tracks the
-  // wheel. Visual + recording: planchette mutation drives both.
-  for (const note of heldMidiNotes) {
-    preview.updateDrawPitch(midiToCents(note) + liveBendCents, `midi-${note}`);
-  }
-  store.setMidiPitchBendOffset(liveBendCents);
-  markBgDirty();
-});
-
-midiInput.onNoteOn((note, velocity) => {
-  const state = store.getState();
-  // When a track is MIDI-armed it owns the audio path so what you hear is
-  // what gets recorded. Otherwise fall back to the selected track (existing
-  // preview-only behavior).
-  const targetTrackId = state.midiArmedTrackId ?? state.selectedTrackId;
-  if (!targetTrackId) return;
-  const track = state.composition.tracks.find(t => t.id === targetTrackId);
-  if (!track) return;
-  const tone = state.composition.toneLibrary.find(t => t.id === track.toneId);
-  if (!tone) return;
-  ensureResumed();
-  // MIDI key press counts as activity for the perform-engine AFK gate, mirroring onLmbDown.
-  composeEngine.markActivity(performance.now());
-  // Per-note voice ID lets simultaneously-held notes sound in parallel.
-  // Initial pitch reflects current bend so a key struck with the wheel held
-  // off-centre starts at the bent pitch, no audible jump on the first frame.
-  heldMidiNotes.add(note);
-  preview.startDrawPreview(
-    tone,
-    midiToCents(note) + liveBendCents,
-    `midi-${note}`,
-    dynamics.getValue(`midi-${note}`),
-  );
-  // Velocity still unused: the dynamics bus owns loudness, and mapping velocity
-  // into it is 11.2's job (where it becomes a proper bus source alongside CC).
-  void velocity;
-
-  // Safety-net hint: if MIDI is sounding but no track is armed, the user's
-  // notes are not being recorded. Surface a once-per-episode toast pointing
-  // at the "I" arm button. Reset paths: device change, disarm event.
-  if (state.midiArmedTrackId === null && !midiArmHintShown) {
-    showToast('MIDI received — arm a track (I) to record', 3500);
-    midiArmHintShown = true;
-  }
-
-  // Recording (Phase 8.11): if the armed track AND playback are active, start
-  // capturing this voice. A planchette in performance state both visualises the
-  // held note on the rail and signals captureComposeRecordingSample to push a
-  // sample each frame. Re-trigger before noteOff: finalize the in-flight voice
-  // first so we don't lose its samples.
-  if (state.midiArmedTrackId !== null && playback.isPlaying()) {
-    const voiceId = `midi-${note}`;
-    const existing = state.performance.planchettes.find(p => p.voiceId === voiceId);
-    if (existing) finalizeMidiVoice(note);
-    // Apply current bend offset on creation so the planchette spawns at the
-    // bent pitch if the wheel was already off-centre when the key was struck.
-    const initialY = midiToCents(note) + liveBendCents;
-    store.addPerformPlanchette({
-      voiceId,
-      trackId: state.midiArmedTrackId,
-      cursorWorldY: initialY,
-      snappedWorldY: initialY,
-      lastCrossedAt: performance.now(),
-    });
-    markBgDirty();
-  }
-});
-
-midiInput.onNoteOff((note) => {
-  // MIDI key release counts as activity for the perform-engine AFK gate.
-  composeEngine.markActivity(performance.now());
-  heldMidiNotes.delete(note);
-  preview.stopDrawPreview(`midi-${note}`);
-  // If this voice was recording, finalize the curve into the MIDI-armed track.
-  // Safe to call unconditionally — finalizeMidiVoice no-ops if no planchette.
-  finalizeMidiVoice(note);
-});
-
-/** Settings › MIDI input device. */
-async function selectMidiDevice(id: string | null) {
-  if (id && !midiInput.hasAccess()) {
-    const ok = await midiInput.requestAccess();
-    refreshMidiDeviceList();
-    if (!ok) {
-      showToast('MIDI access denied or unsupported by this browser', 3000);
-      return;
-    }
-  }
-  midiInput.setActiveDevice(id);
-  midiActiveId.value = midiInput.getActiveDeviceId();
-
-  // Just enabled a device with no armed track — prompt the user before they
-  // hit the silent-no-curves trap. The toast in noteOn is the safety net for
-  // the case where they cancel here and play anyway. Settings closes first so
-  // the arm dialog isn't stacked on it.
-  if (id && store.getState().midiArmedTrackId === null) {
-    midiArmHintShown = false;
-    settingsOpen.value = false;
-    await promptForMidiArm();
-  }
-}
-
-async function promptForMidiArm() {
-  const st = store.getState();
-  const result = await openMidiArmDialog({
-    tracks: st.composition.tracks,
-    toneLibrary: st.composition.toneLibrary,
-  });
-  if (!result) return;
-  if (result.kind === 'arm-existing') {
-    store.setMidiArmedTrackId(result.trackId);
-    return;
-  }
-  // 'arm-new' — same flow as the "+ Add Track" button, then arm.
-  const comp = store.getComposition();
-  const btn = document.getElementById('add-track-btn')!;
-  const picked = await openTonePicker(comp.toneLibrary, null, btn);
-  if (!picked) return;
-  history.snapshot();
-  const track = createTrack(`Track ${comp.tracks.length + 1}`, picked.id);
-  store.mutate(c => { c.tracks.push(track); });
-  store.setSelectedTrack(track.id);
-  store.setMidiArmedTrackId(track.id);
-}
-
-// Reset the noteOn-toast gate on arm/disarm transitions only — not on every
-// store notify, or unrelated state changes would clobber the once-per-episode
-// behavior. While armed: suppress (hint is irrelevant). On disarm: re-enable
-// so the next time the user falls into the no-armed-track trap, the hint
-// fires again.
-watch(() => store.getState().midiArmedTrackId !== null, armed => { midiArmHintShown = armed; });
-
-// Populate the list lazily when the user first reaches for it — requesting
-// MIDI access earlier would trigger a permission prompt before they showed
-// intent.
-async function requestMidiList() {
-  if (midiInput.hasAccess() || !midiInput.isSupported()) return;
-  const ok = await midiInput.requestAccess();
-  if (ok) refreshMidiDeviceList();
-}
 
 // ── Snap drawer (BACKLOG 16.4) ─────────────────────────────────
 /** Add a beat guide (x) or a fret (y) at the centre of the current viewport,
@@ -868,13 +596,9 @@ const snapActions: SnapActions = {
 watch(() => store.getState().metronomeEnabled, on => metronome.setEnabled(on));
 watch(() => store.getState().metronomeVolume, v => metronome.setVolume(v));
 
-/** Loop on/off: the top-bar button and L (both the `transport.loop`
- *  command), plus Record-next-Pass forcing it on. State owns the flag; the
- *  engine and the play range follow it (the watch below and the play-range
- *  watch at the end of the file). */
-function applyLoopEnabled(enabled: boolean): void {
-  store.setLoopEnabled(enabled);
-}
+// Loop on/off (the top-bar button and L, plus Record next Pass forcing it on):
+// the store owns the flag; the engine follows it here, and the play range in
+// the play-range watch at the end of the file.
 watch(() => store.getState().loopEnabled, enabled => playback.setLoop(enabled));
 
 // ── Zoom controls (along the canvas's edges, 13.32) ─────────────
@@ -917,11 +641,7 @@ history.subscribe(() => {
   canRedo.value = history.canRedo();
 });
 
-// ── Commands (BACKLOG 15.3) ─────────────────────────────────────
-// What each command in the catalog (commands/catalog.ts) does. The keyboard,
-// buttons and menus all run commands through `commands`, so a key and the
-// button for the same action can't drift apart. Edit commands live in
-// commands/edit-commands.ts.
+// ── Modes and tools ────────────────────────────────────────────
 
 /** Switch tools — the tool buttons and D / V / X / C. */
 function selectTool(tool: ToolMode) {
@@ -946,28 +666,6 @@ function selectTool(tool: ToolMode) {
   } else if (tool === 'select') {
     buildTransformBoxFromSelection();
   }
-}
-
-/** Escape backs out one level: a count-in or recording first; then Perform;
- *  otherwise the edit in progress (transform box, or the curve being drawn)
- *  and Prism projection. */
-function escapeCommand() {
-  const before = store.getState().transport;
-  transport({ type: 'escape' });
-  if (store.getState().transport !== before) return;
-  if (isComposePerformActive()) {
-    setPerformMode(false);
-    return;
-  }
-  if (interaction.transformBox) interaction.dismissTransformBox();
-  else if (store.getState().activeTool === 'draw' && interaction.hasDrawTarget()) interaction.finishDrawing();
-  if (store.getState().harmonicPrism.projectionSourceId) store.setPrismProjectionSource(null);
-}
-
-/** Play from stopped or paused. In Perform the clock is open-ended: it runs
- *  until you stop it, which is what Jam used to be (BACKLOG 16.2). */
-function play(): void {
-  transport({ type: 'play', openEnded: store.getState().performMode });
 }
 
 /**
@@ -1017,318 +715,6 @@ function chooseTool(tool: ToolMode) {
   if (!setPerformMode(false)) return;
   selectTool(tool);
 }
-
-/** Ctrl+H: project from the selected curve, or turn projection off. */
-function toggleProjection() {
-  if (store.getState().harmonicPrism.projectionSourceId) {
-    store.setPrismProjectionSource(null);
-    return;
-  }
-  const sel = store.getSelectedCurveId();
-  if (sel) store.setPrismProjectionSource(sel);
-}
-
-/** Centre the view on a beat. */
-function scrollToBeat(beat: number) {
-  const r = canvasContainer.getBoundingClientRect();
-  scrollViewportToBeat(viewport, beat, r.width, r.height);
-  markBgDirty();
-}
-
-/** First or last control point across all tracks, or null on an empty canvas. */
-function compositionEdge(edge: 'start' | 'end'): number | null {
-  let best: number | null = null;
-  for (const track of store.getComposition().tracks) {
-    for (const curve of track.curves) {
-      for (const pt of pitchPoints(curve)) {
-        const x = pt.position.x;
-        if (best === null || (edge === 'start' ? x < best : x > best)) best = x;
-      }
-    }
-  }
-  return best;
-}
-
-/** Paste lands at the playhead. In the rail view while stopped, the rail is
- *  what reads as "here" — the stored playhead can lag behind a manual pan. */
-function pasteBeat(): number {
-  const st = store.getState();
-  return effectiveScrollCanvas() && !playback.isPlaying() ? railBeat() : st.playback.positionBeats;
-}
-
-/** Load a whole composition (file open, MIDI import) as one undoable step. */
-function replaceComposition(comp: Composition) {
-  // Stop first so anything a running session captured commits into the
-  // composition the undo snapshot below preserves.
-  transport({ type: 'stop' });
-  history.snapshot();
-  store.loadComposition(comp);
-}
-
-const notWhilePerforming = () => !isComposePerformActive();
-const notWhileSounding = () => !composeEngine.isLmbDown();
-
-const commands = createCommandRegistry({
-  ...createEditCommands({ interaction, viewport, isPerformLocked: isComposePerformActive, pasteBeat }),
-
-  // ── Transport ──
-  'transport.playPause': { run: playPause },
-  'preview.audition': { run: startAudition, release: stopAudition },
-  'transport.play': { run: play },
-  // Playback pauses; a recording or queued pass ends instead — a capture has
-  // no paused state to resume.
-  'transport.pause': { run: () => transport({ type: 'pause' }) },
-  'transport.stop': {
-    run() {
-      transport({ type: 'stop' });
-      // Stop also rewinds the classic playhead, even when already stopped.
-      store.setPlaybackPosition(0);
-    },
-  },
-  'transport.record': { run: toggleRecord },
-  'transport.recordPass': { run: toggleRecordNextPass },
-  // The loop defines what's being recorded, so it holds still meanwhile.
-  'transport.loop': {
-    run: () => applyLoopEnabled(!store.getState().loopEnabled),
-    enabled: () => !isCapturing(store.getState().transport),
-    checked: () => store.getState().loopEnabled,
-  },
-  'transport.layerMode': {
-    run: () => store.setLayerMode(!store.getState().layerModeEnabled),
-    checked: () => store.getState().layerModeEnabled,
-  },
-  'transport.countIn': {
-    run: () => store.setCountIn(!store.getState().countInEnabled),
-    checked: () => store.getState().countInEnabled,
-  },
-  'transport.escape': { run: escapeCommand },
-
-  // ── Perform ──
-  'perform.toggle': {
-    run: () => { setPerformMode(!store.getState().performMode); },
-    enabled: () => !composeEngine.isLmbDown(),
-  },
-  'perform.keep': { run: () => keepLastPhrase() },
-  'perform.dropPass': { run: () => dropLastPass() },
-  // Dynamics swell (11.1): only on the key-swell source, so F is free otherwise.
-  'perform.swell': {
-    run: () => dynamics.setSwellHeld(true),
-    release: () => dynamics.setSwellHeld(false),
-    enabled: () => dynamics.getSource() === 'key-swell',
-  },
-
-  // ── Tools ── (off while the left button performs, like the tool buttons)
-  // Not while a note is held; otherwise a tool also leaves Perform.
-  'tool.draw': { run: () => chooseTool('draw'), enabled: notWhileSounding },
-  'tool.select': { run: () => chooseTool('select'), enabled: notWhileSounding },
-  'tool.nudge': { run: () => chooseTool('nudge'), enabled: notWhileSounding },
-  // [ and ] resize the Nudge brush by a fifth, while it's the tool.
-  'nudge.smaller': {
-    run() { store.setNudgeSize(store.getState().nudgeSize / 1.2); },
-    enabled: () => store.getState().activeTool === 'nudge' && !store.getState().performMode,
-  },
-  'nudge.larger': {
-    run() { store.setNudgeSize(store.getState().nudgeSize * 1.2); },
-    enabled: () => store.getState().activeTool === 'nudge' && !store.getState().performMode,
-  },
-  'tool.delete': { run: () => chooseTool('delete'), enabled: notWhileSounding },
-  'tool.slice': { run: () => chooseTool('scissors'), enabled: notWhileSounding },
-  'edit.finishCurve': {
-    run: () => interaction.finishDrawing(),
-    enabled: () => notWhilePerforming() && store.getState().activeTool === 'draw' && interaction.hasDrawTarget(),
-  },
-  'snap.toggle': { run: () => store.setSnap(!store.getState().snapEnabled), checked: () => store.getState().snapEnabled },
-
-  // ── Harmonic Prism ──
-  'prism.drawMode': { run: () => store.setPrismDrawMode(!store.getState().harmonicPrism.drawMode) },
-  'prism.projection': { run: toggleProjection },
-
-  // ── View ──
-  // Page Up on an empty canvas goes to beat 0 so there's always a way home.
-  'view.start': { run: () => scrollToBeat(compositionEdge('start') ?? 0) },
-  'view.end': {
-    run() {
-      const end = compositionEdge('end');
-      if (end !== null) scrollToBeat(end);
-    },
-  },
-  // While playing, the engine owns the position; stopped, it's the stored
-  // playhead (what ruler scrubbing moves).
-  'view.playhead': {
-    run: () => scrollToBeat(playback.isPlaying() ? playback.getPositionBeats() : store.getState().playback.positionBeats),
-  },
-  'view.pitchHud': {
-    run: () => store.setPitchHudVisible(!store.getState().pitchHudVisible),
-    checked: () => store.getState().pitchHudVisible,
-  },
-  'view.frets': {
-    run() { store.setFretsVisible(!store.getState().fretsVisible); markBgDirty(); },
-    checked: () => store.getState().fretsVisible,
-  },
-  'view.perfHud': {
-    run: () => store.setPerfHudVisible(!store.getState().perfHudVisible),
-    checked: () => store.getState().perfHudVisible,
-  },
-  'view.scrollDuringPlayback': {
-    run: toggleScrollDuringPlayback,
-    checked: () => store.getState().scrollCanvasEnabled,
-  },
-  'view.fullscreen': {
-    run: toggleFullscreen,
-    enabled: canFullscreen,
-    checked: () => fullscreenOn.value,
-  },
-  'app.settings': { run: () => { settingsOpen.value = true; } },
-  'help.open': { run: () => { window.open('/help.html', '_blank'); } },
-
-  // ── File ──
-  'file.save': {
-    run() {
-      const comp = store.getComposition();
-      downloadFile(serializeComposition(comp), `${comp.name || 'composition'}.gliss`);
-    },
-  },
-  'file.open': {
-    async run() {
-      try {
-        // .gliss is the native format; .json accepts legacy flat saves.
-        replaceComposition(deserializeComposition(await openFile('.gliss,.json')));
-      } catch (e) {
-        console.error('Failed to load:', e);
-      }
-    },
-  },
-  'file.importMidi': {
-    async run() {
-      try {
-        replaceComposition(midiToComposition(await openBinaryFile('.mid,.midi')));
-      } catch (e) {
-        console.error('MIDI import failed:', e);
-      }
-    },
-  },
-  'file.exportWav': {
-    async run() {
-      try {
-        await exportWav(store.getComposition());
-      } catch (e) {
-        console.error('WAV export failed:', e);
-      }
-    },
-  },
-});
-
-commands.installKeyboard(window, e =>
-  e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement);
-
-// ── Track panel ─────────────────────────────────────────────────
-/** What the track list's controls do (the list itself is ui/track-list.tsx).
- *  Each looks the track up by id when it runs — an undo swaps in new objects. */
-const trackListActions: TrackListActions = {
-  select(trackId) {
-    const track = store.getComposition().tracks.find(t => t.id === trackId);
-    if (!track) return;
-    store.setSelectedTrack(trackId);
-    // Select all curves in this track. The tool stays as it is (14.2); the
-    // transform box belongs to Select, so it's built only there.
-    if (track.curves.length > 0) {
-      store.setSelectedCurves(track.curves.map(c => c.id));
-      if (store.getState().activeTool === 'select') rebuildTransformBox(interaction, track);
-    }
-  },
-  toggleMute(trackId) {
-    history.snapshot();
-    store.mutate(c => {
-      const t = c.tracks.find(tt => tt.id === trackId);
-      if (t) t.muted = !t.muted;
-    });
-  },
-  toggleSolo(trackId) {
-    history.snapshot();
-    store.mutate(c => {
-      const t = c.tracks.find(tt => tt.id === trackId);
-      if (t && !t.guide) t.solo = !t.solo;
-    });
-  },
-  toggleHidden(trackId) {
-    history.snapshot();
-    const t = store.getComposition().tracks.find(tt => tt.id === trackId);
-    store.setTrackHidden(trackId, !t?.hidden);
-    // A hidden track's curves can't stay selected under a transform box.
-    if (store.getState().selectedTrackId === trackId && t?.hidden) interaction.transformBox = null;
-  },
-  toggleGuide(trackId) {
-    history.snapshot();
-    store.setTrackGuide(trackId, !store.getComposition().tracks.find(t => t.id === trackId)?.guide);
-  },
-  toggleMidiArm(trackId) {
-    const current = store.getState().midiArmedTrackId;
-    // Switching or disarming while notes are held: finalize those voices first
-    // so their samples aren't orphaned by the arm change.
-    if (current !== null) finalizeAllInFlightMidiVoices();
-    store.setMidiArmedTrackId(current === trackId ? null : trackId);
-  },
-  editTone(trackId) {
-    const comp = store.getComposition();
-    const track = comp.tracks.find(t => t.id === trackId);
-    const currentTone = track && comp.toneLibrary.find(t => t.id === track.toneId);
-    if (!currentTone) return;
-    openToneBuilder(currentTone).then(result => {
-      if (result.action !== 'save') return;
-      history.snapshot();
-      store.mutate(c => {
-        const idx = c.toneLibrary.findIndex(t => t.id === result.tone.id);
-        if (idx >= 0) c.toneLibrary[idx] = result.tone;
-      });
-    });
-  },
-  pickTone(trackId, anchor) {
-    const comp = store.getComposition();
-    const track = comp.tracks.find(t => t.id === trackId);
-    if (!track) return;
-    openTonePicker(comp.toneLibrary, track.toneId, anchor).then(picked => {
-      if (!picked) return;
-      history.snapshot();
-      store.mutate(c => {
-        const live = c.tracks.find(t => t.id === trackId);
-        if (live) live.toneId = picked.id;
-      });
-    });
-  },
-  remove(trackId) {
-    const track = store.getComposition().tracks.find(t => t.id === trackId);
-    if (!track) return;
-    // In-flight MIDI voices on this track would otherwise keep capturing into
-    // a track that no longer exists.
-    if (store.getState().midiArmedTrackId === trackId) finalizeAllInFlightMidiVoices();
-    history.snapshot();
-    // If the current layer lived here, clear it so the next pass opens a new one.
-    performer.forgetTrack(trackId);
-    store.removeTrack(trackId);
-    showToast(`Deleted ${track.name} — Ctrl+Z to restore`, 2500);
-  },
-};
-render(h(TrackList, { actions: trackListActions }), document.getElementById('track-list')!);
-
-document.getElementById('add-track-btn')!.addEventListener('click', async () => {
-  const comp = store.getComposition();
-  // Show tone picker anchored to the add button
-  const btn = document.getElementById('add-track-btn')!;
-  const picked = await openTonePicker(comp.toneLibrary, null, btn);
-  if (!picked) return; // Cancelled
-  history.snapshot();
-  const track = createTrack(`Track ${comp.tracks.length + 1}`, picked.id);
-  store.mutate(c => { c.tracks.push(track); });
-  store.setSelectedTrack(track.id);
-});
-
-document.getElementById('new-tone-btn')!.addEventListener('click', async () => {
-  const result = await openToneBuilder();
-  if (result.action === 'save') {
-    history.snapshot();
-    store.mutate(c => { c.toneLibrary.push(result.tone); });
-  }
-});
 
 // ── Canvas panning ──────────────────────────────────────────────
 /** Middle-drag (or Alt+left) pan, shared by the staff and the Parameters Graph
@@ -1392,208 +778,44 @@ fgCanvas.addEventListener('wheel', (e) => {
 // ── Perform (perform/, split out in 15.3) ──────────────────────
 const performer = createPerformer({
   viewport, fgCanvas, preview, dynamics, playback, heldMidiNotes,
-  railBeat, minPanOffsetX, isComposePerformActive, transport,
+  railBeat, minPanOffsetX, isComposePerformActive,
+  transport: e => transport(e),
 });
 const {
   engine: composeEngine, performInput, fingerInput,
-  stopComposePerformSounding, startPrismDrawPreview, updatePrismDrawPreview, syncHarmonyPlanchettes,
-  applyDynamicsToSoundingVoices, captureComposeRecordingSample, closeLmbPhrases, finalizeComposeRecordedCurves,
-  finalizeMidiVoice, finalizeAllInFlightMidiVoices, sealFingerTakes, keepLastPhrase, dropLastPass, passLog,
+  startPrismDrawPreview, updatePrismDrawPreview, syncHarmonyPlanchettes,
+  applyDynamicsToSoundingVoices, captureComposeRecordingSample, closeLmbPhrases, keepLastPhrase, dropLastPass, passLog,
   resetLayerSession, tickComposePerform, tickComposePitchMode, tickPerformYAutoScroll,
   planchettesAsSounding, planchetteDynamicsOf, hudPlanchette,
 } = performer;
 
-// ── Transport controller (BACKLOG 15.2) ─────────────────────────
-// Every transport change goes through `transport(event)`: the pure state
-// machine in state/transport.ts picks the next state, the store takes it, and
-// `applyTransportEffects` does what the change means for audio, capture and
-// the view. Buttons, hotkeys, the count-in, loop wraps, the AFK timer and the
-// playback engine running out all dispatch events rather than setting flags.
+// ── Transport controller (app/transport-controller.ts) ─────────
+const transportController = createTransportController({
+  playback, performer, preview, dynamics, viewport, canvasContainer,
+  endAudition: () => { if (previewActive) { preview.stopAll(); setPreviewActive(false); } },
+  effectiveScrollCanvas, railBeat, setPerformMode,
+});
+const { transport, playRangeFor } = transportController;
 
-/** True while `transport()` applies a change — see the playback engine's
- *  position callback. */
-let applyingTransport = false;
+// ── Commands (commands/app-commands.ts) ─────────────────────────
+const commands = createCommandRegistry(createAppCommands({
+  interaction, viewport, playback, performer, dynamics, transport: transportController, scrollToBeat,
+  startAudition, stopAudition, setPerformMode, chooseTool, isComposePerformActive,
+  effectiveScrollCanvas, railBeat, toggleScrollDuringPlayback,
+  openSettings: () => { settingsOpen.value = true; },
+}));
+commands.installKeyboard(window, e =>
+  e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement);
 
-function transport(event: TransportEvent): void {
-  const prev = store.getState().transport;
-  const next = transition(prev, event);
-  if (next === prev) return;
-  // Commit first: the effects (and anything they trigger) read the new mode.
-  store.setTransport(next);
-  applyingTransport = true;
-  try {
-    applyTransportEffects(prev, next, event);
-  } finally {
-    applyingTransport = false;
-  }
-}
+// ── Live MIDI input (perform/midi.ts) ───────────────────────────
+const midi = createMidiPerformance({
+  preview, dynamics, playback, performer, heldMidiNotes,
+  closeSettings: () => { settingsOpen.value = false; },
+});
 
-function applyTransportEffects(prev: TransportState, next: TransportState, event: TransportEvent): void {
-  switch (next.mode) {
-    case 'stopped':
-      endPerformSession(prev);
-      return;
-    case 'paused':
-      playback.pause();
-      return;
-    case 'countdown':
-      ensureResumed();
-      composeEngine.startSession(performance.now());
-      return;
-    case 'playing':
-      break;
-  }
-
-  if (prev.mode !== 'playing') {
-    // Starting to roll: from stopped, paused, or the end of a count-in.
-    ensureResumed();
-    if (!startRolling(next)) {
-      store.setTransport(TRANSPORT_STOPPED);
-      endPerformSession(next);
-      return;
-    }
-    composeEngine.startSession(performance.now());
-    resetLayerSession();
-    if (next.capture === 'pass-recording') showToast('Recording this pass', 1500);
-    return;
-  }
-
-  // Already rolling: the clock or capture changed. The play-range watch at the
-  // end of the file re-opens the range for open-ended plays and recordings.
-  if (prev.clock !== next.clock) {
-    // Entering Perform opens a running playback's clock: a fresh session, so
-    // its idle timer starts now and the next pass opens a new layer.
-    ensureResumed();
-    composeEngine.startSession(performance.now());
-    resetLayerSession();
-  }
-  if (next.capture === 'armed' && prev.capture !== 'armed') {
-    ensureResumed();
-    composeEngine.startSession(performance.now());
-  }
-  if (next.capture === 'pass-queued' && prev.capture === 'none') {
-    composeEngine.startSession(performance.now());
-    showToast('Armed — recording starts at the loop point', 2500);
-  }
-  if (event.type === 'loop-wrap') {
-    if (next.capture === 'pass-recording') showToast('Recording this pass', 1500);
-    else if (prev.capture === 'pass-recording') showToast('Pass recorded', 2000);
-  }
-  if (event.type === 'toggle-pass-record' && next.capture === 'none') {
-    // Cancelling a pass commits whatever it already captured, like stopping
-    // an ordinary recording.
-    if (prev.capture === 'pass-recording') {
-      if (composeEngine.isLmbDown()) finalizeComposeRecordedCurves();
-      finalizeAllInFlightMidiVoices({ keepPlanchette: true });
-      sealFingerTakes(true);
-    }
-    showToast('Pass record cancelled', 2000);
-  }
-}
-
-/** The engine's play range `[wrapTo, end]` for a rolling transport. Loop on:
- *  the loop markers. Loop off: plain Play ends with the content; Play in
- *  Perform and every kind of capture keep scrolling open-ended. */
-function playRangeFor(t: TransportState): [number, number] {
-  const st = store.getState();
-  const c = st.composition;
-  if (st.loopEnabled) return [c.loopStartBeats, c.loopEndBeats];
-  const openEnded = t.clock === 'open' || t.capture !== 'none';
-  return [0, openEnded ? OPEN_END_BEAT : getCompositionLength(c)];
-}
-
-/** Run the engine from `pos` for transport `t` — pulled into the loop when
- *  Loop is on. False if the engine declined (empty or inverted range). */
-function playEngineFrom(t: TransportState, pos: number): boolean {
-  const st = store.getState();
-  const [wrapTo, end] = playRangeFor(t);
-  const startBeat = st.loopEnabled && (pos < wrapTo || pos >= end) ? wrapTo : pos;
-  playback.play(st.composition, startBeat, end, wrapTo);
-  return playback.isPlaying();
-}
-
-/**
- * Start the transport for a session that's beginning to roll. Play starts where
- * the user is looking: under the rail in the scrolling view, else at the stored
- * playhead. A loop pass always starts at loop-in so the pass is whole. Returns
- * false if the engine declined.
- */
-function startRolling(next: TransportState): boolean {
-  if (previewActive) { preview.stopAll(); setPreviewActive(false); }
-  const st = store.getState();
-  const pos = next.capture === 'pass-recording'
-    ? st.composition.loopStartBeats
-    : effectiveScrollCanvas() ? railBeat() : st.playback.positionBeats;
-  if (!playEngineFrom(next, pos)) {
-    if (next.capture === 'pass-recording') showToast('Set a loop range first', 2500);
-    return false;
-  }
-  // Snap the viewport on the first frame of scrolling playback so there's no
-  // flash of the old static offset before the render loop takes over.
-  if (effectiveScrollCanvas()) {
-    const r = canvasContainer.getBoundingClientRect();
-    scrollViewportToBeat(viewport, playback.getPositionBeats(), r.width, r.height);
-    markBgDirty();
-  }
-  return true;
-}
-
-/** Tear down whatever session `prev` was running: commit what it captured,
- *  silence it, and stop the transport. */
-function endPerformSession(prev: TransportState): void {
-  // Seal in-flight phrases before teardown so a gesture interrupted by Stop
-  // stays keepable (the buffer survives the session — BACKLOG 10.2).
-  closeLmbPhrases();
-  if (isCapturing(prev) && composeEngine.isLmbDown()) {
-    finalizeComposeRecordedCurves();
-  }
-  // Finalize any in-flight MIDI voices before tearing down — otherwise their
-  // buffers would be discarded by composeEngine.stopSession() below.
-  finalizeAllInFlightMidiVoices();
-  // Extra fingers (13.33) too; they play again once lifted and put back.
-  performer.releaseAllFingers(isCapturing(prev));
-  if (composeEngine.isLmbDown()) {
-    stopComposePerformSounding();
-  }
-  preview.stopDrawPreview('primary');
-  playback.stop();
-  composeEngine.stopSession();
-  // The next session starts from rest, not from wherever the swell was left.
-  dynamics.reset();
-  resetLayerSession();
-  store.setPerformLmbSounding(false);
-}
-
-/** R / the Record button. Needs a track to record onto. */
-function toggleRecord(): void {
-  if (store.getState().selectedTrackId === null) return;
-  // Recording is a performance: it enters Perform (BACKLOG 16.2).
-  if (!setPerformMode(true)) return;
-  transport({ type: 'toggle-record', audioNow: getAudioContext().currentTime, countIn: store.getState().countInEnabled });
-}
-
-/** Shift+R / Shift+click Record: record exactly the next full loop pass
- *  (BACKLOG 10.5) — the structured counterpart to retrospective keep. */
-function toggleRecordNextPass(): void {
-  const st = store.getState();
-  const t = st.transport;
-  const cancelling = t.capture === 'pass-queued' || t.capture === 'pass-recording';
-  if (!cancelling) {
-    if (st.selectedTrackId === null) return;
-    if (isRolling(t) && t.capture === 'armed') {
-      showToast('Already recording — press R to stop', 2000);
-      return;
-    }
-    // A "pass" is defined by the loop, so turn Loop on rather than refusing —
-    // but say so, since it changes the transport out from under the user.
-    if (!st.loopEnabled) {
-      applyLoopEnabled(true);
-      showToast('Record next Pass: Loop On', 2000);
-    }
-    if (!setPerformMode(true)) return;
-  }
-  transport({ type: 'toggle-pass-record' });
-}
+// ── Track panel (ui/track-actions.ts) ──────────────────────────
+render(h(TrackList, { actions: createTrackListActions({ interaction, performer }) }), document.getElementById('track-list')!);
+installTrackButtons(document.getElementById('add-track-btn')!, document.getElementById('new-tone-btn')!);
 
 // ── Canvas input: one router per canvas (BACKLOG 15.2) ─────────
 // The router decides once per press who owns the gesture — perform, pan, or
@@ -1944,13 +1166,7 @@ render(h(ToolStrip, { commands, locked: toolsLocked }), document.getElementById(
   document.body.appendChild(settingsHost);
   render(h(SettingsDialog, {
     open: settingsOpen,
-    midi: {
-      supported: midiInput.isSupported(),
-      devices: midiDevices,
-      activeId: midiActiveId,
-      requestList: requestMidiList,
-      select: id => { void selectMidiDevice(id); },
-    },
+    midi: midi.settings,
   }), settingsHost);
 }
 
