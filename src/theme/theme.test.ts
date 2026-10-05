@@ -29,7 +29,7 @@ const RGB = /\b(rgba?|hsla?)\(\s*\d/;
 /** Source files allowed to hold colour literals, and why. */
 const ALLOWED = new Set([
   'src/constants.ts',          // the preset tones' colours: data, saved in files
-  'src/ui/tone-builder.ts',    // a new tone's starting colour: data
+  'src/ui/tone-builder.tsx',   // a new tone's starting colour: data
   'src/theme/theme.ts',        // the loud colour for a missing token
 ]);
 

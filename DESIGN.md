@@ -54,7 +54,7 @@ Honored now so future ports stay cheap:
 | Rendering | HTML5 Canvas 2D | Background (staff, rulers) and foreground (curves, playhead, interaction) canvases, plus a Parameters Graph canvas |
 | Audio | Web Audio API | Oscillator/gain graphs per voice; `AudioParam` automation; `OfflineAudioContext` for WAV export |
 | State | `@preact/signals-core` (MIT) | Fine-grained store subscriptions (BACKLOG 15.1) |
-| UI chrome | Preact (MIT) + `@preact/signals` for panels; vanilla DOM for the rest | Migrating panel by panel (BACKLOG 15.4) — see [Target architecture](#target-architecture) |
+| UI chrome | Preact (MIT) + `@preact/signals` | Every panel, dialog, menu and HUD (BACKLOG 15.4); the canvas stays imperative — see [Target architecture](#target-architecture) |
 | Tests | Vitest | |
 | Input | Mouse, Web MIDI | Pointer Events (pen), Gamepad and Web Serial planned |
 
@@ -111,10 +111,12 @@ src/
 │                    #   scl.ts: Scala .scl import and export
 ├── ui/              # Preact (.tsx): layout (the whole page: rail and drawers, canvas area, side panel),
 │                    #   panel-section, top-bar, menu, tool-strip, settings-dialog, tempo-panel, snap-panel,
-│                    #   prism-panel, tuning-panel, pitch-circle, track-list, property-panel, tool-property-panel.
-│                    #   What panels do: drawer-actions, tuning-actions, track-actions. Vanilla DOM: tone
-│                    #   builder/picker, context menu, older dialogs, HUDs (pitch-hud, perf-hud, session-overlays),
-│                    #   zoom-sliders, param-graph-resize
+│                    #   prism-panel, tuning-panel, pitch-circle, track-list, property-panel, tool-property-panel,
+│                    #   tone-builder, tone-picker, context-menu, midi-arm-dialog, preset-save-dialog (opened through
+│                    #   dialog-host's showDialog), canvas-huds (pitch, Perf, count-in, idle warning), toast.
+│                    #   Pure: what the HUDs show (pitch-hud, perf-hud, session-overlays). What panels do:
+│                    #   drawer-actions, tuning-actions, track-actions. The zoom sliders and the Parameters Graph's
+│                    #   resize handle drive their elements directly
 ├── theme/           # theme.ts: the canvas's reader for the colour tokens in styles/theme.css
 ├── export/          # json-export (.gliss envelope + migrations), wav-export, midi-import
 └── utils/           # bezier-math, snap, snap-magnetic, snap-presets, harmonics, svg-normalize

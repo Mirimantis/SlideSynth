@@ -1,10 +1,9 @@
 /**
- * The count-in number and the idle warning over the canvas (split out of
- * main.ts in 15.3).
+ * What the count-in number and the idle warning over the canvas show (split
+ * out of main.ts in 15.3). The components are in canvas-huds.tsx.
  */
 
 import type { PerformanceEngine } from '../canvas/performance-engine';
-import { getAudioContext } from '../audio/engine';
 import { isOpenEnded, isRecordArmed, isRolling, performPhase } from '../state/transport';
 import { JAM_IDLE_TIMEOUT_MS } from '../constants';
 import type { AppState } from '../types';
@@ -13,66 +12,33 @@ import type { AppState } from '../types';
  *  — i.e. after 30 seconds of inactivity. The popup races the engine's auto-stop
  *  using the same constant, so the countdown reaches 0 at the moment recording
  *  pauses. */
-const AFK_WARNING_LEAD_MS = 30_000;
+export const AFK_WARNING_LEAD_MS = 30_000;
 
-export interface SessionOverlays {
-  update(state: AppState): void;
+type SessionEngine = Pick<PerformanceEngine, 'getCountdownLabel' | 'getIdleMs' | 'getAfkTimeoutMs'>;
+
+/** The count-in's number, or null when there's no count-in. */
+export function countdownLabel(state: AppState, engine: SessionEngine, audioNow: number): string | null {
+  const t = state.transport;
+  if (t.mode !== 'countdown') return null;
+  return engine.getCountdownLabel(audioNow, performPhase(t), t.countdownStartedAt);
 }
 
-export function createSessionOverlays(
-  els: { countdown: HTMLElement; afkWarning: HTMLElement; afkCountdown: HTMLElement },
-  deps: { engine: PerformanceEngine; isPlaying(): boolean },
-): SessionOverlays {
-  const { countdown, afkWarning, afkCountdown } = els;
-
-  function updateCountdown(state: AppState) {
-    const t = state.transport;
-    if (t.mode !== 'countdown') {
-      if (!countdown.hasAttribute('hidden')) {
-        countdown.setAttribute('hidden', '');
-        countdown.textContent = '';
-      }
-      return;
-    }
-    const label = deps.engine.getCountdownLabel(getAudioContext().currentTime, performPhase(t), t.countdownStartedAt);
-    if (countdown.textContent !== label) countdown.textContent = label;
-    countdown.removeAttribute('hidden');
-  }
-
-  /** AFK warning popup: appears once the user has been idle past
-   *  `afkTimeoutMs - AFK_WARNING_LEAD_MS`, counts down the seconds remaining,
-   *  and disappears as soon as activity resumes (engine resets idle to 0) or
-   *  recording stops. Suppression (loop on / playhead before rightmost) is
-   *  inherited automatically — `tickComposePerform` calls `markActivity` every
-   *  frame in those cases, so `getIdleMs` stays near zero. */
-  function updateAfkWarning(state: AppState) {
-    const t = state.transport;
-    const armed = isRecordArmed(t) || state.midiArmedTrackId !== null;
-    const shouldShow = (armed || isOpenEnded(t)) && isRolling(t) && deps.isPlaying();
-    if (!shouldShow) {
-      if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
-      return;
-    }
-    const idleMs = deps.engine.getIdleMs(performance.now());
-    // Mirror the timeout selection in tickComposePerform so the popup countdown
-    // races the same window the engine will actually fire on.
-    const timeoutMs = armed ? deps.engine.getAfkTimeoutMs() : JAM_IDLE_TIMEOUT_MS;
-    const remainingMs = timeoutMs - idleMs;
-    if (remainingMs > AFK_WARNING_LEAD_MS) {
-      if (!afkWarning.hasAttribute('hidden')) afkWarning.setAttribute('hidden', '');
-      return;
-    }
-    // Round up so the user never sees "0" while the engine is still ticking down.
-    const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
-    const label = `${remainingSec}s`;
-    if (afkCountdown.textContent !== label) afkCountdown.textContent = label;
-    if (afkWarning.hasAttribute('hidden')) afkWarning.removeAttribute('hidden');
-  }
-
-  return {
-    update(state) {
-      updateCountdown(state);
-      updateAfkWarning(state);
-    },
-  };
+/** The idle warning's seconds left, or null when it's hidden. It appears once
+ *  the user has been idle past `afkTimeoutMs - AFK_WARNING_LEAD_MS`, counts
+ *  down the seconds remaining, and disappears as soon as activity resumes
+ *  (engine resets idle to 0) or recording stops. Suppression (loop on /
+ *  playhead before rightmost) is inherited automatically — `tickComposePerform`
+ *  calls `markActivity` every frame in those cases, so `getIdleMs` stays near
+ *  zero. */
+export function afkLabel(state: AppState, engine: SessionEngine, isPlaying: boolean, now: number): string | null {
+  const t = state.transport;
+  const armed = isRecordArmed(t) || state.midiArmedTrackId !== null;
+  if (!((armed || isOpenEnded(t)) && isRolling(t) && isPlaying)) return null;
+  // Mirror the timeout selection in tickComposePerform so the popup countdown
+  // races the same window the engine will actually fire on.
+  const timeoutMs = armed ? engine.getAfkTimeoutMs() : JAM_IDLE_TIMEOUT_MS;
+  const remainingMs = timeoutMs - engine.getIdleMs(now);
+  if (remainingMs > AFK_WARNING_LEAD_MS) return null;
+  // Round up so the user never sees "0" while the engine is still ticking down.
+  return `${Math.max(0, Math.ceil(remainingMs / 1000))}s`;
 }
