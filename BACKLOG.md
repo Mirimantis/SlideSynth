@@ -12,14 +12,15 @@ A full-project review on 2026-09-24 (findings in [DESIGN.md › Current architec
 
 - **Phase 14 — Stabilize:** done.
 - **Phase 15 — Consolidate the architecture:** done (2026-10-04, PR #113): signals store, transport state machine, input router, command catalog, one snap-config builder, read-only render loop, AudioWorklet voice, kernel tests, `main.ts` a bootstrap, and every panel, dialog and HUD a Preact component.
-- **Phase 16 — Simplify the interface:** the build is done (16.1–16.7). Left: the **16.8 Perform**, **16.9 Visual theme** and **16.10 Small-screen layout** design sessions.
+- **Phase 16 — Simplify the interface:** the build is done (16.1–16.7). **16.8 Perform**'s session was held on 2026-10-05; its build is next. Left: the **16.9 Visual theme** and **16.10 Small-screen layout** design sessions.
 - **Phase 17 — Portable core:** not started. Needed only before a port (VST, VCV, hardware).
 
 **[Queued features](#queued-features) resumed on 2026-09-26**, starting with the tuning rework (13.8) and frets (13.16–13.22). Suggested next:
 
 1. **Done since:** 13.24 Transform by interval (PR #98), 12.3 unknown file sections round-trip (PR #99), 13.10 Curves as pitch guides (PR #100), 13.26 Area Nudge with 13.25's first step (PR #101), 13.11 recording fit and Simplify (PR #102), 13.28 test builds at gliss.mirimantis.com (PR #103), the touch round: 13.32 phone layout, 13.35 haptic clicks, 13.36 Gravity Speed, 13.37 defaults (PR #104), 13.33 multitouch with gesture guards and Full screen (PR #105), 15.8 kernel tests (PR #106), 15.3 parts A (PR #107), B (PR #108, landed via #109), C (PR #111) and D (PR #112), the layer-undo and Prism-finger fixes (PR #110), 15.4's last dialogs and HUDs (PR #113).
-2. **Planning sessions, roughly by payoff:** 16.8 Perform (it shapes 13.23's hot bar and 11.x dynamics; decide on 13.11's Old fit switch first); 13.23 Key guides, then 12.1. 13.25 step 2 (Projection's back end) when decided.
-3. **Background (decided 2026-10-04: finish before piling more on):** done. 15.8; 15.3 in four PRs (A render loop, HUDs, zoom; B perform and capture; C transport, commands, MIDI, Tune A4, track panel; D the layout template with 15.4); then the rest of 15.4.
+2. **Next to build: 16.8 Perform** (session held 2026-10-05, [spec](DESIGN.md#perform-spec-168-decided-2026-10-05)), in the order its entry gives; with it, test touch contact size on the three touch devices (11.8).
+3. **Planning sessions, roughly by payoff:** 13.34 orientation (the combinations of canvas and frame orientation), 13.23 Key guides (the hot bar's key changes), then 12.1. 11.9 envelopes. 13.25 step 2 (Projection's back end) when decided.
+4. **Background (decided 2026-10-04: finish before piling more on):** done. 15.8; 15.3 in four PRs (A render loop, HUDs, zoom; B perform and capture; C transport, commands, MIDI, Tune A4, track panel; D the layout template with 15.4); then the rest of 15.4.
 
 ---
 
@@ -377,14 +378,27 @@ Implementation comes first: block out every control so it works, then hold the d
     - **Components:** the tone fallback, the toast and the scissors dot use tokens too.
     - **Guard** (`theme.test.ts`): no colour literal outside theme.css, except the preset tones' colours, a new tone's default and the missing-token magenta; no `var()` without a definition; every canvas token defined. Vitest now loads `styles/*.css` (`test.css.include`) so the test can read them.
     - Values are unchanged, so nothing looks different.
-- [ ] **16.8 Perform experience** *(L, own planning session — after 16.2)*
-  - **Before starting, decide on 13.11's Old fit switch** (reminder, 2026-09-28): this session redesigns Perform's settings, where the switch lives. Removing it first (`recordFitLegacy`, `legacyCurveFromRecording`) keeps it out of the redesign.
+- [ ] **16.8 Perform experience** *(L, own planning session — after 16.2; session held 2026-10-05)*
+  - **Before starting, decide on 13.11's Old fit switch** (reminder, 2026-09-28): this session redesigns Perform's settings, where the switch lives. Removing it first (`recordFitLegacy`, `legacyCurveFromRecording`) keeps it out of the redesign. **Decided 2026-10-05: remove it.**
   - Make Perform feel like picking up an instrument, not sitting down in an airplane cockpit: a musical instrument with a recording studio attached, visually distinct from the compose DAW.
   - **Session inputs:**
     - how you enter and leave it: a strip button, a top-bar switch, a key, a transition;
     - a "stage" view that clears the edit chrome and brings the capture controls forward;
     - the rail drawn as the instrument itself, e.g. a string or slide with snap targets as detents. Keep H.3 in mind: what the haptic slide lets you feel should be what you see;
     - a clear user-facing name for the dynamics source (today's "Dynamics: Fixed / Key swell").
+  - **Spec:** [DESIGN.md › Perform spec](DESIGN.md#perform-spec-168-decided-2026-10-05) (session 2026-10-05). In short:
+    - **A stage:** the edit tools and the Parameters Graph are hidden in Perform. What you reach for during play is always there and larger (transport, Record, Loop, Gravity on/off, Keep, the track list, the hot bar); what you set before playing (Tempo, Gravity's settings, Harmonizer, Tuning, tones, the name, File / Edit / View) becomes icons in a slim bar that open their drawer or panel. A short transition between the layouts.
+    - **Names, the same in both modes:** Snap becomes **Gravity**, with the feels **Instant** (today's snap) and **Glissando** (today's Gravity physics); Harmonic Prism becomes **Harmonizer**; Dynamics stays, its "Fixed" source becomes **Steady**, and Swell (F) is to be replaced (11.x); Tuning and Track + tone stay; the planchette keeps its name.
+    - **The rail is a fretless string;** frets and pitch lines stay full length across the canvas.
+    - **Orientation** is a View option per mode, separate for the canvas and the frame (13.34).
+    - **The hot bar** along the bottom, Perform only, key changes first (13.23).
+  - **Build order:**
+    1. Remove the Old fit switch (`recordFitLegacy`, `legacyCurveFromRecording`, the checkbox, its pref).
+    2. The stage: the two tiers of controls, the slim bar of icons, hiding the edit tools and the Parameters Graph, the transition; the renames everywhere the user reads them (menus, tooltips, help, toasts; the code and file fields can keep their names, as 16.4 did for Gravity).
+    3. The string, drawn in today's vertical orientation.
+    4. The orientation switch (13.34), Perform first. Needs 13.34's session first.
+    5. The hot bar with key changes, after 13.23's session.
+  - **Related, logged at the session:** 13.39 split-voice canvas; 11.8 touch contact size; 11.9 envelopes; Gravity "tension" under 11.6; 11.3 pen pressure deferred.
 - [ ] **16.9 Visual theme** *(L, own planning session — after 16.2–16.7)*
   - Replaces the default dark-blue theme, which was never designed.
   - **Direction to explore:** a fusion of Tron-style neon and the Italian Renaissance (synthwave + glissando).
@@ -462,7 +476,7 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - **`curveFromRecording(samples, { accuracyCents, legacy })`**: the fitter for pitch (at the Accuracy) and volume (0.04); the performance engine reads the fit from the store when a take is kept; MIDI import uses the default.
     - **Accuracy** (`recordAccuracy`, workspace pref, default 8 ¢): a slider in Perform's settings and Select's.
     - **Simplify Curve** (`edit.simplify`, Alt+Shift+S): Edit menu, right-click menu, Selection panel. Selected points: the span between the first and last on each curve. One undo step; a toast when nothing can be thinned.
-    - **Kept for now (decided 2026-09-28):** "Old fit (testing)" in Perform's settings (`recordFitLegacy`, the old RDP path `legacyCurveFromRecording` in `curve.ts`), in case something else turns up. The new fit is meant to be permanent. **Reminder:** decide whether to remove it before starting 16.8 or 17.1 (both entries carry the reminder).
+    - **Kept for now (decided 2026-09-28):** "Old fit (testing)" in Perform's settings (`recordFitLegacy`, the old RDP path `legacyCurveFromRecording` in `curve.ts`), in case something else turns up. The new fit is meant to be permanent. **Reminder:** decide whether to remove it before starting 16.8 or 17.1 (both entries carry the reminder). **Decided 2026-10-05: remove it** (the new fit works well); step 1 of 16.8's build.
   - **Revisit the simplifier itself (2026-09-27):** find an algorithm that's adjustable and fits the recorded motion more accurately than today's fixed RDP fit (for example, curve fitting that places Bezier handles, rather than keeping a subset of points). An earlier attempt, with a less capable agent, was abandoned because it didn't work well; look at why before starting. Pairs with 13.26: fewer, better-placed points leave less wobble to nudge.
 - [x] **13.24 Transform by interval** *(S, PR #98)*
   - The transform box moves a selection up or down an octave. Offer other intervals too: a third, fourth, fifth, and the Prism chord's own intervals, in the current tuning's steps (as the Prism counts them, 13.8 (b)).
@@ -567,6 +581,12 @@ Resumed 2026-09-26 (see [Current direction](#current-direction-updated-2026-09-2
     - the viewport's mapping is the place to swap axes; every renderer and hit-test goes through it, but rulers, the rail, the staff labels, edge scrolling and the zoom sliders (13.32) all assume today's layout;
     - Perform only, or editing too;
     - which way it scrolls, and where the rail sits (a horizontal line, like a keyboard's edge).
+  - **From 16.8's session (2026-10-05):**
+    - Perform's horizontal string: pitch left to right (low to high), the string across the middle of the canvas, and time scrolling down from above, so what's coming is seen before it reaches the string ("now"), as in a rhythm game. Fingers or a stylus play anywhere on the canvas, best below the string. On a big screen, two hands like a piano's.
+    - A **View option for each mode** (Perform and editing), not one switch for both.
+    - The **canvas** and the **frame** (bars and panels) orient separately: a phone or tablet can be held in portrait or landscape. The combinations need detailed planning in this session.
+    - The user's likely default: landscape for both modes, Perform on the horizontal string, editing on today's vertical one. Offer the choice, since the machinery is the same.
+    - Builds after 16.8's stage and string (16.8 step 4).
 - [x] **13.35 Haptic click on snap lines** *(S — added 2026-10-04; PR #104)*
   - On devices that can vibrate, a tiny haptic click when the **finger** (the cursor, not the planchette) crosses a snap line while performing.
   - **Notes:** the browser's Vibration API works in Chrome on Android; iOS Safari and desktops don't support it, so it's an extra where available. Very short pulses (a few ms) may be rounded up or ignored by some phones; test the shortest that's felt. A setting to turn it off. A first taste of H.3's felt detents.
@@ -820,6 +840,7 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
   - Beat guides today only bookmark places. Let one carry a **key change**: place it, set its tuning, root and scale (**a key guide**), and from that beat on the staff, snapping and labels follow the new settings until the next key guide.
   - A composer lays out the key changes, then while performing, snapping follows them automatically.
   - **Tuning hot bar:** slots holding a tuning / root / scale each, on user-definable keys (1–0 on the keyboard; configurable notes or controls on a MIDI controller). Pressing one while performing places a key guide at the playhead and changes key from there on.
+  - **From 16.8's session (2026-10-05):** the hot bar sits along the bottom of Perform's stage, in Perform only, and key changes are the first thing it holds. Chord favourites (8.12) matter less now that multitouch can play chords, which eases the split of 1–0.
   - **Session inputs:**
     - **Data:** the composition's snap settings become the settings at beat 0, plus a list of changes at beats. Stored on beat guides (a payload on `GuideDefinition`) or as their own list shown as guides? A file-format version bump either way.
     - **What a change can set:** tuning, root, scale, Tuned from. Pitch lines and the 12-EDO reference probably stay global.
@@ -883,11 +904,13 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
 
 ### Dynamics bus
 The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); each input is a thin adapter. Build order: MIDI → pen → gamepad.
+
+**From 16.8's session (2026-10-05):** Swell (hold F) proved the bus but isn't a way to play, so a better source should replace it soon. Most input devices have no pressure, so the sources that need no hardware come first: try **touch contact size** (11.8), explore **envelopes** (11.9) and Gravity **tension** (under 11.6). Pen pressure (11.3) is deferred: few people have a pen.
 - [ ] **11.2 MIDI velocity + CC / channel pressure + MIDI-learn** *(M)*
   - Stop discarding live velocity (`void velocity;` in the MIDI `onNoteOn` handler).
   - Decode CC and channel pressure as a new `DynamicsSource`, with MIDI-learn so any controller maps.
   - Optional; never a prerequisite for anything.
-- [ ] **11.3 Pen pressure / tilt** *(M)*
+- [ ] **11.3 Pen pressure / tilt** *(M — DEFERRED 2026-10-05: few people have a pen; see 11.8)*
   - The canvases already run on Pointer Events (15.2). What remains: pressure feeds the bus, tilt is captured for later use, plus pen-vs-mouse detection and a sensitivity curve. `PointerEvent.pressure` / `tiltX` / `tiltY` reach the perform handlers in `main.ts` via the input router.
 - [ ] **11.4 Gamepad analog input** *(S–M)*
   - Poll the Gamepad API in the frame loop, with a "pick your control" mapping step.
@@ -895,6 +918,7 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
   - The gesture's own vertical speed drives dynamics; no extra hardware.
   - **Critical:** read the raw pre-snap cursor, not the planchette. Under magnetic snap the planchette carries spring oscillation and would ring the volume at the vibrato rate.
 - [ ] **11.6 Distance from snap target as a dynamics source** *(M — added 2026-10-03)*
+  - **Gravity "tension" (idea from 16.8's session, 2026-10-05):** with Glissando, think of the distance between the finger and its line as the spring stretched: on the line, louder (or a stronger effect); further off, softer. With a high Force the pitch stays on the line while the finger moves around it, so the finger's position is free to play dynamics. The same measure as below, read as tension.
   - Volume follows how close the pitch is to a snap target: on a target, **Max**; exactly halfway between two targets, **Min**. Max and Min are set as percentages.
   - **Decide when building:**
     - which targets: the same set Gravity pulls to (scale, frets, pitch guides), so it changes with the tuning and the Snap settings;
@@ -903,6 +927,13 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - the planchette or the raw cursor: under magnetic snap the planchette's spring would make a tremolo at the vibrato rate (11.5's warning). **Build both and test (2026-10-03):** one may work better, or both may be worth keeping as a choice;
     - smoothing, so a fast glide doesn't zipper;
     - recorded into the volume lane like the other sources.
+- [ ] **11.8 Touch contact size as a dynamics source** *(S–M — added 2026-10-05)*
+  - Each finger's contact size (`PointerEvent.width` / `height`, and `pressure` where a touchscreen reports it) as its own loudness: a firmer press flattens the fingertip. Per finger, so multitouch voices each get their own dynamics.
+  - **First, test whether the devices report it:** the user's Android phone, Wacom Intuos (touch), and Asus ZenBook (Windows 11). A quick probe page or a Perf HUD readout of the values per pointer. Many screens report a fixed size, or none.
+  - If it works: calibration (each screen's range differs), a sensitivity curve, and smoothing.
+- [ ] **11.9 Envelopes as a dynamics source** *(M, own planning session — added 2026-10-05)*
+  - Since most input devices have no pressure, give a note a shape over time instead: attack, decay, sustain, release from the moment a finger lands until it lifts, written into the volume lane like the other sources.
+  - **Session inputs:** how it relates to tone envelopes (13.20, "beepy" without Gravity), whether it combines with another source (an envelope scaled by 11.6's tension, say), per-track settings (13.31), and where it's set (Dynamics in Perform's controls).
 - [ ] **11.7 Looping drawn shape as a dynamics source** *(M–L, own planning session — added 2026-10-03)*
   - A drawn volume shape that **loops** (a custom tremolo) instead of following along in time. Loop boundaries are set where the source is chosen.
   - **Session inputs:**
@@ -1008,6 +1039,10 @@ The bus exists ([src/audio/dynamics-bus.ts](src/audio/dynamics-bus.ts), 11.1); e
     - `npm run deploy` (`scripts/deploy.mjs`): builds, adds `deploy/.htaccess` (HTTPS only, pages never cached) and `deploy/assets.htaccess` (hashed assets cached for good) and a `build.txt` label, then streams `dist/` as one tar over SSH (one passphrase prompt). On the server it unpacks into a staging folder, then replaces the document root's contents, keeping `.well-known`. Guards: the target must be `/home/<user>/<folder>`, never `public_html`.
     - Settings in `deploy/deploy.env.local` (ignored by git via `*.local`); `deploy/deploy.env.example` documents them.
     - **Build label:** version · commit (+ if uncommitted changes) · date, from `vite.config.ts` (`__BUILD_INFO__`), shown at the bottom of Settings.
+- [ ] **13.39 Split-voice canvas** *(M–L, own planning session — added 2026-10-05; after 16.8 and 13.34)*
+  - In Perform, regions of the canvas play different tracks: a touch that starts inside a region plays its track's voice. Mostly for multitouch on a big screen, giving the left and right hands different voices.
+  - **Or:** two separate canvases side by side.
+  - **Session inputs:** how regions are set (a split point in pitch, or areas), which track each plays, what a recording captures (a take per region's track), and how it looks on the string (13.34's horizontal orientation suits a left/right split).
 - [ ] **13.38 Installable web app** *(S–M — added 2026-10-04; DEFERRED until after the UI redesign, 16.8–16.10)*
   - Make the app installable from the browser (a PWA): added to a phone's home screen or a computer's app list, it opens in its own window with no browser bars, like an app.
   - From multitouch testing (13.33): a web page can't turn off the device's own gestures, and the browser's bars cost canvas on a phone. Installed, the app can open full screen (`display: fullscreen` or `standalone`) and choose its orientation (portrait, for performing on a phone).
