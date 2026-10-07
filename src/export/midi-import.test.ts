@@ -61,7 +61,7 @@ describe('midiToComposition — pitch bend', () => {
     ]);
     const comp = midiToComposition(buf);
     const curve = comp.tracks[0]!.curves[0]!;
-    // Every sample sits at note 61 (60 + 1 semitone), so RDP collapses to 2 points
+    // Every sample sits at note 61 (60 + 1 semitone), so the fit collapses to 2 points
     expect(pitchPoints(curve).length).toBeGreaterThanOrEqual(2);
     expect(pitchPoints(curve)[0]!.position.y).toBeCloseTo(6100, 3);
     expect(pitchPoints(curve)[pitchPoints(curve).length - 1]!.position.y).toBeCloseTo(6100, 3);
