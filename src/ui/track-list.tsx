@@ -132,7 +132,7 @@ function TrackRow({ track, color, toneName, selected, midiArm, actions }: TrackR
           class={`track-btn track-guide${track.guide ? ' active' : ''}`}
           title={track.guide
             ? 'Guide track: its curves are silent pitch guides that pull like frets. Click to make it sound again'
-            : 'Make this a guide track: its curves go silent and pull like frets whose pitch moves (Snap drawer › Guides shows or hides them)'}
+            : 'Make this a guide track: its curves go silent and pull like frets whose pitch moves (Gravity drawer › Guides shows or hides them)'}
           aria-label="Guide track"
           aria-pressed={!!track.guide}
           onClick={control(() => actions.toggleGuide(id))}

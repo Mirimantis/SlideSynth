@@ -225,9 +225,9 @@
     <a href="#tracks">Tracks & Tones</a>
     <a href="#preview">Live Audio Preview</a>
     <a href="#midi-input">Live MIDI Input</a>
-    <a href="#snapping">Snap & Grid</a>
+    <a href="#snapping">Gravity & Grid</a>
     <a href="#scales">Tuning, Root & Scale</a>
-    <a href="#prism">Harmonic Prism</a>
+    <a href="#prism">Harmonizer</a>
     <a href="#viewport">Zoom & Pan</a>
     <a href="#clipboard">Copy, Paste & Duplicate</a>
     <a href="#undo">Undo & Redo</a>
@@ -256,13 +256,13 @@
     in the centre, and a <strong>properties panel</strong> on the right. The top of the rail
     holds the drawer icons; each opens a <strong>drawer</strong> that slides out over the
     canvas edge — <strong>Tempo</strong> (BPM, time signature, metronome),
-    <strong>Snap</strong> (presets, Gravity, frets and beat guides), <strong>Harmonic Prism</strong>, and
+    <strong>Gravity</strong> (presets, its feel, frets and beat guides), <strong>Harmonizer</strong>, and
     <strong>Tuning</strong> (pitch circle, tuning, root, scale, reference pitch). One drawer is open at a time;
     <kbd>Escape</kbd> or a click on the canvas closes it. Below a divider sits the
     <strong>tool strip</strong>, always visible: <strong>Draw</strong>, <strong>Select</strong>,
     <strong>Delete</strong>, <strong>Slice</strong> and <strong>Perform</strong>. The active
-    tool is filled in; hover a button for its name and key. While the Harmonic Prism's
-    <strong>Draw</strong> mode is on, Draw and Perform carry a small rainbow
+    tool is filled in; hover a button for its name and key. While the Harmonizer's
+    <strong>Harmony</strong> is on, Draw and Perform carry a small rainbow
     <strong>chord badge</strong> showing how many voices will sound. The
     right-hand panel stacks <strong>Tool</strong> (settings for the active tool, or Perform's),
     <strong>Selection</strong> (what's selected: a group, curves, a point, a fret or beat guide, and the
@@ -275,7 +275,7 @@
     <code>M:SS</code>), the <strong>File</strong>, <strong>Edit</strong> and <strong>View</strong>
     menus and the <strong>Undo</strong>/<strong>Redo</strong> arrows on the left; and on the
     right the transport (Stop,
-    Play/Pause, Record with its ▾ options menu, Keep), the <strong>Snap</strong> and
+    Play/Pause, Record with its ▾ options menu, Keep), the <strong>Gravity</strong> and
     <strong>Loop</strong> switches, which fill with the accent colour when on, and the
     <strong>Settings</strong> gear (the bottom of Settings shows which build you're running; mention it
     when reporting a problem). Every menu item shows its keyboard shortcut, greys out when
@@ -312,7 +312,7 @@
   <h3>Playing</h3>
   <ul>
     <li>Press <kbd>P</kbd> (or the <strong>Perform</strong> button). The rail snaps onto the playhead.</li>
-    <li><strong>Mouse Y</strong> moves the planchette along the rail, driving pitch (snapped to scale/semitone if snap is on, with Gravity's pull if Gravity is on).</li>
+    <li><strong>Mouse Y</strong> moves the planchette along the rail, driving pitch. With <strong>Gravity</strong> on it's pulled to the scale's notes (and frets): straight there with the <strong>Instant</strong> feel, gliding with <strong>Glissando</strong>.</li>
     <li><strong>Hold the left button</strong> to sound the selected track's tone at the planchette's pitch — release to stop.</li>
     <li><strong>With the transport stopped</strong>, holding the left button just auditions the pitch: nothing is recorded and the clock doesn't start. Handy for finding your note before you play.</li>
     <li>Press <kbd>Space</kbd> or Play and the canvas scrolls past the rail at the composition's BPM. In Perform, Play <strong>runs until you stop it</strong> — it doesn't end with the existing content, so there's always room to keep playing. With <strong>Loop</strong> on it cycles the loop range instead.</li>
@@ -321,15 +321,15 @@
     <li>Pressing <kbd>P</kbd> while Compose playback is running switches to Perform without stopping; the clock becomes open-ended from there.</li>
     <li><strong>Leaving Perform</strong>: press <kbd>P</kbd> again, <kbd>Escape</kbd>, or pick a tool (button or <kbd>D</kbd> / <kbd>V</kbd> / <kbd>X</kbd> / <kbd>C</kbd>). Playback keeps running if it was. While a recording runs you stay in Perform until it stops.</li>
     <li><strong>Scrubbing</strong> the ruler in Perform slides the content under the rail as you drag: click a beat in the ruler to bring it to the rail, then drag to move forward or back. The rail is always where Play will start.</li>
-    <li>Gravity is fully live in Perform, including while stopped — the pitch settles even when you're just hovering.</li>
+    <li>Gravity's Glissando is fully live in Perform, including while stopped — the pitch settles even when you're just hovering.</li>
     <li><strong>Touch screens:</strong> Perform works with a finger. On a phone or tablet that can
       vibrate (Android), you feel a tiny <strong>haptic click</strong> when your finger comes onto a
-      line Gravity would pull to (a note line, fret or pitch guide) while you play, with Snap on or
+      line Gravity would pull to (a note line, fret or pitch guide) while you play, with Gravity on or
       off: a click as it gets within a few pixels, and not again until it has moved away. Turn it
       off, or change the click's length, under <strong>Touch</strong> in Settings. iPhones and computers can't vibrate.</li>
     <li><strong>Several fingers at once:</strong> on a touch screen, put more fingers down while one plays
       and each plays its own note, up to 10. Each glides, feels Gravity and clicks on its own, and
-      stops when it lifts. With Prism <strong>Draw</strong> on, the chord plays on the
+      stops when it lifts. With the Harmonizer's <strong>Harmony</strong> on, the chord plays on the
       <strong>newest</strong> finger down instead: it glides there without restarting, and when that
       finger lifts it goes back to the newest finger still down, like a monosynth playing legato. Holding any finger near the top or bottom
       edge scrolls, and every held note glides with the view. While recording, each finger's take
@@ -358,7 +358,7 @@
     <li>Phrases stay keepable for <strong>30 seconds</strong> after they end, then age out of the buffer (the button goes dark).</li>
     <li>You don't have to let go first. Pressing <kbd>K</kbd> mid-gesture keeps what you've played so far and carries on capturing, so a long sustained line can be kept in pieces without breaking the note.</li>
     <li>A line held across the <strong>loop point</strong> is split at the seam into two curves — one ending at loop-out, one starting at loop-in. Press <kbd>K</kbd> once for the part after the loop-back, again for the part before it.</li>
-    <li>A Harmonic Prism chord cluster played as one gesture keeps as one group, exactly like an armed recording.</li>
+    <li>A Harmonizer chord cluster played as one gesture keeps as one group, exactly like an armed recording.</li>
     <li>With <strong>several fingers</strong> on a touch screen, <kbd>K</kbd> keeps the whole last hand: every take that sounded together with the newest one, each as its own curve (not grouped). Press again for the hand before.</li>
     <li>Each keep is a single <strong>undo</strong> step — <kbd>Ctrl+Z</kbd> removes one kept phrase at a time.</li>
     <li>While Record is armed, gestures are already committed on release, so there's nothing left for Keep to find.</li>
@@ -424,9 +424,9 @@
     volume lane. Set it from <strong>Dynamics</strong> in the Tool panel while you're in Perform.
   </p>
   <ul>
-    <li><strong>Fixed</strong> (default) — every performed note records at one steady level. This is how recording has always behaved.</li>
-    <li><strong>Key swell</strong> — notes sit quiet until you hold <kbd>F</kbd>, then swell up; let go and they fall away. Your right hand stays on the mouse for pitch while your left hand shapes the volume.</li>
-    <li>The swell applies to whatever is sounding — the line you're performing, every voice of a Harmonic Prism chord, and held MIDI notes.</li>
+    <li><strong>Steady</strong> (default) — every performed note records at one steady level.</li>
+    <li><strong>Swell</strong> — notes sit quiet until you hold <kbd>F</kbd>, then swell up; let go and they fall away. A stand-in for testing the dynamics channel: better ways to play dynamics are on the way.</li>
+    <li>The swell applies to whatever is sounding — the line you're performing, every voice of a Harmonizer chord, and held MIDI notes.</li>
     <li>What you played is what gets recorded: the committed curve's volume lane traces the swell, with just enough points to hold its shape. You can still refine it point-by-point afterward.</li>
     <li>The setting is remembered between sessions, and it belongs to your workspace rather than the composition — files you send elsewhere are unaffected.</li>
   </ul>
@@ -434,7 +434,7 @@
   <h3>Heads-up display</h3>
   <ul>
     <li><strong>Pitch readout</strong> (top-right) shows the planchette's current pitch as a note name plus cents offset (e.g. <code>C#4 +12¢</code>). Out-of-tune cents appear only when the raw cursor pitch differs from the snapped pitch by more than a cent.</li>
-    <li><strong>Dynamics readout</strong> sits beside the pitch as a small bar plus value, whenever Dynamics is set to something other than Fixed.</li>
+    <li><strong>Dynamics readout</strong> sits beside the pitch as a small bar plus value, whenever Dynamics is set to something other than Steady.</li>
     <li><strong>Planchette and trail</strong> respond to the swell too — the planchette gains a halo that grows and brightens as you push, and the live recording trail thickens with it.</li>
     <li><strong>Record button</strong> in the transport row pulses red when armed and glows solid red while recording.</li>
   </ul>
@@ -546,7 +546,7 @@
         <li>A red preview dot shows where the cut will happen as you hover over a curve.</li>
         <li>Click on a curve segment to split it into two curves at that point. Bezier handles are recalculated so both halves maintain the original shape.</li>
         <li>Click near an interior control point to split exactly at that point, duplicating it as the end/start of each half.</li>
-        <li>When snap is enabled, the cut position snaps horizontally to the beat grid.</li>
+        <li>When Gravity is on, the cut position snaps horizontally to the beat grid.</li>
         <li>Volume is interpolated at the split point.</li>
         <li>Use <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo a split.</li>
       </ul>
@@ -631,7 +631,7 @@
         <li><strong>Pitch HUD</strong> — shows the pitch under the cursor (note name + cents + frequency in Hz) in the top-right of the canvas while the cursor has a meaningful Y. The Hz readout reflects the current Tune A4 setting, so A=432 etc. shifts every frequency in lockstep. Toggle it from the <strong>View</strong> menu. Preference persists via localStorage.</li>
         <li><strong>Perf HUD</strong> — passive observer in the top-left: frame ms (p50 / p99 over a rolling ~2 s), live synth / oscillator / voice counts, audio output latency, and where live voices are smoothed (<code>live: audio thread</code> normally; <code>main thread</code> if the browser can't run the audio worklet). Off by default; toggle from the <strong>View</strong> menu or press <kbd>!</kbd> (Shift+1). Useful when something feels sluggish — load a heavy composition (see <code>fixtures/stress-test.ssn</code>) and watch the numbers move.</li>
         <li><strong>Record</strong> (<kbd>R</kbd>) — arms recording, switching to Perform first. From Idle, a 3-second count-in runs then Playback begins (turn <strong>Count-in</strong> off in the Record ▾ menu to start straight away). If Playback is already running, the countdown is skipped and recording arms immediately at the current beat. While armed, holding the left button plays the selected track's tone AND captures it as a curve; release commits the curve. Escape cancels.</li>
-        <li><strong>Dynamics</strong> — in the Tool panel while you're in Perform, picks what drives the loudness of what you perform: <strong>Fixed</strong> (a steady level, the original behaviour) or <strong>Key swell</strong> (hold <kbd>F</kbd> to swell). See <a href="#perform">Perform &amp; Record</a>. Remembered between sessions.</li>
+        <li><strong>Dynamics</strong> — in the Tool panel while you're in Perform, picks what drives the loudness of what you perform: <strong>Steady</strong> (one level) or <strong>Swell</strong> (hold <kbd>F</kbd> to swell; for testing). See <a href="#perform">Perform &amp; Record</a>. Remembered between sessions.</li>
         <li><strong>Perform</strong> (<kbd>P</kbd>) — in Perform the left button plays the selected track's tone at the planchette's pitch, and Play runs until you stop it. In Compose the left button always runs the active tool, playing or not. See <a href="#perform">Perform &amp; Record</a>.</li>
         <li><strong>Ruler</strong> — two stacked strips at the top of the canvas: a <strong>seconds ruler</strong> (adapts tick spacing to zoom; labels decimal seconds when zoomed in and <code>M:SS</code> for larger steps) and a <strong>beat / measure ruler</strong> with subdivision ticks. The seconds ruler also reflects BPM changes.</li>
         <li><strong>Scrubbing</strong> — click and drag anywhere in the ruler bar (either strip) to position the playhead; the small tab at its left end is the guide handle instead (see <em>Frets and beat guides</em>). Scrubbing is allowed into empty grid past the last point. Where the rail is showing (Perform, or Scroll during playback), scrubbing slides the content under the rail instead of moving a playhead across it. The ruler is locked while a recording runs. Scrubbing plays what's under the playhead as you drag; turn <strong>Audible scrub</strong> off in Settings for silent scrubbing.</li>
@@ -659,7 +659,7 @@
           hidden track shows it again. Both are saved with the composition and can be undone.</li>
         <li><strong>Guide</strong> makes a track a <strong>guide track</strong>: its curves go
           silent, are drawn thin and dashed in the fret colour, and pull like frets whose pitch
-          moves (see <em>Pitch guides</em> under Snap &amp; Grid). Mute and Solo don't apply to
+          moves (see <em>Pitch guides</em> under Gravity &amp; Grid). Mute and Solo don't apply to
           it. Click Guide again to hear the track.</li>
         <li><strong>X</strong> deletes the track and everything on it. It's a single undo step, so <kbd>Ctrl+Z</kbd> brings it straight back — handy for clearing away layers you don't want to keep. If the track is sounding when you delete it, its audio stops immediately.</li>
         <li>Tone builder supports oscillator types (sine, square, sawtooth, triangle), detune, gain layers, and optional distortion.</li>
@@ -692,12 +692,12 @@
             </ul>
         </li>
         <li><strong>Fret pitch</strong> — while dragging a fret in the Select tool, hold
-            <kbd>A</kbd> to hear its pitch on the current track's tone as it moves. Snap
+            <kbd>A</kbd> to hear its pitch on the current track's tone as it moves. Gravity
             applies, so you hear exactly where it will land.</li>
         <li><strong>Scrubbing</strong> the ruler needs no key: it plays what's under the
             playhead as you drag. Turn <strong>Audible scrub</strong> off in Settings for
             silent scrubbing.</li>
-        <li>Pitch respects snap and scale settings — if snap is on with a scale selected,
+        <li>Pitch respects Gravity and the scale — if Gravity is on with a scale selected,
             you'll hear scale-quantised notes.</li>
         <li>Release <kbd>A</kbd> to stop. Nothing sounds while a recording is armed.</li>
       </ul>
@@ -772,43 +772,48 @@
     </div>
   </details>
 
-  <!-- Snap -->
-  <h2 id="snapping">Snap & Grid</h2>
+  <!-- Gravity (was Snap until 16.8) -->
+  <h2 id="snapping">Gravity & Grid</h2>
   <p>
-    Toggle snap on/off with the <strong>Snap</strong> button at the right of the top
-    toolbar (it fills with the accent colour when on) or press <kbd>S</kbd>. The
-    <strong>Loop</strong> button sits beside it and works the same way — see
-    <a href="#playback">Playback &amp; Transport</a> for what the loop range does.
+    <strong>Gravity</strong> pulls pitch to the notes: the scale's lines, frets and pitch guides.
+    Turn it on and off with the <strong>Gravity</strong> button at the right of the top
+    toolbar (it fills with the accent colour when on) or press <kbd>S</kbd>. Off, pitch floats
+    free. The <strong>Loop</strong> button sits beside it and works the same way — see
+    <a href="#playback">Playback &amp; Transport</a> for what the loop range does. The
+    <strong>Gravity</strong> drawer holds its feel and its presets.
   </p>
   <details>
-    <summary>Snap details</summary>
+    <summary>Gravity details</summary>
     <div class="detail-body">
       <ul>
-        <li>When snap is on, points snap to the time grid and the nearest semitone (or nearest scale note if a scale is active). Transitions between snap lines are instantaneous unless Gravity (below) is also on.</li>
-        <li><strong>Adaptive snap</strong> — the time-axis snap granularity adjusts with zoom: 1/16-beat at high zoom, eighth-note at medium zoom, and whole beats when zoomed out. The ruler ticks match the current snap resolution.</li>
-        <li>Bezier handles are never snapped, allowing smooth curve shaping regardless of snap setting.</li>
+        <li>When Gravity is on, drawn and dragged points snap to the time grid and the nearest semitone (or nearest scale note if a scale is active).</li>
+        <li><strong>Adaptive grid</strong> — the time grid's step adjusts with zoom: 1/16-beat at high zoom, eighth-note at medium zoom, and whole beats when zoomed out. The ruler ticks match the current step.</li>
+        <li>Bezier handles never snap, allowing smooth curve shaping whether Gravity is on or off.</li>
         <li>Hold <kbd>Shift</kbd> while dragging to constrain movement to one axis.</li>
-        <li><strong>Gravity</strong> — a spring-mass physics alternative for pitch
-            snapping during performance. The planchette has inertia, is pulled toward
-            the cursor by an elastic force, and is attracted to the nearest snap line
-            with proximity-based strength. Only active during Compose Performance
-            (LMB held). Requires Snap on to have any effect. <strong>On by default</strong> —
-            Gravity's pull is the instrument's feel, not an add-on. Three tuning sliders:
+        <li><strong>Feel</strong> — how a played pitch reaches its note, chosen in the Gravity drawer:
             <ul>
-              <li><strong>Force</strong> (0–1, default 0.85) — snap attractor
-                  strength. At 0 the planchette is a smooth cursor-follower with no
-                  snap detents; higher values make snap lines pull the pitch in
+              <li><strong>Instant</strong> — it jumps straight to the nearest line. Drawing always works this way.</li>
+              <li><strong>Glissando</strong> (default) — spring-mass physics. The planchette has inertia, is
+                  pulled toward the cursor by an elastic force, and is attracted to the nearest line
+                  with proximity-based strength. Glissando's pull is the instrument's feel, not an add-on.
+                  It applies to the pitch you perform, and has four sliders (greyed out with Instant):</li>
+            </ul></li>
+        <li>Glissando's sliders:
+            <ul>
+              <li><strong>Force</strong> (0–1, default 0.85) — how hard the lines pull.
+                  At 0 the planchette is a smooth cursor-follower with no
+                  detents; higher values make the lines pull the pitch in
                   increasingly hard.</li>
               <li><strong>Spring</strong> (1–50, default 50) — cursor-to-pitch coupling
                   stiffness. Lower values feel rubbery and let the planchette linger
-                  between snaps; higher values track the cursor tightly.</li>
+                  between notes; higher values track the cursor tightly.</li>
               <li><strong>Damping</strong> (0.25–15, default 6) — how quickly pitch
-                  oscillations near a snap line fade. Low values sustain vibrato
+                  oscillations near a line fade. Low values sustain vibrato
                   wobbles for longer; high values settle quickly. Too low combined
                   with high Force can swing wildly.</li>
-              <li><strong>Speed</strong> (0.25×–4×, default 1×) — how fast Gravity moves,
+              <li><strong>Speed</strong> (0.25×–4×, default 1×) — how fast the glide moves,
                   without changing the tempo. It moves in steps of 0.1× from 1× up, and 0.05×
-                  below. Gravity's motion is measured in beats, so it
+                  below. The glide's motion is measured in beats, so it
                   already follows the tempo; Speed 2× feels like playing at double tempo.
                   Fast Speed with high Damping glides quickly between notes and settles
                   without overshoot (no vibrato), which helps keep up with a finger on a
@@ -822,21 +827,21 @@
     </div>
   </details>
   <p>
-    All snap-section settings (Snap toggle, Gravity on/off, its four
+    All of Gravity's settings (on/off, the feel, its four
     sliders, plus the Tuning, Root and Scale picks) are saved with the composition file
-    and restored on load, so a project's bespoke snap configuration round-trips
+    and restored on load, so a project's own Gravity round-trips
     cleanly.
   </p>
 
   <details>
-    <summary>Snap presets</summary>
+    <summary>Gravity presets</summary>
     <div class="detail-body">
       <p>
-        The <strong>Preset</strong> dropdown at the top of the Snap section
-        loads a named <em>Gravity feel</em> in one click. A preset carries only
+        The <strong>Preset</strong> dropdown at the top of the Gravity drawer
+        loads a named <em>Glissando feel</em> in one click. A preset carries only
         the four physics values — Force, Spring, Damping and Speed — so it
         never changes your Tuning, Root or Scale, and never changes what Gravity
-        snaps <em>to</em>, only how it gets there:
+        pulls <em>to</em>, only how it gets there:
       </p>
       <ul>
         <li><strong>Standard</strong> — force 0.85, spring 50, damping 6. The app's default feel: settles onto a target promptly.</li>
@@ -846,9 +851,9 @@
         <li><strong>Vibrato</strong> — force 0.9, spring 35, damping 1.5. A strong attractor with low damping, so held notes undulate around the target instead of settling.</li>
       </ul>
       <p>
-        Loading a preset turns <strong>Snap</strong> and <strong>Gravity</strong>
-        on if either is off (Gravity needs both), and a toast says which
-        it switched on — so a preset click always changes how the instrument
+        Loading a preset turns <strong>Gravity</strong> on and chooses
+        <strong>Glissando</strong> if needed (the preset is a Glissando feel), and a toast says which
+        it changed — so a preset click always changes how the instrument
         feels rather than doing nothing.
       </p>
       <p>
@@ -876,7 +881,7 @@
             snapping as it goes (hold <kbd>A</kbd> to hear a fret's pitch). Let go to place it;
             it's selected, ready to label. Changed your mind? Drag back onto the handle and
             let go.</li>
-        <li>Or use <strong>+ Fret</strong> and <strong>+ Beat</strong> in the Snap drawer to
+        <li>Or use <strong>+ Fret</strong> and <strong>+ Beat</strong> in the Gravity drawer to
             drop one at the centre of the view; a new fret lands on the tuning's nearest
             note.</li>
         <li>Switch to the <strong>Select</strong> tool, then click a fret or beat guide to
@@ -906,7 +911,7 @@
               fret nearest the root. Its Tuned from may sit between standard notes, e.g.
               "D +17¢". Single frets stay as they are.</li>
             <li>A From frets tuning works like any other: it's on the staff and the pitch
-              circle, the Prism counts in its steps, and Export .scl saves it.</li>
+              circle, the Harmonizer counts in its steps, and Export .scl saves it.</li>
           </ul>
         </li>
         <li>Press <kbd>Delete</kbd> with one selected to remove it.</li>
@@ -951,7 +956,7 @@
           <strong>Send to guide track</strong>.</li>
         <li>Guide curves are ordinary curves otherwise: select, edit, transform, copy and record
           onto them. A curve you're drawing or dragging doesn't pull on itself.</li>
-        <li>The Snap drawer's <strong>Guides</strong> switch covers pitch guides too: off, they
+        <li>The Gravity drawer's <strong>Guides</strong> switch covers pitch guides too: off, they
           aren't drawn and don't pull. To put away just one guide track, <strong>Hide</strong> it:
           a hidden guide track doesn't pull either.</li>
         <li>A file with a guide track opens in an older version of the app as a muted track, so
@@ -1100,7 +1105,7 @@
           pitch lines, and nothing pulls the cursor in pitch except frets and pitch
           guides. Useful when you've set up your own frets and want only those.</li>
         <li><strong>Frets</strong> (on by default) — hide every fret, and stop them pulling,
-          without touching beat guides. Also in the View menu. Greyed out while the Snap
+          without touching beat guides. Also in the View menu. Greyed out while the Gravity
           drawer's Guides switch is off.</li>
         <li><strong>Tune A4</strong> — the reference frequency (see
           <a href="#playback">Playback &amp; Transport</a>). It moves every frequency together
@@ -1113,17 +1118,17 @@
     </div>
   </details>
 
-  <!-- Harmonic Prism -->
-  <h2 id="prism">Harmonic Prism</h2>
+  <!-- Harmonizer (was Harmonic Prism until 16.8) -->
+  <h2 id="prism">Harmonizer</h2>
   <p>
-    The <strong>Harmonic Prism</strong> turns single-pitch curves into chord
-    gestures:
+    The <strong>Harmonizer</strong> adds harmony voices at set intervals to what you draw
+    or play, turning single-pitch curves into chord gestures:
   </p>
   <ul>
-    <li><strong>Draw Mode</strong> (<kbd>H</kbd>) — clicking with the Draw
+    <li><strong>Harmony</strong> (<kbd>H</kbd>) — clicking with the Draw
       tool places <em>N grouped sibling curves</em> at chord-related Y
       offsets. The cursor shows a multi-color preview of where each voice
-      will land. Performing with Draw on plays the chord.</li>
+      will land. Performing with Harmony on plays the chord.</li>
     <li>For silent harmony lines to glide against (what Projection mode used to
       give), copy a curve by an interval (the transform box's arrows, see
       <em>Transform Box</em>) and send the copy to a guide track (see
@@ -1131,11 +1136,11 @@
   </ul>
 
   <details open>
-    <summary>Using Draw Mode</summary>
+    <summary>Drawing harmony</summary>
     <div class="detail-body">
       <ol>
-        <li>Pick the Draw tool. Toggle <strong>Draw</strong> on in the
-          Harmonic Prism drawer (or press <kbd>H</kbd>). The Draw and Perform
+        <li>Pick the Draw tool. Toggle <strong>Harmony</strong> on in the
+          Harmonizer drawer (or press <kbd>H</kbd>). The Draw and Perform
           buttons in the tool strip show a chord badge with the voice count
           while it's on.</li>
         <li>Hover the canvas. The cursor shows a primary planchette
@@ -1159,7 +1164,7 @@
     <summary>Performing &amp; recording chord clusters</summary>
     <div class="detail-body">
       <p>
-        With <strong>Draw</strong> mode on, holding LMB on the canvas
+        With <strong>Harmony</strong> on, holding LMB on the canvas
         sounds <em>all N voices simultaneously</em> — primary at the
         cursor pitch, harmonies at the chord-spec offsets above (or
         around) it. The rail shows every voice as a planchette so you
@@ -1189,7 +1194,7 @@
     <summary>Group / Ungroup</summary>
     <div class="detail-body">
       <p>
-        Chord-cluster siblings drawn in Draw Mode share a <em>group id</em>.
+        Chord-cluster siblings drawn with Harmony on share a <em>group id</em>.
         Group is also a first-class freehand action you can apply to any
         selection of curves on a track:
       </p>

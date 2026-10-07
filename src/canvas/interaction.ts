@@ -567,7 +567,7 @@ export function createInteraction(
       const locked = store.getState().guidesLocked;
       canvas.style.cursor = locked ? 'not-allowed' : 'grab';
       canvas.title = locked
-        ? 'Frets and beat guides are locked (Snap drawer)'
+        ? 'Frets and beat guides are locked (Gravity drawer)'
         : 'Drag down for a fret, or right for a beat guide';
     } else if (!istate.dragging && sy < RULER_HEIGHT) {
       canvas.style.cursor = 'col-resize';

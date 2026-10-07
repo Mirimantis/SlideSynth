@@ -97,10 +97,10 @@ export function App({ huds, parts }: {
         <Drawers
           drawers={[
             { id: 'tempo', label: 'Tempo', icon: iconTempo, body: parts && <TempoPanel actions={parts.tempo} /> },
-            { id: 'snap', label: 'Snap', icon: iconSnap, body: parts && <SnapPanel actions={parts.snap} /> },
+            { id: 'snap', label: 'Gravity', icon: iconSnap, body: parts && <SnapPanel actions={parts.snap} /> },
             {
-              id: 'prism', label: 'Harmonic Prism', icon: iconPrism, body: parts && <PrismPanel />,
-              headerTitle: `Harmonic Prism — ${primaryShortcut('prism.drawMode')}: Draw mode`,
+              id: 'prism', label: 'Harmonizer', icon: iconPrism, body: parts && <PrismPanel />,
+              headerTitle: `Harmonizer — ${primaryShortcut('prism.drawMode')}: harmony on or off`,
             },
             { id: 'tuning', label: 'Tuning', icon: iconTuning, body: parts && <TuningPanel actions={parts.tuning} /> },
           ]}

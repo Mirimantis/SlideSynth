@@ -49,7 +49,7 @@ export function PresetSaveDialog({ title, initialName, existingNames, onDone }: 
         <div class="tb-row">
           <label for="ps-name">Name</label>
           <input
-            type="text" id="ps-name" ref={input} value={name} placeholder="My Snap Preset"
+            type="text" id="ps-name" ref={input} value={name} placeholder="My preset"
             // Hide the warning as the user types past it.
             onInput={e => { setName(e.currentTarget.value); setWarning(null); }}
             onKeyDown={e => {

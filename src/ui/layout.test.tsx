@@ -75,8 +75,10 @@ describe('the layout (BACKLOG 15.3, 15.4)', () => {
     expect(html.match(/class="rail-icon"/g)).toHaveLength(4);
     expect(html.match(/class="drawer"/g)).toHaveLength(4);
     expect(html).not.toContain('has-open');
-    expect(html).toMatch(/<button class="rail-icon" data-drawer="prism" title="Harmonic Prism"/);
-    expect(html).toMatch(/class="drawer-header" title="Harmonic Prism — [^"]+: Draw mode"/);
+    // Renamed in 16.8: Snap is Gravity, Harmonic Prism is Harmonizer.
+    expect(html).toMatch(/<button class="rail-icon" data-drawer="snap" title="Gravity"/);
+    expect(html).toMatch(/<button class="rail-icon" data-drawer="prism" title="Harmonizer"/);
+    expect(html).toMatch(/class="drawer-header" title="Harmonizer — [^"]+: harmony on or off"/);
   });
 
   it('the side panel has Tool, Selection and Tracks sections', () => {

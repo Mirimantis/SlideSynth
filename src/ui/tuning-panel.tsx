@@ -157,7 +157,7 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
       <Switch
         id="pitch-lines-toggle"
         label="Pitch lines"
-        title="Show the pitch lines, and snap to them. Off: no lines, and pitch floats free (frets and Prism echoes still pull)"
+        title="Show the pitch lines, and snap to them. Off: no lines, and pitch floats free (frets and Harmonizer echoes still pull)"
         checked={!st.hidePitchLines}
         onChange={actions.setPitchLinesVisible}
       />
@@ -166,7 +166,7 @@ export function TuningPanel({ actions }: { actions: TuningActions }) {
         label="Frets"
         title={st.guidesVisible
           ? 'Show the frets, and snap to them. Off: every fret is hidden and doesn\'t pull (beat guides stay)'
-          : 'Guides are off (Snap drawer), so no fret shows'}
+          : 'Guides are off (Gravity drawer), so no fret shows'}
         checked={st.fretsVisible}
         disabled={!st.guidesVisible}
         onChange={actions.setFretsVisible}

@@ -8,12 +8,13 @@ import {
 } from '../utils/snap-presets';
 
 /**
- * The Snap drawer (BACKLOG 16.4): feel presets, Gravity and its Force /
- * Spring / Damping, and the guides. Snap on/off itself is the top-bar switch.
+ * The Gravity drawer (BACKLOG 16.4; was Snap until 16.8): feel presets, the
+ * feel (Instant or Glissando) and Glissando's Force / Spring / Damping /
+ * Speed, and the guides. Gravity on/off itself is the top-bar switch.
  *
- * Gravity is `magnetic*` in the store and the file, and Force is
- * `magneticStrength` — persisted names, so the renames (13.1, 16.4) are
- * display-only.
+ * In the store and the file, Gravity on/off is `snapEnabled`, Glissando is
+ * `magneticEnabled` and Force is `magneticStrength` — persisted names, so the
+ * renames (13.1, 16.4, 16.8) are display-only.
  */
 
 export interface SnapActions {
@@ -72,12 +73,12 @@ function PresetRow({ actions }: { actions: SnapActions }) {
   function load(id: string) {
     const preset = all.find(p => p.id === id);
     if (!preset) return;
-    // Presets hold feel only (13.2), but Gravity needs Snap and Gravity both on,
-    // so a load with either off would do nothing audible. Turn them on and say so.
+    // Presets hold Glissando's feel only (13.2), so a load with Gravity off or
+    // on Instant would do nothing audible. Turn them on and say so.
     const turnedOn: string[] = [];
-    if (!store.getState().snapEnabled) { store.setSnap(true); turnedOn.push('Snap'); }
-    if (!store.getState().magneticEnabled) { store.setMagneticEnabled(true); turnedOn.push('Gravity'); }
-    if (turnedOn.length > 0) actions.notify(`${preset.name}: ${turnedOn.join(' + ')} On`);
+    if (!store.getState().snapEnabled) { store.setSnap(true); turnedOn.push('Gravity on'); }
+    if (!store.getState().magneticEnabled) { store.setMagneticEnabled(true); turnedOn.push('Glissando'); }
+    if (turnedOn.length > 0) actions.notify(`${preset.name}: ${turnedOn.join(', ')}`);
     // Not an undo step: a preset is a workflow setting, like the sliders.
     const s = preset.settings;
     if (s.magneticStrength !== undefined) store.setMagneticStrength(s.magneticStrength);
@@ -95,7 +96,7 @@ function PresetRow({ actions }: { actions: SnapActions }) {
     saveUserSnapPresets(next);
     setUserPresets(next);
     setPickedId(preset.id);
-    actions.notify(`Saved snap preset "${name}".`);
+    actions.notify(`Saved Gravity preset "${name}".`);
   }
 
   function remove() {
@@ -111,7 +112,7 @@ function PresetRow({ actions }: { actions: SnapActions }) {
       <label for="snap-preset-select">Preset</label>
       <select
         id="snap-preset-select"
-        title="Snap preset — load a saved Gravity feel (Force, Spring, Damping)"
+        title="Gravity preset — load a saved Glissando feel (Force, Spring, Damping, Speed)"
         value={match?.id ?? CUSTOM}
         onChange={e => { load((e.currentTarget as HTMLSelectElement).value); blur(e); }}
       >
@@ -143,62 +144,69 @@ function PresetRow({ actions }: { actions: SnapActions }) {
   );
 }
 
+/** Gravity's feel (16.8): Instant jumps to the nearest line; Glissando
+ *  glides there under Force, Spring, Damping and Speed, which only it uses. */
 function GravityControls() {
   const st = store.getState();
+  const glissando = st.magneticEnabled;
+  const feel = (value: boolean, label: string, title: string) => (
+    <label class="prop-radio" title={title}>
+      <input
+        type="radio" name="gravity-feel" id={`gravity-feel-${value ? 'glissando' : 'instant'}`} checked={glissando === value}
+        onChange={e => { store.setMagneticEnabled(value); blur(e); }}
+      /> {label}
+    </label>
+  );
+  const off = glissando ? undefined : 'Glissando’s setting: choose Glissando to use it';
   return (
     <>
-      <div class="transport-row">
-        <label class="toggle-switch" title="Gravity: snap lines pull the pitch like a spring, instead of snapping to them instantly">
-          <span class="toggle-switch-track">
-            <input
-              type="checkbox"
-              id="gravity-toggle"
-              checked={st.magneticEnabled}
-              onChange={e => { store.setMagneticEnabled((e.currentTarget as HTMLInputElement).checked); blur(e); }}
-            />
-            <span class="toggle-switch-thumb" />
-          </span>
-          <span class="toggle-switch-label">Gravity</span>
-        </label>
+      <div class="transport-row gravity-feel-row">
+        <label>Feel</label>
+        {feel(false, 'Instant', 'Pitch jumps straight to the nearest line. Drawing always works this way')}
+        {feel(true, 'Glissando', 'Pitch glides to the lines like a weight on a spring, with the Force, Spring, Damping and Speed below')}
       </div>
       <Slider
-        id="gravity-force" label="Force" min={0} max={1} step={0.05}
+        id="gravity-force" label="Force" min={0} max={1} step={0.05} disabledTitle={off}
         value={st.magneticStrength} shown={st.magneticStrength.toFixed(2)}
-        title="Force: how hard snap lines pull the pitch (0 = smooth cursor follow, 1 = strong snap pull)"
+        title="Force: how hard the lines pull the pitch (0 = follows the cursor smoothly, 1 = a strong pull)"
         onInput={v => store.setMagneticStrength(v)}
       />
       <Slider
-        id="gravity-spring" label="Spring" min={1} max={50} step={1}
+        id="gravity-spring" label="Spring" min={1} max={50} step={1} disabledTitle={off}
         value={st.magneticSpringK} shown={String(Math.round(st.magneticSpringK))}
         title="Cursor-to-pitch spring stiffness (1 = loose, 50 = tight tracking)"
         onInput={v => store.setMagneticSpringK(v)}
       />
       <Slider
-        id="gravity-damping" label="Damping" min={0.25} max={15} step={0.25}
+        id="gravity-damping" label="Damping" min={0.25} max={15} step={0.25} disabledTitle={off}
         value={st.magneticDamping} shown={formatDamping(st.magneticDamping)}
         title="Velocity damping (low = long vibrato wobbles, high = quick settle)"
         onInput={v => store.setMagneticDamping(v)}
       />
       {/* 13.36. Logarithmic: 1× in the middle, as much travel slower as faster. */}
       <Slider
-        id="gravity-speed" label="Speed" min={Math.log2(MAGNETIC_SPEED_MIN)} max={Math.log2(MAGNETIC_SPEED_MAX)} step={0.05}
+        id="gravity-speed" label="Speed" min={Math.log2(MAGNETIC_SPEED_MIN)} max={Math.log2(MAGNETIC_SPEED_MAX)} step={0.05} disabledTitle={off}
         value={Math.log2(st.magneticSpeed)} shown={`${formatSpeed(st.magneticSpeed)}×`}
-        title="How fast Gravity moves, without changing the tempo (1× follows the tempo as it is; 2× feels like double tempo). Fast with high Damping glides quickly and settles without vibrato"
+        title="How fast the glide moves, without changing the tempo (1× follows the tempo as it is; 2× feels like double tempo). Fast with high Damping glides quickly and settles without vibrato"
         onInput={v => store.setMagneticSpeed(stepMagneticSpeed(2 ** v))}
       />
     </>
   );
 }
 
-function Slider({ id, label, min, max, step, value, shown, title, onInput }: {
+function Slider({ id, label, min, max, step, value, shown, title, disabledTitle, onInput }: {
   id: string; label: string; min: number; max: number; step: number;
-  value: number; shown: string; title: string; onInput(value: number): void;
+  value: number; shown: string; title: string;
+  /** Set: the slider is greyed out, and this says why. */
+  disabledTitle?: string;
+  onInput(value: number): void;
 }) {
   return (
-    <div class="transport-row">
+    <div class="transport-row" title={disabledTitle}>
       <label for={id}>{label}</label>
       <input
-        type="range" id={id} class="gravity-slider" min={min} max={max} step={step} value={value} title={title}
+        type="range" id={id} class="gravity-slider" min={min} max={max} step={step} value={value}
+        title={disabledTitle ?? title} disabled={disabledTitle !== undefined}
         onInput={e => onInput(Number((e.currentTarget as HTMLInputElement).value))}
       />
       <span class="gravity-value">{shown}</span>

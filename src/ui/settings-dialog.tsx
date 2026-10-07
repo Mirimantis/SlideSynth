@@ -80,10 +80,10 @@ function SettingsBody({ close, midi }: { close(): void; midi: MidiSettings }) {
               onChange={e => store.setHapticClicks((e.currentTarget as HTMLInputElement).checked)}
             />
             <span>
-              Haptic clicks on snap lines
+              Haptic clicks on note lines
               <span class="settings-hint">
                 A tiny click when your finger comes onto a note line, fret or pitch guide while
-                performing, with Snap on or off. On Android phones and tablets; iPhones and
+                performing, with Gravity on or off. On Android phones and tablets; iPhones and
                 computers can’t vibrate.
               </span>
             </span>
