@@ -126,7 +126,6 @@ const GUIDES_LOCKED_STORAGE_KEY = 'slidesynth.guidesLocked';
 const FRETS_VISIBLE_STORAGE_KEY = 'slidesynth.fretsVisible';
 const DYNAMICS_SOURCE_STORAGE_KEY = 'slidesynth.dynamicsSource';
 const RECORD_ACCURACY_STORAGE_KEY = 'slidesynth.recordAccuracy';
-const RECORD_FIT_LEGACY_STORAGE_KEY = 'slidesynth.recordFitLegacy';
 
 function loadBoolPref(key: string, defaultValue: boolean): boolean {
   try {
@@ -313,7 +312,6 @@ function createInitialState(): RawState {
     nudgeStrength: Math.max(0.05, Math.min(1, loadNumberPref(NUDGE_STRENGTH_STORAGE_KEY, NUDGE_STRENGTH_DEFAULT))),
     dynamicsSource: loadStringPref(DYNAMICS_SOURCE_STORAGE_KEY, DYNAMICS_SOURCES, 'fixed'),
     recordAccuracy: clampRecordAccuracy(loadNumberPref(RECORD_ACCURACY_STORAGE_KEY, RECORD_ACCURACY_DEFAULT)),
-    recordFitLegacy: loadBoolPref(RECORD_FIT_LEGACY_STORAGE_KEY, false),
     harmonicPrism: {
       chordSpec: loadChordSpecPref(DEFAULT_CHORD_SPEC),
       projectionOctaveRange: Math.max(0, Math.min(3, Math.round(loadNumberPref(PRISM_OCTAVE_RANGE_STORAGE_KEY, 2)))),
@@ -736,14 +734,6 @@ class Store {
     this.state.recordAccuracy = accuracy;
     saveNumberPref(RECORD_ACCURACY_STORAGE_KEY, accuracy);
     this.touch('recordAccuracy');
-  }
-
-  /** Record with the old fit, for comparison (13.11; kept for now). */
-  setRecordFitLegacy(legacy: boolean) {
-    if (this.state.recordFitLegacy === legacy) return;
-    this.state.recordFitLegacy = legacy;
-    saveBoolPref(RECORD_FIT_LEGACY_STORAGE_KEY, legacy);
-    this.touch('recordFitLegacy');
   }
 
   setMetronomeEnabled(enabled: boolean) {

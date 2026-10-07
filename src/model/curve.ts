@@ -3,10 +3,7 @@ import type { PointSelection } from './point-selection';
 import { generateId } from './tone';
 import { subdivideCubic, distToPoint } from '../utils/bezier-math';
 import {
-  createLane, createLanePoint, pitchLane, pitchPoints, getLane,
-  setLaneHandle, addLanePoint, segmentControlPointsOf, applyAutoSmoothLaneHandles, clampToRange,
-  deepCopyLanePoints, deepCopyLanes, splitLanesAtBeat, concatNonPitchLanes,
-  smoothLaneHandles, sharpenLaneHandles, repositionLaneX,
+  createLane, createLanePoint, pitchLane, pitchPoints, getLane, setLaneHandle, addLanePoint, segmentControlPointsOf, clampToRange, deepCopyLanePoints, deepCopyLanes, splitLanesAtBeat, concatNonPitchLanes, smoothLaneHandles, sharpenLaneHandles, repositionLaneX,
 } from './lane';
 import { AUTO_SMOOTH_X_RATIO, MIN_PITCH_CENTS, MAX_PITCH_CENTS } from '../constants';
 import { fitSamples, fittedLanePoints, laneFitOptions, RECORD_ACCURACY_DEFAULT } from './fit';
@@ -411,54 +408,10 @@ export interface RecordedSample {
   volume: number;
 }
 
-/** Perpendicular distance from p to line a-b, measured in anisotropic tolerance units. */
-function anisotropicPerpDist(
-  p: Vec2, a: Vec2, b: Vec2,
-  tx: number, ty: number,
-): number {
-  const ax = a.x / tx, ay = a.y / ty;
-  const bx = b.x / tx, by = b.y / ty;
-  const px = p.x / tx, py = p.y / ty;
-  const dx = bx - ax, dy = by - ay;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq < 1e-12) return Math.hypot(px - ax, py - ay);
-  const cross = dx * (py - ay) - dy * (px - ax);
-  return Math.abs(cross) / Math.sqrt(lenSq);
-}
-
-/**
- * Ramer-Douglas-Peucker simplification with anisotropic X/Y tolerances, on
- * plain (x, y) pairs. Lane-agnostic on purpose: the pitch lane runs it over
- * (beat, cents) and the volume lane over (beat, 0–1), each with its own Y
- * tolerance, so a busy glissando and a slow swell simplify independently.
- * A flat input always returns exactly [first, last].
- */
-function rdpSimplify(
-  points: Vec2[], toleranceX: number, toleranceY: number,
-): Vec2[] {
-  if (points.length <= 2) return [...points];
-  const first = points[0]!;
-  const last = points[points.length - 1]!;
-  let maxDist = 0;
-  let maxIdx = 0;
-  for (let i = 1; i < points.length - 1; i++) {
-    const d = anisotropicPerpDist(points[i]!, first, last, toleranceX, toleranceY);
-    if (d > maxDist) { maxDist = d; maxIdx = i; }
-  }
-  if (maxDist > 1) {
-    const left = rdpSimplify(points.slice(0, maxIdx + 1), toleranceX, toleranceY);
-    const right = rdpSimplify(points.slice(maxIdx), toleranceX, toleranceY);
-    return [...left.slice(0, -1), ...right];
-  }
-  return [first, last];
-}
-
 /** How a take becomes a curve (13.11). */
 export interface RecordingFit {
   /** The most any pitch sample may be off, in cents. */
   accuracyCents?: number;
-  /** The old RDP fit with flat handles, kept for comparison for now (13.11). */
-  legacy?: boolean;
 }
 
 /**
@@ -472,7 +425,6 @@ export function curveFromRecording(samples: RecordedSample[], fit: RecordingFit 
   if (samples.length < 2) return null;
   const duration = samples[samples.length - 1]!.beat - samples[0]!.beat;
   if (duration < 0.05) return null;
-  if (fit.legacy) return legacyCurveFromRecording(samples);
 
   // Strictly increasing beats (drop samples too close to their predecessor).
   const kept: RecordedSample[] = [];
@@ -491,108 +443,6 @@ export function curveFromRecording(samples: RecordedSample[], fit: RecordingFit 
   volume.points = fittedLanePoints(volume, fitSamples(xs, kept.map(s => clampToRange(volume, s.volume)), laneFitOptions(volume, accuracy)));
   curve.lanes.push(volume);
   return curve;
-}
-
-/**
- * The fit before 13.11, kept for comparison while the new one settles: RDP with
- * separate beat/cents tolerances, then flat auto-smooth handles.
- */
-function legacyCurveFromRecording(
-  samples: RecordedSample[],
-  toleranceBeats: number = 0.03,
-  toleranceCents: number = 15,
-  toleranceVolume: number = 0.04,
-): BezierCurve | null {
-
-  const pitchXY = samples.map(s => ({ x: s.beat, y: s.note }));
-  const simplified = rdpSimplify(pitchXY, toleranceBeats, toleranceCents);
-
-  // Enforce monotonic X (drop points too close to their predecessor)
-  const cleaned: Vec2[] = [];
-  for (const s of simplified) {
-    const prev = cleaned[cleaned.length - 1];
-    if (!prev || s.x - prev.x >= 0.001) cleaned.push(s);
-  }
-  if (cleaned.length < 2) return null;
-
-  const curve = createCurve();
-  const points = pitchPoints(curve);
-  for (const s of cleaned) {
-    points.push({
-      position: { x: s.x, y: s.y },
-      handleIn: null,
-      handleOut: null,
-    });
-  }
-  // applyAutoSmoothHandles handles indices >= 1; index 0 keeps null handles.
-  for (let i = 1; i < points.length; i++) {
-    applyAutoSmoothHandles(curve, i);
-  }
-
-  curve.lanes.push(volumeLaneFromRecording(
-    samples,
-    cleaned[0]!.x,
-    cleaned[cleaned.length - 1]!.x,
-    toleranceBeats,
-    toleranceVolume,
-  ));
-  return curve;
-}
-
-/**
- * Build the volume lane for a recording, simplified on its OWN terms.
- *
- * Volume's point density is independent of pitch's (per-lane retention, per the
- * lanes model): mirroring the pitch curve's density made even a flat volume look
- * as busy as a fast glissando. So the samples' volume channel gets its own RDP
- * pass against `toleranceVolume`, which means a constant-volume take — anything
- * recorded with the dynamics bus on its `fixed` source — still collapses to
- * exactly the two endpoints, while a performed swell (BACKLOG 11.1) keeps as
- * many points as its shape actually needs.
- *
- * The lane is pinned to the pitch lane's span so the envelope starts and ends
- * with the note even when the pitch pass dropped trailing samples.
- */
-function volumeLaneFromRecording(
-  samples: RecordedSample[],
-  startBeat: number,
-  endBeat: number,
-  toleranceBeats: number,
-  toleranceVolume: number,
-): Lane {
-  const lane = createLane('volume');
-
-  // Monotonic, in-span, clamped to the lane's 0..1 domain.
-  const raw: Vec2[] = [];
-  for (const s of samples) {
-    if (s.beat < startBeat || s.beat > endBeat) continue;
-    const prev = raw[raw.length - 1];
-    if (prev && s.beat - prev.x < 0.001) continue;
-    raw.push({ x: s.beat, y: clampToRange(lane, s.volume) });
-  }
-
-  if (raw.length < 2) {
-    // Degenerate span (single in-range sample, or none): fall back to a flat
-    // lane across the note at whatever value we do have.
-    const v = raw[0]?.y ?? clampToRange(lane, samples[0]!.volume);
-    lane.points = [createLanePoint(startBeat, v), createLanePoint(endBeat, v)];
-    return lane;
-  }
-
-  const simplified = rdpSimplify(raw, toleranceBeats, toleranceVolume);
-  lane.points = simplified.map(p => createLanePoint(p.x, p.y));
-  // Pin the endpoints to the note's span (the last in-span sample can sit a
-  // fraction of a beat short of it).
-  lane.points[0]!.position.x = startBeat;
-  lane.points[lane.points.length - 1]!.position.x = endBeat;
-
-  // Smooth INTERIOR points only. A two-point lane therefore stays a straight
-  // segment — identical to the pre-bus output — while a multi-point swell gets
-  // curved shoulders without the endpoints easing away from what was played.
-  for (let i = 1; i < lane.points.length - 1; i++) {
-    applyAutoSmoothLaneHandles(lane, i, AUTO_SMOOTH_X_RATIO);
-  }
-  return lane;
 }
 
 /** Deep copy an array of control points. */

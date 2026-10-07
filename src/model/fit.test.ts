@@ -191,15 +191,6 @@ describe('curveFromRecording (13.11)', () => {
     expect(loose).toBe(2);
   });
 
-  it('keeps the old fit behind the testing switch', () => {
-    const s = samples(b => 6000 + 150 * b);
-    const legacy = pitchLane(curveFromRecording(s, { legacy: true })!).points;
-    // Flat handles: the old fit's signature.
-    expect(legacy[1]!.handleIn!.y).toBe(0);
-    const fitted = pitchLane(curveFromRecording(s)!).points;
-    expect(fitted[1]!.handleIn!.y).not.toBe(0);
-  });
-
   it('defaults to the default Accuracy', () => {
     expect(clampRecordAccuracy(Number.NaN)).toBe(RECORD_ACCURACY_DEFAULT);
     expect(clampRecordAccuracy(7)).toBe(6);

@@ -57,10 +57,7 @@ export function createPerformer(deps: PerformerDeps) {
     recordingBufferMax: 3600,
     loopWrapThresholdBeats: 0.5,
     keepBufferMs: KEEP_BUFFER_MS,
-    recordingFit: () => {
-      const st = store.getState();
-      return { accuracyCents: st.recordAccuracy, legacy: st.recordFitLegacy };
-    },
+    recordingFit: () => ({ accuracyCents: store.getState().recordAccuracy }),
   });
 
   const gravity = createGravity({ viewport, railBeat, isComposePerformActive });
