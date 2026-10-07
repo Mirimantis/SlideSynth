@@ -890,6 +890,20 @@ Curves group by a shared `groupId` (Harmonic Prism chord clusters, and freehand 
     - intervals counted in the tuning's steps, as the Prism counts them (13.8 (b)) and from each note (13.21); names shared with 13.24's Move by list;
     - saved chord specs and the `prismChordSpec` workspace pref: migrating today's specs to rows;
     - knock-on: 8.12 favorites, 8.14 chord labels.
+- [ ] **13.40 Harmonizer voices on springs** *(L, own planning session — added 2026-10-07)*
+  - Today each harmony voice is fixed at its interval from the root and moves with it exactly. Instead, tie each voice to the root with Gravity-style physics (Force, Spring, Damping, Speed): as the root moves, the voices follow with a delay and move on their own, and Gravity's pull on them (the scale, frets) still acts.
+  - **Example:** the root starts on C and the second voice on E. As the root moves up, the voice's spring stretches, but E's pull holds it, until the spring is strong enough to pull it free and it moves up to F. The voices move together as a chord, with motion of their own between them, a little like voice leading.
+  - **Setting a voice up (the user's picture):** three points that move rigidly with the root: where the voice **rests** relative to the root, and a point **ahead** and **behind** it that the voice can't pass. The voice hangs on springs from these. (Mathematically it may be simpler, for example one spring to the rest point and hard stops at the two limits, with the same result.)
+  - **Session inputs:**
+    - **the physics:** one spring to the rest point plus hard stops, or springs to all three; whether the voice feels Gravity's wells through the same integrator as the planchette (`snap-magnetic.ts`), so "E's pull" is the same pull the planchette feels; what happens at a stop (a hard stop, or a stiff spring);
+    - **settings:** shared by all voices or set for each; how they sit with 13.30 (building the chord voice by voice, a row per voice), which would gain the rest point and the two limits;
+    - **units:** the rest point and limits in the tuning's steps (as the Harmonizer counts its intervals, 13.8 (b)) or in cents;
+    - **Gravity's two feels:** with Instant (no physics), does a voice jump between notes when the root pushes it past a limit, with some hysteresis?
+    - **where it applies:** performing (the harmony planchettes), and whether Draw's harmony preview and Draw clicks use it or stay fixed;
+    - **recording:** each voice's own motion is what's captured, as harmony curves are today;
+    - **multitouch** (13.33): each finger's chord has its own voices;
+    - **cost:** a few more integrators each frame, or on the audio thread (15.7's note).
+  - Related: 13.30, 13.36 (Gravity's Speed and feel), 12.1 (snapping to the sounding harmony).
 - [ ] **8.12 Chord-spec favorites on number keys** *(M)*
   - Retune voices mid-perform without the mouse. The live-retune plumbing already exists.
   - Bind through 15.3's command registry.
