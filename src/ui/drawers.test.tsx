@@ -22,10 +22,21 @@ beforeEach(() => {
 describe('Snap drawer (BACKLOG 16.4)', () => {
   const panel = () => renderToString(<SnapPanel actions={actions} />);
 
-  it('calls the physics Gravity, not Magnetic', () => {
-    const html = panel();
-    expect(html).toContain('>Gravity</span>');
-    expect(html).not.toMatch(/Magnetic/i);
+  it('offers Gravity’s two feels, Instant and Glissando, and never says Magnetic (16.8)', () => {
+    store.setMagneticEnabled(true);
+    let html = panel();
+    expect(html).toMatch(/id="gravity-feel-glissando" checked/);
+    expect(html).not.toMatch(/id="gravity-force"[^>]*disabled/);
+    // What the user reads: the text and the tooltips (ids keep their old names).
+    const read = [...html.matchAll(/title="([^"]*)"|>([^<]+)</g)].map(m => m[1] ?? m[2]).join(' ');
+    expect(read).not.toMatch(/Magnetic|Snap/i);
+    // Instant doesn't use Glissando's sliders.
+    store.setMagneticEnabled(false);
+    html = panel();
+    expect(html).toMatch(/id="gravity-feel-instant" checked/);
+    expect(html).toMatch(/id="gravity-force"[^>]*disabled/);
+    expect(html).toMatch(/id="gravity-speed"[^>]*disabled/);
+    store.setMagneticEnabled(true);
   });
 
   it('names the preset the feel matches, and says Custom once it drifts', () => {

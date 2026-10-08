@@ -192,7 +192,7 @@ The UI grew one drawer and toggle per feature and now overlaps heavily: tool × 
 
 The outcome of the BACKLOG 16.1 structure session. It blocks out the whole interface as working controls. Three areas get their own design sessions afterwards, and this spec leaves room for them:
 
-- **Perform** (16.8): making Perform feel like picking up an instrument, not sitting down in a cockpit. This matters more once the haptic slide hardware exists.
+- **Perform** (16.8): making Perform feel like picking up an instrument, not sitting down in a cockpit. This matters more once the haptic slide hardware exists. *(Held 2026-10-05: [Perform spec](#perform-spec-168-decided-2026-10-05).)*
 - **Tuning** (13.8): making the Tuning drawer more visually intuitive, together with the tuning-model rework.
 - **Visual theme** (16.9): custom graphics come only after everything works.
 
@@ -289,6 +289,41 @@ Every colour, in both the CSS and the canvas renderers, comes from one set of na
 - **Chrome:** the other stylesheets, help.html and inline component styles use `var(--token)`.
 - **Canvas:** renderers call `themeColor('staff-line-c')` ([src/theme/theme.ts](src/theme/theme.ts)). `loadTheme()` resolves each token from the page's stylesheets through a probe element, so the canvas and the chrome can't drift. A theme switch calls it again and redraws.
 - **Enforced:** `theme.test.ts` fails on a colour literal anywhere else. The exceptions are data: the preset tones' colours and a new tone's default. It also fails on a token that's used but not defined, or that the canvas expects but the CSS lacks. The chrome's ornaments, such as hand-drawn vector scrollwork, will be SVG assets that go through the icon pipeline (PR #59).
+
+### Perform spec (16.8, decided 2026-10-05)
+
+The outcome of the BACKLOG 16.8 session. Perform should feel like picking up an instrument with a recording studio attached, not sitting down in a cockpit. It becomes a **stage**: the same page with everything for editing put away, the controls you play with brought forward and made bigger, and the rail drawn as the instrument.
+
+**The stage.** Entering Perform (P, the Perform button, Record) changes the layout, with a short transition (about 200 ms) so it reads as picking up the instrument. Leaving it (Escape, P, an Edit button) brings the editing layout back.
+
+- **Hidden in Perform:** the edit tools (Draw, Select, Nudge, Delete, Slice) and the Parameters Graph, which is for editing; the canvas takes the room.
+- **During play, always reachable, larger and easy to hit quickly:** the transport, Record (with its menu), Loop, Gravity on/off, Keep, the track list, and the hot bar. More may join this group as features arrive.
+- **Set before playing, tucked away:** Tempo, Gravity's settings, Harmonizer, Tuning, building and editing tones, the composition's name, and File / Edit / View. They become icons in a slim bar that open a drawer or panel when pressed.
+- **The hot bar** sits along the bottom of the stage, in Perform only. Key changes come first (13.23 designs them); chord favourites (8.12) matter less now that multitouch can play chords.
+
+**One vocabulary.** Names are the same in Perform and in editing.
+
+- **Track and tone** stay together: a track's tone is set on the track.
+- **Tuning** stays the name for tuning, root and scale (musicians use "key" for root and scale, a part of tuning).
+- **Gravity** is the whole feature that pulls pitch to targets (today's Snap). It has two feels: **Instant** (today's snap with the physics off; the only feel drawing uses, so editing is unchanged) and **Glissando** (today's Gravity physics; Force, Spring, Damping and Speed belong to it). The beat grid's snapping in Draw is part of Gravity too. Tooltips may still say a point "snaps" to something, as description.
+- **Harmonizer** replaces Harmonic Prism: in studio gear, a device that adds voices at set intervals to the one you play. What it adds is the **harmony**. The rainbow voices can stay as its look. ("Harmonics" was considered and set aside: it means a note's overtones, which tones already make.)
+- **Dynamics** stays the name of the section, so it can hold other curves later; **Volume** is the lane it drives. Its source "Fixed" becomes **Steady**. Swell (hold F) proved the bus works but isn't a way to play; it's replaced by a better source (BACKLOG 11.x) and not part of the final design.
+- **Planchette** stays the name of what sounds: a step of abstraction between the player's fingers and the pitch played, a musical Ouija.
+
+**The rail is the string.** The rail is drawn as a fretless string (an upright bass, a slide guitar, a psalmodicon), not a keyboard.
+
+- Frets and pitch lines stay **full length across the canvas**, not ticks on the string, so a finger has a line to aim for anywhere on the canvas.
+- The planchette is where the string sounds; Gravity's pull shows as the planchette moving toward its line.
+- What the haptic clicks (13.35) and the motorized slide (H.3) let you feel is the same set of lines you see.
+
+**Orientation.** Two layouts of the canvas, chosen per mode as a View option:
+
+- **Vertical string** (today): time runs left to right, pitch bottom to top, like a staff. Suits the mouse and the slide potentiometer.
+- **Horizontal string** (13.34): pitch runs left to right, low to high, the string across the middle of the canvas, and time scrolls down from above, so what's coming (composed curves, guides, earlier takes) is in view before it reaches the string, which is "now", as in a rhythm game. Fingers or a stylus can be anywhere on the canvas, best below the string where they don't hide what's coming. On a big screen both hands play like a piano's: left low, right high.
+- The orientation of the **canvas** and of the **frame** (bars and panels) are separate settings, since a phone or tablet can be held either way. The combinations need their own planning (13.34).
+- The user's own likely setup: landscape for both modes, Perform on the horizontal string, editing on the vertical one.
+
+**Order of work** (BACKLOG 16.8): remove the Old fit switch; the stage and the names; the string, in today's orientation; the orientation switch (13.34), Perform first; the hot bar with key changes (after 13.23's session). Later: a split-voice canvas (13.39) and new dynamics sources (11.8, 11.9, 11.6).
 
 ### Layout before Phase 16 (for reference)
 
@@ -437,7 +472,7 @@ How a recorded take (and a MIDI import's pitch bend) becomes an editable curve, 
 - **Simplify** (Edit menu, canvas right-click menu, Selection panel, Alt+Shift+S): refits the selected curves at the current Accuracy, from their own shape (sampled densely), since the raw take isn't kept. A tight take stays within a couple of cents of what was played, so refitting it is nearly the same as refitting the raw take. The curve's ends stay put. With points selected, only the span from the first to the last selected point is refitted, its ends and their slopes kept, so a busy area can be thinned without touching the rest. Volume and other lanes are refitted too. One undo step.
 - **Editing dense takes:** Nudge (13.26) for areas, Simplify to thin.
 - **Raw takes (12.4):** a tight fit may make keeping the raw samples unnecessary; 12.4 stays open until that's tried.
-- **Old fit (for now):** a switch in Perform's settings back to the old fitter, for comparison. Kept after the PR in case something else turns up (decided 2026-09-28); the new fit is meant to be permanent. Whether to remove it is decided before 16.8 (which redesigns Perform's settings) or 17.1 (which would carry the old code into the core), whichever comes first.
+- **Old fit (removed in 16.8):** a switch in Perform's settings back to the old fitter, for comparison, was kept after the PR in case something else turned up (decided 2026-09-28). The new fit worked well, so it was removed (decided 2026-10-05) as the first step of 16.8, with the old RDP code.
 
 ### Guide tracks spec (13.10, decided 2026-09-27)
 

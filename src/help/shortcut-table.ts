@@ -5,7 +5,7 @@ import { COMMAND_SPECS, GESTURES, shortcutText, type CommandSection } from '../c
  * catalog (BACKLOG 15.3) so it can't fall out of step with the real bindings.
  */
 
-const SECTION_ORDER: readonly CommandSection[] = ['Transport', 'Perform', 'Tools', 'Edit', 'Harmonic Prism', 'View'];
+const SECTION_ORDER: readonly CommandSection[] = ['Transport', 'Perform', 'Tools', 'Edit', 'Harmonizer', 'View'];
 
 function kbd(text: string): string {
   // "Ctrl+Shift+Z / Ctrl+Y" → <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd>

@@ -18,7 +18,7 @@ import { isTwelveEdo, resolveTuning } from '../tuning/tuning';
 import { PanelSection } from './panel-section';
 
 /**
- * The Harmonic Prism drawer: Draw and Projection switches, the chord spec and
+ * The Harmonizer drawer (was Harmonic Prism until 16.8): Harmony and Projection switches, the chord spec and
  * per-voice octaves. 16.4 renamed the chord's "Tuning" to Intonation, so it
  * isn't confused with the Tuning drawer.
  */
@@ -54,7 +54,7 @@ export function PrismPanel() {
   return (
     <>
       <Switch
-        id="prism-draw-toggle" label="Draw" title={commandTitle('prism.drawMode')} checked={prism.drawMode}
+        id="prism-draw-toggle" label="Harmony" title={commandTitle('prism.drawMode')} checked={prism.drawMode}
         onChange={on => { store.setPrismDrawMode(on); return true; }}
       />
       {SHOW_PROJECTION && <Switch

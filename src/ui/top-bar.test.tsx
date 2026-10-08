@@ -113,6 +113,9 @@ describe('Tempo drawer and Settings (BACKLOG 16.3)', () => {
 
   it('in Perform, the Tool panel holds the dynamics choice', () => {
     store.setPerformMode(true);
-    expect(renderToString(<ToolPropertyPanel />)).toContain('Key swell');
+    const html = renderToString(<ToolPropertyPanel />);
+    expect(html).toContain('>Steady</option>');
+    expect(html).toContain('>Swell (hold F)</option>');
+    expect(html).not.toContain('Old fit');
   });
 });

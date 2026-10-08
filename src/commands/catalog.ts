@@ -10,7 +10,7 @@ import { formatChord, parseChord } from './keys';
  * Pure data, without DOM or store imports, so help.html can load it.
  */
 
-export type CommandSection = 'Transport' | 'Perform' | 'Tools' | 'Edit' | 'Harmonic Prism' | 'View' | 'File';
+export type CommandSection = 'Transport' | 'Perform' | 'Tools' | 'Edit' | 'Harmonizer' | 'View' | 'File';
 
 export interface CommandSpec {
   readonly id: string;
@@ -43,7 +43,7 @@ export const COMMANDS = [
     description: 'count in before recording from a stop' },
   { id: 'transport.loop', label: 'Loop', section: 'Transport', keys: ['L'], description: 'toggle looping between the loop markers' },
   { id: 'transport.escape', label: 'Cancel', section: 'Transport', keys: ['Escape'],
-    description: 'stop a count-in or recording; otherwise leave Perform, or finish drawing, close the transform box and clear Prism projection' },
+    description: 'stop a count-in or recording; otherwise leave Perform, or finish drawing, close the transform box and clear Harmonizer projection' },
 
   // ── Perform ──
   { id: 'perform.toggle', label: 'Perform', section: 'Perform', keys: ['P'], once: true,
@@ -53,7 +53,7 @@ export const COMMANDS = [
   { id: 'perform.dropPass', label: 'Drop last pass', section: 'Perform', keys: ['U'], once: true,
     description: 'remove the last performed pass (undo the last layer)' },
   { id: 'perform.swell', label: 'Swell', section: 'Perform', keys: ['F'], hold: true,
-    description: 'hold to swell the note you’re performing (Dynamics: Key swell)' },
+    description: 'hold to swell the note you’re performing (Dynamics: Swell)' },
 
   // ── Tools ──
   { id: 'tool.draw', label: 'Draw', section: 'Tools', keys: ['D'] },
@@ -65,7 +65,8 @@ export const COMMANDS = [
   { id: 'tool.delete', label: 'Delete', section: 'Tools', keys: ['X'], description: 'click a point to remove it' },
   { id: 'tool.slice', label: 'Slice', section: 'Tools', keys: ['C'], description: 'click a curve to split it' },
   { id: 'edit.finishCurve', label: 'Finish curve', section: 'Tools', keys: ['Enter'], description: 'end the curve you’re drawing' },
-  { id: 'snap.toggle', label: 'Snap', section: 'Tools', keys: ['S'], description: 'toggle snap' },
+  { id: 'snap.toggle', label: 'Gravity', section: 'Tools', keys: ['S'],
+    description: 'turn Gravity on or off: pitch pulls to the note lines and frets, and drawn points to the beat grid' },
   { id: 'preview.audition', label: 'Audition', section: 'Tools', keys: ['A'], hold: true,
     description: 'hold to hear the pitch under the Draw cursor, or a fret’s pitch while you drag it' },
 
@@ -98,11 +99,11 @@ export const COMMANDS = [
   { id: 'edit.simplify', label: 'Simplify Curve', section: 'Edit', keys: ['Alt+Shift+S'],
     description: 'refit the selected curves (or the span between selected points) with fewer points, within the Accuracy' },
 
-  // ── Harmonic Prism ──
-  { id: 'prism.drawMode', label: 'Prism Draw mode', section: 'Harmonic Prism', keys: ['H'],
-    description: 'each Draw click places a chord cluster' },
+  // ── Harmonizer (was Harmonic Prism; renamed in 16.8) ──
+  { id: 'prism.drawMode', label: 'Harmony', section: 'Harmonizer', keys: ['H'],
+    description: 'turn harmony on or off: what you draw or perform gets the Harmonizer’s voices' },
   // No key while Projection is set aside (13.25); it was Ctrl+H.
-  { id: 'prism.projection', label: 'Prism Projection', section: 'Harmonic Prism',
+  { id: 'prism.projection', label: 'Harmonizer Projection', section: 'Harmonizer',
     description: 'project harmonic echoes from the selected curve' },
 
   // ── View ──

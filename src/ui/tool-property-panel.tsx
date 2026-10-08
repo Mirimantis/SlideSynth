@@ -13,7 +13,7 @@ import { RECORD_ACCURACY_STEPS } from '../model/fit';
  */
 export function ToolPropertyPanel() {
   const st = store.getState();
-  if (st.performMode) return <PerformSettings source={st.dynamicsSource} legacy={st.recordFitLegacy} />;
+  if (st.performMode) return <PerformSettings source={st.dynamicsSource} />;
   if (st.activeTool === 'select') return <SelectSettings />;
   if (st.activeTool === 'nudge') return <NudgeSettings />;
   if (st.activeTool !== 'draw') return <p class="placeholder-text">No settings for this tool</p>;
@@ -162,9 +162,9 @@ function SelectSettings() {
 }
 
 /** Perform's settings (BACKLOG 16.3, moved from the old Transport drawer):
- *  what sets the volume of what you play. The Perform session (16.8) gives it
- *  a clearer name. */
-function PerformSettings({ source, legacy }: { source: DynamicsSource; legacy: boolean }) {
+ *  what sets the volume of what you play. Swell is a stand-in until a better
+ *  source replaces it (16.8, 11.x). */
+function PerformSettings({ source }: { source: DynamicsSource }) {
   return (
     <>
     <div class="prop-section">
@@ -178,19 +178,11 @@ function PerformSettings({ source, legacy }: { source: DynamicsSource; legacy: b
           if (DYNAMICS_SOURCES.includes(value)) store.setDynamicsSource(value);
         }}
       >
-        <option value="fixed">Fixed</option>
-        <option value="key-swell">Key swell (hold F)</option>
+        <option value="fixed">Steady</option>
+        <option value="key-swell">Swell (hold F)</option>
       </select>
     </div>
     <AccuracySlider />
-    {/* 13.11: kept for comparison while the new fit settles; its removal is
-        decided before 16.8 or 17.1 (see BACKLOG 13.11). */}
-    <div class="prop-section">
-      <label class="prop-radio" title="Testing: record with the old fit (RDP, flat handles) to compare">
-        <input type="checkbox" id="record-fit-legacy" checked={legacy}
-          onChange={e => store.setRecordFitLegacy((e.currentTarget as HTMLInputElement).checked)} /> Old fit (testing)
-      </label>
-    </div>
     </>
   );
 }

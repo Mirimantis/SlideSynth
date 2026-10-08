@@ -40,8 +40,8 @@ const TOOLS: readonly ToolMode[] = ['draw', 'select', 'nudge', 'delete', 'scisso
  * button follows the store, not the click: a click can be refused (leaving
  * Perform mid-recording). In Perform no tool is lit, Perform is.
  *
- * While Prism Draw is on, Draw and Perform carry a chord badge (the voice
- * count), so the mode shows without opening the drawer.
+ * While the Harmonizer's harmony is on, Draw and Perform carry a chord badge
+ * (the voice count), so it shows without opening the drawer.
  */
 export function ToolStrip({ commands, locked }: {
   commands: CommandRegistry;
@@ -85,7 +85,7 @@ function ChordBadge() {
   const spec = store.getState().harmonicPrism.chordSpec;
   const chord = `${QUALITY_LABELS[spec.quality]} ${STACKING_LABELS[spec.stacking]}, ${spec.numVoices} voices`;
   return (
-    <span class="chord-badge" title={`Prism Draw: ${chord}\n${commandTitle('prism.drawMode')}`}>
+    <span class="chord-badge" title={`Harmony: ${chord}\n${commandTitle('prism.drawMode')}`}>
       {spec.numVoices}
     </span>
   );

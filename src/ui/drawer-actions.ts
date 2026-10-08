@@ -1,6 +1,6 @@
 /**
- * What the Tempo and Snap drawers' controls do beyond the store (split out of
- * main.ts in 15.3). The Tuning drawer's are in tuning-actions.ts.
+ * What the Tempo and Gravity drawers' controls do beyond the store (split out
+ * of main.ts in 15.3). The Tuning drawer's are in tuning-actions.ts.
  */
 
 import { store } from '../state/store';
@@ -25,7 +25,7 @@ export const tempoActions: TempoActions = {
   },
 };
 
-/** The Snap drawer (BACKLOG 16.4). New guides land in the middle of the view. */
+/** The Gravity drawer (BACKLOG 16.4). New guides land in the middle of the view. */
 export function createSnapActions(deps: { viewport: Viewport; canvasContainer: HTMLElement }): SnapActions {
   const { viewport, canvasContainer } = deps;
 
@@ -53,7 +53,7 @@ export function createSnapActions(deps: { viewport: Viewport; canvasContainer: H
   }
 
   return {
-    askPresetName: existingNames => openPresetSaveDialog({ title: 'Save Snap Preset', existingNames }),
+    askPresetName: existingNames => openPresetSaveDialog({ title: 'Save Gravity Preset', existingNames }),
     confirmDeletePreset: name => confirm(`Delete user preset "${name}"?`),
     addGuide: addGuideAtViewportCenter,
     redrawGuides: () => { markBgDirty(); },

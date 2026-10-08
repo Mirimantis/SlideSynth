@@ -7,7 +7,7 @@ import { getLane, deepCopyLanes, evaluateLaneAtBeat } from './lane';
 
 describe('curveFromRecording — volume lane density', () => {
   it('collapses constant volume to exactly 2 points, independent of pitch point count', () => {
-    // A gliding gesture: pitch moves continuously (RDP keeps several points),
+    // A gliding gesture: pitch moves continuously (the fit keeps several points),
     // volume stays constant. Recording used to mirror the pitch curve's point
     // density onto the volume lane, making a flat volume look as busy as the
     // glissando. Volume is simplified on its own terms, so a flat take — which
@@ -15,7 +15,7 @@ describe('curveFromRecording — volume lane density', () => {
     // nothing but the two endpoints.
     const samples: RecordedSample[] = [];
     for (let i = 0; i <= 20; i++) {
-      // A wobbling (non-linear) pitch path so RDP keeps interior points.
+      // A wobbling (non-linear) pitch path so the fit keeps interior points.
       samples.push({ beat: i * 0.1, note: 6000 + Math.round(Math.sin(i) * 300), volume: 0.8 });
     }
     const curve = curveFromRecording(samples)!;
