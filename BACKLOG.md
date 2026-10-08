@@ -399,7 +399,7 @@ Implementation comes first: block out every control so it works, then hold the d
     4. The orientation switch (13.34), Perform first. Needs 13.34's session first.
     5. The hot bar with key changes, after 13.23's session.
   - **Related, logged at the session:** 13.39 split-voice canvas; 11.8 touch contact size; 11.9 envelopes; Gravity "tension" under 11.6; 11.3 pen pressure deferred.
-  - **Part 1 (built, being tested): step 1 and the renames of step 2.**
+  - **Part 1 (PR #114): step 1 and the renames of step 2.**
     - **Old fit removed:** `recordFitLegacy` (state, pref, setter), the checkbox, `legacyCurveFromRecording` and the RDP helpers only it used.
     - **Gravity:** the top-bar switch, the drawer, the S key's command, tooltips, toasts and help say Gravity. In the drawer, the old Gravity switch is now **Feel: Instant / Glissando**; Force, Spring, Damping and Speed grey out with Instant. A preset turns Gravity on and picks Glissando, and says so. "Save Gravity Preset". Settings › Touch: "Haptic clicks on note lines". The store and file keep `snapEnabled` (on/off) and `magneticEnabled` (Glissando).
     - **Harmonizer:** the drawer, its header tooltip, the H command ("Harmony"; its switch in the drawer is **Harmony**), the chord badge's tooltip, the help's shortcut table section and help.
