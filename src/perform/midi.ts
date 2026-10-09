@@ -127,7 +127,6 @@ export function createMidiPerformance(deps: {
         trackId: state.midiArmedTrackId,
         cursorWorldY: initialY,
         snappedWorldY: initialY,
-        lastCrossedAt: performance.now(),
       });
       markBgDirty();
     }

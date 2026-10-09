@@ -395,7 +395,7 @@ Implementation comes first: block out every control so it works, then hold the d
   - **Build order:**
     1. Remove the Old fit switch (`recordFitLegacy`, `legacyCurveFromRecording`, the checkbox, its pref).
     2. The stage: the two tiers of controls, the slim bar of icons, hiding the edit tools and the Parameters Graph, the transition; the renames everywhere the user reads them (menus, tooltips, help, toasts; the code and file fields can keep their names, as 16.4 did for Gravity).
-    3. The string, drawn in today's vertical orientation.
+    3. The string, drawn in today's vertical orientation. **Decided 2026-10-09:** kept simple; its look goes to 16.9. Built as part 3 (below).
     4. The orientation switch (13.34), Perform first. Needs 13.34's session first.
     5. The hot bar with key changes, after 13.23's session.
   - **Related, logged at the session:** 13.39 split-voice canvas; 11.8 touch contact size; 11.9 envelopes; Gravity "tension" under 11.6; 11.3 pen pressure deferred.
@@ -413,6 +413,9 @@ Implementation comes first: block out every control so it works, then hold the d
     - The drawers stay on the left rail as the "set before playing" bar.
     - **The side panel collapses to a strip** (asked for in testing): **›** at its top folds it to 36 px (44 on touch), **‹** brings it back. Collapsed, it shows the tracks as colour dots (`TrackDots`); click one to select its track, so the track list stays reachable while playing. Perform and editing each remember it (`slidesynth.sidePanelCollapsed`). The width animates.
     - *Left for later:* the string (step 3), the hot bar (step 5). On a narrow window the top bar still wraps; 16.10 designs the small-screen layout.
+  - **Part 3 (PR #116): the string, kept simple** (discussed 2026-10-09). Multitouch is the favourite way to play, and the whole string is in use, with planchettes close together and passing each other, so: no vibration, no spring between finger and planchette, and the planchettes stay clean markers of pitch. Their shape, and the string's look, go to 16.9.
+    - **The crossing flash is gone** (the line across the canvas when the planchette changed snap target): rarely noticed, and with constant glides seldom exactly on a line. `lastCrossedAt`, `markPlanchetteCrossed` and the `planchette-pulse` token went with it.
+    - **The metronome flashes the Tempo icon** on the left rail instead of a ring on the rail or playhead: a ring that fades with each tick, brightest on the downbeat (`app/metronome.ts` now gives a `beat` signal; `MetronomePulse` in `ui/layout.tsx`). The canvas no longer redraws for it.
 - [ ] **16.9 Visual theme** *(L, own planning session — after 16.2–16.7)*
   - Replaces the default dark-blue theme, which was never designed.
   - **Direction to explore:** a fusion of Tron-style neon and the Italian Renaissance (synthwave + glissando).

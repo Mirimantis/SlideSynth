@@ -69,9 +69,6 @@ export function createPerformer(deps: PerformerDeps) {
    *  tick can keep advancing the planchette pitch even when the mouse isn't moving. */
   let lastComposeSy: number | null = null;
 
-  /** Previous snap target. Used to trigger the snap-line-cross pulse on target
-   *  changes rather than on every frame while magnetic physics is interpolating. */
-  let prevSnapTarget: number | null = null;
 
   function composeUpdatePlanchette(sy: number) {
     lastComposeSy = sy;
@@ -79,17 +76,10 @@ export function createPerformer(deps: PerformerDeps) {
       clearPlanchettePitches();
       return;
     }
-    const { cursorWorldY, snappedWorldY, snapTarget, snapConfig } = computeComposeCursorPitch(sy);
+    const { cursorWorldY, snappedWorldY, snapConfig } = computeComposeCursorPitch(sy);
     store.setPlanchetteY('primary', cursorWorldY, snappedWorldY);
     hapticInput = { wy: cursorWorldY, config: snapConfig };
     hapticCheck();
-    // Snap-line-cross pulse — fire only when crossing between two real targets.
-    // Skip when either side is null (no attractor in None-mode between-guides
-    // zones) so the flash doesn't fire on every frame.
-    if (prevSnapTarget != null && snapTarget != null && prevSnapTarget !== snapTarget) {
-      store.markPlanchetteCrossed('primary', Date.now());
-    }
-    prevSnapTarget = snapTarget;
     // Drive harmony voices off the primary's snapped Y. No-op outside Prism Draw
     // perform (no harmony planchettes exist) so cheap to call unconditionally.
     updateHarmonyVoices(snappedWorldY);
@@ -123,7 +113,6 @@ export function createPerformer(deps: PerformerDeps) {
       if (p.voiceId === 'primary' || p.voiceId.startsWith('harmony-')) store.setPlanchetteY(p.voiceId, null, null);
     }
     resetMagnetic(magneticState);
-    prevSnapTarget = null;
     lastComposeSy = null;
   }
 
@@ -361,7 +350,6 @@ export function createPerformer(deps: PerformerDeps) {
         trackId: st.selectedTrackId,
         cursorWorldY: initialY,
         snappedWorldY: initialY,
-        lastCrossedAt: 0,
       });
       // If LMB is held when a new voice spawns (e.g. user just toggled drawMode
       // mid-perform), start its synth at the right pitch immediately.
@@ -775,8 +763,6 @@ export function createPerformer(deps: PerformerDeps) {
     /** Screen Y of its latest move. */
     sy: number;
     magnetic: MagneticState;
-    /** Last snap target, for the cross flash (see prevSnapTarget). */
-    prevSnapTarget: number | null;
     /** The line it's on, for haptic clicks (see hapticLine). */
     hapticLine: number | null;
   }
@@ -789,13 +775,9 @@ export function createPerformer(deps: PerformerDeps) {
 
   /** Move a finger's planchette and voice to where it is now. */
   function updateFinger(f: Finger) {
-    const { cursorWorldY, snappedWorldY, snapTarget, snapConfig } = computeComposeCursorPitch(f.sy, f.magnetic);
+    const { cursorWorldY, snappedWorldY, snapConfig } = computeComposeCursorPitch(f.sy, f.magnetic);
     store.setPlanchetteY(f.voiceId, cursorWorldY, snappedWorldY);
     f.hapticLine = store.getState().hapticClicks ? hapticFollow(cursorWorldY, snapConfig, f.hapticLine) : null;
-    if (f.prevSnapTarget != null && snapTarget != null && f.prevSnapTarget !== snapTarget) {
-      store.markPlanchetteCrossed(f.voiceId, Date.now());
-    }
-    f.prevSnapTarget = snapTarget;
     if (preview.isDrawPreviewActive(f.voiceId)) preview.updateDrawPitch(snappedWorldY, f.voiceId);
   }
 
@@ -847,12 +829,11 @@ export function createPerformer(deps: PerformerDeps) {
         voiceId,
         sy: e.clientY - fgCanvas.getBoundingClientRect().top,
         magnetic: createMagneticState(),
-        prevSnapTarget: null,
         hapticLine: null,
       };
       fingers.set(e.pointerId, f);
       fingerOrder.push(voiceId);
-      store.addPerformPlanchette({ voiceId, trackId: st.selectedTrackId, cursorWorldY: null, snappedWorldY: null, lastCrossedAt: 0 });
+      store.addPerformPlanchette({ voiceId, trackId: st.selectedTrackId, cursorWorldY: null, snappedWorldY: null });
       composeEngine.markActivity(performance.now());
       updateFinger(f);
       const y = store.getState().performance.planchettes.find(p => p.voiceId === voiceId)?.snappedWorldY;

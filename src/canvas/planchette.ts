@@ -16,7 +16,6 @@ export const RAIL_SCREEN_X_RATIO = 0.5;
 /** @deprecated use RAIL_SCREEN_X_RATIO. Retained as an alias for callers in flight. */
 export const PLANCHETTE_SCREEN_X_RATIO = RAIL_SCREEN_X_RATIO;
 
-export const PULSE_DURATION_MS = 200;
 export const LOOP_WRAP_FLASH_MS = 250;
 const CIRCLE_RADIUS = 9;
 
@@ -194,7 +193,6 @@ export function renderPlanchettes(
   renderRail(ctx, canvasWidth, canvasHeight, lastLoopWrapAt);
   const railX = canvasWidth * RAIL_SCREEN_X_RATIO;
   const topY = RULER_HEIGHT;
-  const now = Date.now();
   for (const p of planchettes) {
     if (p.snappedWorldY == null) continue;
     const snappedScreenY = vp.worldToScreen(0, p.snappedWorldY).sy;
@@ -222,54 +220,7 @@ export function renderPlanchettes(
       ? prismPlanchetteStroke(ctx, railX, snappedScreenY, CIRCLE_RADIUS, p.voiceId)
       : themeColor('planchette');
     renderPlanchetteGlyph(ctx, railX, snappedScreenY, color);
-
-    // Snap-line-cross pulse — brief horizontal flash at the planchette's Y.
-    const pulseAge = now - p.lastCrossedAt;
-    if (pulseAge >= 0 && pulseAge < PULSE_DURATION_MS) {
-      const pulseAlpha = 1 - pulseAge / PULSE_DURATION_MS;
-      ctx.save();
-      ctx.globalAlpha = pulseAlpha;
-      ctx.beginPath();
-      ctx.moveTo(0, snappedScreenY);
-      ctx.lineTo(canvasWidth, snappedScreenY);
-      ctx.strokeStyle = themeColor('planchette-pulse');
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.restore();
-    }
   }
-}
-
-/**
- * Brief expanding ring + halo for a metronome tick. Downbeats are bigger +
- * brighter than accent/weak ticks so the beat hierarchy is visible. `ageMs`
- * is the wall-clock age of the most recent click; ring fades + grows over
- * `METRONOME_FLASH_DURATION_MS`.
- */
-export const METRONOME_FLASH_DURATION_MS = 180;
-
-export function renderMetronomeFlash(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  ageMs: number,
-  tier: 'downbeat' | 'accent' | 'weak',
-): void {
-  if (ageMs < 0 || ageMs >= METRONOME_FLASH_DURATION_MS) return;
-  const t = ageMs / METRONOME_FLASH_DURATION_MS;   // 0..1
-  const alpha = 1 - t;
-  const maxRadius = tier === 'downbeat' ? 22 : tier === 'accent' ? 16 : 12;
-  const radius = CIRCLE_RADIUS + (maxRadius - CIRCLE_RADIUS) * t;
-  const lineWidth = tier === 'downbeat' ? 2.5 : 1.8;
-  const color = themeColor(tier === 'downbeat' ? 'metronome-downbeat' : tier === 'accent' ? 'metronome-accent' : 'metronome-beat');
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
 }
 
 /** Resolve a solid stroke color for an in-flight recording trail by voiceId.

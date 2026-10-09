@@ -160,7 +160,6 @@
   --playhead: #f44336;
   --planchette: #f44336;
   --planchette-ghost: rgba(var(--playhead-rgb), 0.35);
-  --planchette-pulse: #ffeb3b;
   --loop-flash: #fff;
   --metronome-downbeat: #ffeb3b;
   --metronome-accent: #ffb74d;

@@ -35,14 +35,13 @@ import type { Interaction } from '../canvas/interaction';
 import type { Viewport } from '../canvas/viewport';
 import type { Scene } from '../canvas/scene';
 import { scrollViewportToBeat } from '../canvas/scrolling-play';
-import { METRONOME_FLASH_DURATION_MS, LOOP_WRAP_FLASH_MS, PULSE_DURATION_MS } from '../canvas/planchette';
+import { LOOP_WRAP_FLASH_MS } from '../canvas/planchette';
 import type { Performer } from '../perform/performer';
 import { pitchReadout } from '../ui/pitch-hud';
 import { perfReadout } from '../ui/perf-hud';
 import { countdownLabel, afkLabel } from '../ui/session-overlays';
 import { setReadout, type CanvasHuds } from '../ui/canvas-huds';
 import { createFrameTimes } from '../ui/frame-times';
-import type { MetronomeFlash } from './metronome';
 import { requestRedraw, redrawPending, clearRedrawRequest, markBgDirty } from './redraw';
 
 export interface FrameLoopDeps {
@@ -56,7 +55,6 @@ export interface FrameLoopDeps {
   effectiveScrollCanvas(): boolean;
   /** Keep a held A's audition in step with what it's over. */
   syncAudition(): void;
-  metronomeFlash(): MetronomeFlash;
   /** What the HUDs over the canvas show. */
   huds: CanvasHuds;
 }
@@ -86,13 +84,8 @@ export function createFrameLoop(deps: FrameLoopDeps) {
   function isAnimating(state: AppState): boolean {
     if (playback.isPlaying() || composeEngine.isLmbDown()) return true;
     if (state.transport.mode === 'countdown' || isRecordArmed(state.transport)) return true;
-    const now = performance.now();
-    const flash = deps.metronomeFlash();
-    if (flash.at > 0 && now - flash.at < METRONOME_FLASH_DURATION_MS) return true;
     const wrapAt = composeEngine.getLastLoopWrapAt();
-    if (wrapAt > 0 && now - wrapAt < LOOP_WRAP_FLASH_MS) return true;
-    const wall = Date.now();
-    return state.performance.planchettes.some(p => wall - p.lastCrossedAt < PULSE_DURATION_MS);
+    return wrapAt > 0 && performance.now() - wrapAt < LOOP_WRAP_FLASH_MS;
   }
 
   function updatePitchHud(state: AppState) {

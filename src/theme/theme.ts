@@ -31,8 +31,7 @@ export const CANVAS_TOKENS = [
   // Guides and loop
   'guide', 'guide-selected', 'guide-label-bg', 'guide-handle-bg', 'loop-in', 'loop-out', 'loop-range',
   // Playhead, planchette, metronome
-  'playhead', 'planchette', 'planchette-ghost', 'planchette-pulse', 'loop-flash',
-  'metronome-downbeat', 'metronome-accent', 'metronome-beat',
+  'playhead', 'planchette', 'planchette-ghost', 'loop-flash',
   // Harmonic Prism
   'echo-stroke', 'prism-primary-edge', 'prism-harmony-edge',
   'spectrum-1', 'spectrum-2', 'spectrum-3', 'spectrum-4', 'spectrum-5', 'spectrum-6', 'spectrum-7',

@@ -30,6 +30,7 @@ function parts(): AppParts {
     tracks: noop(),
     settingsOpen: signal(false),
     midi: { supported: false, devices: signal([]), activeId: signal(null), requestList: () => {}, select: () => {} },
+    metronomeBeat: signal(null),
   };
 }
 
@@ -63,6 +64,14 @@ describe('the layout (BACKLOG 15.3, 15.4)', () => {
     expect(html).toMatch(/<div id="tool-strip-host"><div class="tool-strip"/);
     // Settings stays closed until asked for.
     expect(html).not.toContain('settings-modal');
+  });
+
+  it('the metronome flashes the Tempo icon, not the canvas (16.8)', () => {
+    const p = parts();
+    expect(renderToString(<App huds={createCanvasHuds()} parts={p} />)).not.toContain('metronome-pulse');
+    p.metronomeBeat = signal({ n: 7, tier: 'downbeat' });
+    expect(renderToString(<App huds={createCanvasHuds()} parts={p} />))
+      .toMatch(/data-drawer="tempo"[^>]*>[\s\S]*?<span class="metronome-pulse downbeat" aria-hidden="true"><\/span><\/button><button class="rail-icon" data-drawer="snap"/);
   });
 
   it('leaves the zoom sliders’ values to the zoom code', () => {
