@@ -405,7 +405,7 @@ Implementation comes first: block out every control so it works, then hold the d
     - **Harmonizer:** the drawer, its header tooltip, the H command ("Harmony"; its switch in the drawer is **Harmony**), the chord badge's tooltip, the help's shortcut table section and help.
     - **Dynamics:** Fixed is **Steady**, Key swell is **Swell (hold F)**, described in help as a stand-in.
     - Step 2's layout (the stage) is part 2.
-  - **Part 2 (built, being tested): the stage.**
+  - **Part 2 (PR #115): the stage.**
     - **Edit tools fold away** in Perform: the tool strip keeps only the Perform button (lit; press it, P or Escape to go back; a tool's key goes straight to that tool). The **Parameters Graph** folds away too, and the canvas takes the room.
     - **Top bar:** the name, length, File / Edit / View menus and Undo / Redo give way to one **menu** button (File, Undo / Redo, View: `STAGE_MENU` in `ui/layout.tsx`; the edit commands don't apply in Perform). The transport (Stop, Play, Record ▾, Keep) and the Gravity and Loop switches are larger (44 px).
     - **Side panel:** Tool becomes **Perform** (Dynamics, Accuracy), Selection is hidden, and the track rows are roomier. Each section remembers whether it's collapsed.
