@@ -411,6 +411,7 @@ Implementation comes first: block out every control so it works, then hold the d
     - **Side panel:** Tool becomes **Perform** (Dynamics, Accuracy), Selection is hidden, and the track rows are roomier. Each section remembers whether it's collapsed.
     - **Transition:** the folding animates over 0.2 s, only while the mode switches (`body.stage-changing`), so dragging the graph's handle stays immediate.
     - The drawers stay on the left rail as the "set before playing" bar.
+    - **The side panel collapses to a strip** (asked for in testing): **›** at its top folds it to 36 px (44 on touch), **‹** brings it back. Collapsed, it shows the tracks as colour dots (`TrackDots`); click one to select its track, so the track list stays reachable while playing. Perform and editing each remember it (`slidesynth.sidePanelCollapsed`). The width animates.
     - *Left for later:* the string (step 3), the hot bar (step 5). On a narrow window the top bar still wraps; 16.10 designs the small-screen layout.
 - [ ] **16.9 Visual theme** *(L, own planning session — after 16.2–16.7)*
   - Replaces the default dark-blue theme, which was never designed.

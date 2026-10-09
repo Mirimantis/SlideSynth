@@ -16,7 +16,7 @@ import { PrismPanel } from './prism-panel';
 import { TuningPanel, type TuningActions } from './tuning-panel';
 import { PropertyPanel } from './property-panel';
 import { ToolPropertyPanel } from './tool-property-panel';
-import { TrackList, type TrackListActions } from './track-list';
+import { TrackList, TrackDots, type TrackListActions } from './track-list';
 import { PanelSection } from './panel-section';
 import { CanvasHudLayer, type CanvasHuds } from './canvas-huds';
 import { Toast } from './toast';
@@ -124,15 +124,56 @@ export function App({ huds, parts }: {
   );
 }
 
+/** Whether the side panel is collapsed to a strip, for each mode, kept
+ *  between visits. */
+const SIDE_PANEL_KEY = 'slidesynth.sidePanelCollapsed';
+type SidePanelCollapsed = { edit: boolean; perform: boolean };
+
+function loadSidePanelCollapsed(): SidePanelCollapsed {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SIDE_PANEL_KEY) ?? '{}');
+    return { edit: raw?.edit === true, perform: raw?.perform === true };
+  } catch {
+    return { edit: false, perform: false };
+  }
+}
+
 /**
  * The side panel. Editing: Tool, Selection, Tracks. Perform (16.8): Perform's
  * settings and Tracks; nothing is selected for editing there. It reads only
- * the mode, so it re-renders when you enter or leave Perform.
+ * the mode (and the tracks, while collapsed), so it re-renders when you enter
+ * or leave Perform.
+ *
+ * It collapses to a thin strip when it isn't needed, separately in each mode;
+ * collapsed, the strip shows the tracks as colour dots, so a track is still a
+ * click away while playing.
  */
 function SidePanel({ parts }: { parts: AppParts | null }) {
   const perform = store.getState().performMode;
+  const [collapsedBy, setCollapsedBy] = useState(loadSidePanelCollapsed);
+  const mode = perform ? 'perform' : 'edit';
+  const collapsed = collapsedBy[mode];
+  // The page's grid gives the panel its width (styles/main.css).
+  useEffect(() => { document.body.classList.toggle('side-panel-collapsed', collapsed); }, [collapsed]);
+  const toggle = () => {
+    const next = { ...collapsedBy, [mode]: !collapsed };
+    setCollapsedBy(next);
+    try { localStorage.setItem(SIDE_PANEL_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+  };
   return (
-    <div id="property-panel">
+    <div id="property-panel" class={collapsed ? 'collapsed' : undefined}>
+      <div class="side-panel-bar">
+        <button
+          class="side-panel-toggle"
+          title={collapsed ? 'Show the panel' : 'Collapse the panel to a strip'}
+          aria-label={collapsed ? 'Show the panel' : 'Collapse the panel'}
+          aria-expanded={!collapsed}
+          onClick={e => { (e.currentTarget as HTMLElement).blur(); toggle(); }}
+        >
+          {collapsed ? '‹' : '›'}
+        </button>
+      </div>
+      {collapsed && parts && <TrackDots actions={parts.tracks} />}
       {/* Keyed by title, so each remembers whether it's collapsed. */}
       <PanelSection key={perform ? 'Perform' : 'Tool'} title={perform ? 'Perform' : 'Tool'} id="tool-prop-content">
         {parts && <ToolPropertyPanel />}

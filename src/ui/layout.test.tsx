@@ -114,4 +114,16 @@ describe('collapsed panel sections are remembered', () => {
     expect(html).toContain('<div class="panel-header collapsed">Selection</div><div id="prop-content" style="display:none;">');
     expect(html).toContain('<div class="panel-header">Tool</div><div id="tool-prop-content">');
   });
+
+  it('the side panel collapses to a strip separately in each mode (16.8)', () => {
+    const items = new Map([['slidesynth.sidePanelCollapsed', JSON.stringify({ edit: false, perform: true })]]);
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: { getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => items.set(k, v) },
+      configurable: true,
+    });
+    store.setPerformMode(true);
+    expect(renderToString(<App huds={createCanvasHuds()} parts={null} />)).toMatch(/<div id="property-panel" class="collapsed"><div class="side-panel-bar"><button class="side-panel-toggle"[^>]*aria-expanded="false"/);
+    store.setPerformMode(false);
+    expect(renderToString(<App huds={createCanvasHuds()} parts={null} />)).toMatch(/<div id="property-panel"><div class="side-panel-bar">/);
+  });
 });

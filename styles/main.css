@@ -1370,3 +1370,97 @@ body.perform-mode .track-item {
 body.perform-mode .track-name {
   font-size: 0.95rem;
 }
+
+/* ── The side panel collapsed to a strip (16.8) ─────────────────── */
+:root {
+  --panel-width-collapsed: 36px;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --panel-width-collapsed: 44px;
+  }
+}
+
+#main-area {
+  transition: grid-template-columns 0.2s ease;
+}
+
+body.side-panel-collapsed #main-area {
+  grid-template-columns: var(--rail-width) 1fr var(--panel-width-collapsed);
+}
+
+/* Collapsed, only the toggle and the track dots show. !important beats a
+   section's own inline display. */
+#property-panel.collapsed > :not(.side-panel-bar):not(.track-dots) {
+  display: none !important;
+}
+
+#property-panel.collapsed {
+  overflow: hidden;
+}
+
+.side-panel-bar {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.side-panel-toggle {
+  width: 100%;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  text-align: left;
+  padding: 0 10px;
+}
+
+#property-panel.collapsed .side-panel-toggle {
+  text-align: center;
+  padding: 0;
+  height: 32px;
+}
+
+.side-panel-toggle:hover {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--text);
+}
+
+.track-dots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  overflow-y: auto;
+}
+
+.track-dot {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+@media (pointer: coarse) {
+  .track-dot {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+.track-dot.selected {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.track-dot.muted {
+  opacity: 0.4;
+}

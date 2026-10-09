@@ -162,3 +162,33 @@ function TrackRow({ track, color, toneName, selected, midiArm, actions }: TrackR
     </div>
   );
 }
+
+/**
+ * The tracks as a column of colour dots, for the side panel collapsed to a
+ * strip (16.8): the track list stays reachable while playing. Click a dot to
+ * select its track.
+ */
+export function TrackDots({ actions }: { actions: Pick<TrackListActions, 'select'> }) {
+  const st = store.getState();
+  const comp = st.composition;
+  return (
+    <div class="track-dots" role="list" aria-label="Tracks">
+      {comp.tracks.map(track => {
+        const tone = comp.toneLibrary.find(t => t.id === track.toneId);
+        const selected = track.id === st.selectedTrackId;
+        return (
+          <button
+            key={track.id}
+            role="listitem"
+            class={`track-dot${selected ? ' selected' : ''}${track.muted ? ' muted' : ''}`}
+            style={{ background: tone?.color ?? 'var(--tone-fallback)' }}
+            title={`${track.name} · ${tone?.name ?? '?'}${selected ? ' (selected)' : ''}`}
+            aria-label={track.name}
+            aria-pressed={selected}
+            onClick={e => { (e.currentTarget as HTMLElement).blur(); actions.select(track.id); }}
+          />
+        );
+      })}
+    </div>
+  );
+}
