@@ -259,8 +259,8 @@
     <strong>Gravity</strong> (presets, its feel, frets and beat guides), <strong>Harmonizer</strong>, and
     <strong>Tuning</strong> (pitch circle, tuning, root, scale, reference pitch). One drawer is open at a time;
     <kbd>Escape</kbd> or a click on the canvas closes it. Below a divider sits the
-    <strong>tool strip</strong>, always visible: <strong>Draw</strong>, <strong>Select</strong>,
-    <strong>Delete</strong>, <strong>Slice</strong> and <strong>Perform</strong>. The active
+    <strong>tool strip</strong>, always visible while editing: <strong>Draw</strong>, <strong>Select</strong>,
+    <strong>Nudge</strong>, <strong>Delete</strong>, <strong>Slice</strong> and <strong>Perform</strong>. The active
     tool is filled in; hover a button for its name and key. While the Harmonizer's
     <strong>Harmony</strong> is on, Draw and Perform carry a small rainbow
     <strong>chord badge</strong> showing how many voices will sound. The
@@ -300,7 +300,17 @@
     turns the canvas into an instrument: the left button <em>plays</em>. Press
     <kbd>P</kbd> or the <strong>Perform</strong> button at the bottom of the tool strip to
     switch; the button lights up violet and so does the canvas's frame, so you can always tell
-    which mode you're in. Picking a tool goes back to Compose.
+    which mode you're in. Press it again, <kbd>P</kbd> or <kbd>Escape</kbd> to go back to Compose.
+  </p>
+  <p>
+    Perform is a <strong>stage</strong>: editing is put away and what you play with comes forward.
+    The edit tools and the Parameters Graph fold away, so the canvas gets their room. The
+    transport, Record, Keep, <strong>Gravity</strong> and <strong>Loop</strong> grow, and so do the
+    track rows, so they're quick to hit while you play. What you set before playing stays a
+    click away: the drawers on the left (Tempo, Gravity, Harmonizer, Tuning), and the
+    <strong>menu</strong> button at the top left, which holds File, Undo and Redo, and the View
+    options. The right panel shows <strong>Perform</strong>'s settings (Dynamics, Accuracy) above
+    the tracks.
   </p>
   <p>
     In Perform the music slides right-to-left past a stationary <strong>rail</strong> at the
@@ -319,7 +329,7 @@
     <li>Play and Record start at the <strong>rail's current beat</strong> — wherever you've panned or scrubbed to — not from beat 0.</li>
     <li><kbd>Space</kbd> pauses and resumes. Stop ends the take.</li>
     <li>Pressing <kbd>P</kbd> while Compose playback is running switches to Perform without stopping; the clock becomes open-ended from there.</li>
-    <li><strong>Leaving Perform</strong>: press <kbd>P</kbd> again, <kbd>Escape</kbd>, or pick a tool (button or <kbd>D</kbd> / <kbd>V</kbd> / <kbd>X</kbd> / <kbd>C</kbd>). Playback keeps running if it was. While a recording runs you stay in Perform until it stops.</li>
+    <li><strong>Leaving Perform</strong>: press <kbd>P</kbd> again (or the Perform button), <kbd>Escape</kbd>, or a tool's key (<kbd>D</kbd> / <kbd>V</kbd> / <kbd>N</kbd> / <kbd>X</kbd> / <kbd>C</kbd>), which goes straight to that tool. Playback keeps running if it was. While a recording runs you stay in Perform until it stops.</li>
     <li><strong>Scrubbing</strong> the ruler in Perform slides the content under the rail as you drag: click a beat in the ruler to bring it to the rail, then drag to move forward or back. The rail is always where Play will start.</li>
     <li>Gravity's Glissando is fully live in Perform, including while stopped — the pitch settles even when you're just hovering.</li>
     <li><strong>Touch screens:</strong> Perform works with a finger. On a phone or tablet that can

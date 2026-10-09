@@ -3,10 +3,11 @@ import type { ReadonlySignal, Signal } from '@preact/signals';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { primaryShortcut } from '../commands/catalog';
+import { store } from '../state/store';
 import type { CommandRegistry } from '../commands/registry';
 import { MIN_ZOOM_Y, MAX_ZOOM_Y } from '../constants';
 import { Icon } from './icon';
-import type { MenuSpec } from './menu';
+import type { MenuEntry, MenuSpec } from './menu';
 import { TopBar } from './top-bar';
 import { ToolStrip } from './tool-strip';
 import { TempoPanel, type TempoActions } from './tempo-panel';
@@ -65,6 +66,14 @@ export const MENUS: readonly MenuSpec[] = [
   },
 ];
 
+/** Perform's one menu (16.8): File, Undo / Redo and View. The edit commands
+ *  are left out: in Perform they don't apply. */
+export const STAGE_MENU: readonly MenuEntry[] = [
+  ...MENUS.find(m => m.label === 'File')!.entries, '-',
+  'edit.undo', 'edit.redo', '-',
+  ...MENUS.find(m => m.label === 'View')!.entries,
+];
+
 /** What the panels need: made after the canvases, so they come in the
  *  second render. */
 export interface AppParts {
@@ -91,7 +100,7 @@ export function App({ huds, parts }: {
   return (
     <>
       <div id="toolbar">
-        {parts && <TopBar commands={parts.commands} menus={MENUS} canUndo={parts.canUndo} canRedo={parts.canRedo} keepable={parts.keepable} />}
+        {parts && <TopBar commands={parts.commands} menus={MENUS} stageMenu={STAGE_MENU} canUndo={parts.canUndo} canRedo={parts.canRedo} keepable={parts.keepable} />}
       </div>
       <div id="main-area">
         <Drawers
@@ -107,27 +116,42 @@ export function App({ huds, parts }: {
           tools={parts && <ToolStrip commands={parts.commands} locked={parts.toolsLocked} />}
         />
         <Stage huds={huds} />
-        <div id="property-panel">
-          <PanelSection title="Tool" id="tool-prop-content">
-            {parts && <ToolPropertyPanel />}
-          </PanelSection>
-          <PanelSection title="Selection" id="prop-content">
-            {parts && <PropertyPanel commands={parts.commands} />}
-          </PanelSection>
-          <PanelSection title="Tracks" id="tracks-section">
-            <div id="track-list">
-              {parts && <TrackList actions={parts.tracks} />}
-            </div>
-            <div class="track-panel-actions">
-              <button id="add-track-btn" title="Add track" onClick={e => { void addTrackWithPickedTone(e.currentTarget); }}>+ Track</button>
-              <button id="new-tone-btn" title="Create new tone" onClick={() => { void newTone(); }}>+ Tone</button>
-            </div>
-          </PanelSection>
-        </div>
+        <SidePanel parts={parts} />
       </div>
       {parts && <SettingsDialog open={parts.settingsOpen} midi={parts.midi} />}
       <Toast />
     </>
+  );
+}
+
+/**
+ * The side panel. Editing: Tool, Selection, Tracks. Perform (16.8): Perform's
+ * settings and Tracks; nothing is selected for editing there. It reads only
+ * the mode, so it re-renders when you enter or leave Perform.
+ */
+function SidePanel({ parts }: { parts: AppParts | null }) {
+  const perform = store.getState().performMode;
+  return (
+    <div id="property-panel">
+      {/* Keyed by title, so each remembers whether it's collapsed. */}
+      <PanelSection key={perform ? 'Perform' : 'Tool'} title={perform ? 'Perform' : 'Tool'} id="tool-prop-content">
+        {parts && <ToolPropertyPanel />}
+      </PanelSection>
+      {!perform && (
+        <PanelSection title="Selection" id="prop-content">
+          {parts && <PropertyPanel commands={parts.commands} />}
+        </PanelSection>
+      )}
+      <PanelSection title="Tracks" id="tracks-section">
+        <div id="track-list">
+          {parts && <TrackList actions={parts.tracks} />}
+        </div>
+        <div class="track-panel-actions">
+          <button id="add-track-btn" title="Add track" onClick={e => { void addTrackWithPickedTone(e.currentTarget); }}>+ Track</button>
+          <button id="new-tone-btn" title="Create new tone" onClick={() => { void newTone(); }}>+ Tone</button>
+        </div>
+      </PanelSection>
+    </div>
   );
 }
 

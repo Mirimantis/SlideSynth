@@ -20,6 +20,7 @@ import iconUndo from '../assets/icons/undo.svg?raw';
 import iconRedo from '../assets/icons/redo.svg?raw';
 import iconSettings from '../assets/icons/settings.svg?raw';
 import iconFullscreen from '../assets/icons/fullscreen.svg?raw';
+import iconMenu from '../assets/icons/menu.svg?raw';
 import { canFullscreen, fullscreenOn } from './fullscreen';
 
 /**
@@ -36,6 +37,8 @@ import { canFullscreen, fullscreenOn } from './fullscreen';
 export interface TopBarProps {
   commands: CommandRegistry;
   menus: readonly MenuSpec[];
+  /** Perform's one menu (16.8): what File, Edit and View hold for playing. */
+  stageMenu: readonly MenuEntry[];
   canUndo: ReadonlySignal<boolean>;
   canRedo: ReadonlySignal<boolean>;
   /** Phrases the rolling buffer can keep. Engine state, polled per frame. */
@@ -47,20 +50,12 @@ export const RECORD_MENU: readonly MenuEntry[] = [
   'transport.recordPass', 'perform.dropPass', '-', 'transport.layerMode', 'transport.countIn',
 ];
 
-export function TopBar({ commands, menus, canUndo, canRedo, keepable }: TopBarProps) {
+export function TopBar({ commands, menus, stageMenu, canUndo, canRedo, keepable }: TopBarProps) {
   return (
     <>
-      <div class="toolbar-row" id="toolbar-left">
-        <div class="toolbar-group">
-          <CompositionName />
-          <CompositionLength />
-        </div>
-        <MenuBar menus={menus} commands={commands} />
-        <div class="toolbar-group">
-          <HistoryButton id="edit.undo" svg={iconUndo} commands={commands} can={canUndo} />
-          <HistoryButton id="edit.redo" svg={iconRedo} commands={commands} can={canRedo} />
-        </div>
-      </div>
+      {store.getState().performMode
+        ? <StageLeft commands={commands} entries={stageMenu} />
+        : <EditLeft commands={commands} menus={menus} canUndo={canUndo} canRedo={canRedo} />}
       <div class="toolbar-zone right">
         <Transport commands={commands} keepable={keepable} />
         <div class="toolbar-toggles">
@@ -77,6 +72,36 @@ export function TopBar({ commands, menus, canUndo, canRedo, keepable }: TopBarPr
         </CommandButton>
       </div>
     </>
+  );
+}
+
+/** Editing's left zone: the name and length, the menus, Undo and Redo. */
+function EditLeft({ commands, menus, canUndo, canRedo }: {
+  commands: CommandRegistry; menus: readonly MenuSpec[]; canUndo: ReadonlySignal<boolean>; canRedo: ReadonlySignal<boolean>;
+}) {
+  return (
+    <div class="toolbar-row" id="toolbar-left">
+      <div class="toolbar-group">
+        <CompositionName />
+        <CompositionLength />
+      </div>
+      <MenuBar menus={menus} commands={commands} />
+      <div class="toolbar-group">
+        <HistoryButton id="edit.undo" svg={iconUndo} commands={commands} can={canUndo} />
+        <HistoryButton id="edit.redo" svg={iconRedo} commands={commands} can={canRedo} />
+      </div>
+    </div>
+  );
+}
+
+/** Perform's left zone (16.8): what's set before playing, in one menu. */
+function StageLeft({ commands, entries }: { commands: CommandRegistry; entries: readonly MenuEntry[] }) {
+  return (
+    <div class="toolbar-row" id="toolbar-left">
+      <MenuButton entries={entries} commands={commands} class="icon-toggle stage-menu-btn" title="Menu: file, undo and view">
+        <Icon svg={iconMenu} />
+      </MenuButton>
+    </div>
   );
 }
 

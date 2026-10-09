@@ -274,8 +274,17 @@ watch(
   },
   () => { markBgDirty(); },
 );
-// Perform colours the whole app (a first cue; 16.8 designs the real one).
-watch(() => store.getState().performMode, on => document.body.classList.toggle('perform-mode', on));
+// Perform's stage (16.8): styles/main.css lays the page out for playing.
+// While the mode switches, body.stage-changing animates the folding.
+{
+  let stageTimer: number | undefined;
+  watch(() => store.getState().performMode, on => {
+    document.body.classList.add('stage-changing');
+    document.body.classList.toggle('perform-mode', on);
+    window.clearTimeout(stageTimer);
+    stageTimer = window.setTimeout(() => document.body.classList.remove('stage-changing'), 250);
+  });
+}
 // Tune A4 (BACKLOG 8.27): the audio's reference pitch follows the composition.
 syncTuningToAudio();
 

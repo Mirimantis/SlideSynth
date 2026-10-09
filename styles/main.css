@@ -1318,3 +1318,55 @@ body.perform-mode #canvas-container::after {
   transition: opacity 180ms ease;
 }
 .slidesynth-toast.visible { opacity: 1; }
+
+/* ── Perform's stage (BACKLOG 16.8) ───────────────────────────────
+   Perform puts editing away and brings what you play with forward: the edit
+   tools and the Parameters Graph fold away, and the transport, Gravity and
+   Loop, and the track rows, get bigger so they're quick to hit while
+   playing. body.stage-changing is set for the moment the mode switches, so
+   the folding is animated but dragging the graph's handle stays immediate. */
+body.stage-changing #param-container,
+body.stage-changing .tool-strip .strip-btn:not(.perform-entry) {
+  transition: height 0.2s ease, opacity 0.2s ease, margin 0.2s ease, visibility 0.2s;
+}
+
+body.perform-mode #param-container {
+  height: 0;
+  overflow: hidden;
+}
+
+/* The left zone holds only the menu button in Perform: no stretching. */
+body.perform-mode #toolbar-left {
+  flex: 0 0 auto;
+}
+
+body.perform-mode .tool-strip .strip-btn:not(.perform-entry) {
+  height: 0;
+  margin-bottom: -4px; /* the strip's gap */
+  opacity: 0;
+  visibility: hidden;
+}
+
+body.perform-mode .transport button {
+  padding: 8px 16px;
+  font-size: 1.2rem;
+}
+
+body.perform-mode .transport .split-btn-caret {
+  padding: 0 8px;
+}
+
+body.perform-mode .toolbar-toggles .icon-toggle,
+body.perform-mode .stage-menu-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 24px;
+}
+
+body.perform-mode .track-item {
+  padding: 10px 10px;
+}
+
+body.perform-mode .track-name {
+  font-size: 0.95rem;
+}

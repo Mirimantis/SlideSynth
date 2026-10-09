@@ -82,8 +82,19 @@ describe('the layout (BACKLOG 15.3, 15.4)', () => {
   });
 
   it('the side panel has Tool, Selection and Tracks sections', () => {
+    store.setPerformMode(false);
     const html = renderToString(<App huds={createCanvasHuds()} parts={null} />);
     expect([...html.matchAll(/class="panel-header">([^<]+)</g)].map(m => m[1])).toEqual(['Tool', 'Selection', 'Tracks']);
+  });
+
+  it('in Perform the side panel has Perform’s settings and the tracks, nothing to select (16.8)', () => {
+    store.setPerformMode(true);
+    const html = renderToString(<App huds={createCanvasHuds()} parts={null} />);
+    expect([...html.matchAll(/class="panel-header">([^<]+)</g)].map(m => m[1])).toEqual(['Perform', 'Tracks']);
+    expect(html).not.toContain('id="prop-content"');
+    // The canvases are still there: the stage changes the panels, not the canvas.
+    expect(html).toContain('id="fg-canvas"');
+    store.setPerformMode(false);
   });
 });
 
