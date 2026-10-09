@@ -253,13 +253,11 @@ const scene = createScene({
   effectiveScrollCanvas,
   planchettesAsSounding: performer.planchettesAsSounding,
   planchetteDynamicsOf: performer.planchetteDynamicsOf,
-  metronomeFlash: metronome.flash,
 });
 const frameLoop = createFrameLoop({
   scene, performer, dynamics, playback, viewport, canvasContainer, interaction,
   effectiveScrollCanvas,
   syncAudition: audition.sync,
-  metronomeFlash: metronome.flash,
   huds,
 });
 
@@ -309,6 +307,7 @@ render(h(App, {
     tracks: createTrackListActions({ interaction, performer }),
     settingsOpen,
     midi: midi.settings,
+    metronomeBeat: metronome.beat,
   },
 }), appEl);
 installTouchGuards();

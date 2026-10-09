@@ -40,8 +40,7 @@ import { renderLoopMarkers } from './loop-markers';
 import { renderGuideHandle, renderGuides } from './guides';
 import { renderParamGraph } from './param-graph-renderer';
 import {
-  renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails, renderMetronomeFlash,
-  METRONOME_FLASH_DURATION_MS, RAIL_SCREEN_X_RATIO,
+  renderPlanchettes, renderFreePlanchette, renderRail, renderRecordingTrails,
 } from './planchette';
 
 export interface SceneDeps {
@@ -65,8 +64,6 @@ export interface SceneDeps {
   planchettesAsSounding(planchettes: PlanchetteState[]): PlanchetteState[];
   /** A voice's dynamics for its halo, or null to draw it plain. */
   planchetteDynamicsOf(voiceId: string): number | null;
-  /** The latest metronome tick, for its flash. */
-  metronomeFlash(): { at: number; tier: 'downbeat' | 'accent' | 'weak' };
 }
 
 export interface Scene {
@@ -79,7 +76,7 @@ export function createScene(deps: SceneDeps): Scene {
   const {
     bgCtx, fgCtx, paramCtx, canvasContainer, viewport, paramViewport, interaction, paramInteraction,
     composeEngine, playback, paramSize, getSelectedParamCurve, previewActive, effectiveScrollCanvas,
-    planchettesAsSounding, planchetteDynamicsOf, metronomeFlash,
+    planchettesAsSounding, planchetteDynamicsOf,
   } = deps;
   let drawCount = 0;
 
@@ -375,24 +372,6 @@ export function createScene(deps: SceneDeps): Scene {
         ? playback.getPositionBeats()
         : state.playback.positionBeats;
       renderPlayhead(fgCtx, viewport, playheadBeat, rect.height);
-    }
-
-    // Metronome tick flash: ring at the top of the rail / playhead. Lives briefly
-    // and fades, so the user gets a visual beat even if audio is muted or missed.
-    const flash = metronomeFlash();
-    const flashAge = performance.now() - flash.at;
-    if (flash.at > 0 && flashAge < METRONOME_FLASH_DURATION_MS) {
-      const flashY = RULER_HEIGHT + 9;
-      let flashX: number;
-      if (railVisible) {
-        flashX = rect.width * RAIL_SCREEN_X_RATIO;
-      } else {
-        const playheadBeat = playback.isPlaying()
-          ? playback.getPositionBeats()
-          : state.playback.positionBeats;
-        flashX = viewport.worldToScreen(playheadBeat, 0).sx;
-      }
-      renderMetronomeFlash(fgCtx, flashX, flashY, flashAge, flash.tier);
     }
 
     // Drag-marquee rubber-band (BACKLOG 8.3) — drawn on top of everything else

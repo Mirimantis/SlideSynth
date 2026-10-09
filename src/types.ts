@@ -234,7 +234,6 @@ export interface PlanchetteState {
   trackId: string | null;
   cursorWorldY: number | null;
   snappedWorldY: number | null;
-  lastCrossedAt: number;
 }
 
 /** Deliberate "record next full pass" (BACKLOG 10.5), as the Record button

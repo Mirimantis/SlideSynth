@@ -93,7 +93,6 @@ function createInitialPrimaryPlanchette(trackId: string | null): PlanchetteState
     trackId,
     cursorWorldY: null,
     snappedWorldY: null,
-    lastCrossedAt: 0,
   };
 }
 
@@ -568,13 +567,6 @@ class Store {
     p.snappedWorldY = snappedWorldY;
     // Canvas-only: called every frame during mouse-move and magnetic settling.
     if (moved) this.touch('canvas');
-  }
-
-  markPlanchetteCrossed(voiceId: string, t: number) {
-    const p = this.state.performance.planchettes.find(pl => pl.voiceId === voiceId);
-    if (!p) return;
-    p.lastCrossedAt = t;
-    this.touch('canvas');
   }
 
   setPerformCurrentCurve(voiceId: string, curveId: string | null) {

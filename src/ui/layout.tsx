@@ -6,6 +6,7 @@ import { primaryShortcut } from '../commands/catalog';
 import { store } from '../state/store';
 import type { CommandRegistry } from '../commands/registry';
 import { MIN_ZOOM_Y, MAX_ZOOM_Y } from '../constants';
+import type { MetronomeBeat } from '../app/metronome';
 import { Icon } from './icon';
 import type { MenuEntry, MenuSpec } from './menu';
 import { TopBar } from './top-bar';
@@ -90,6 +91,8 @@ export interface AppParts {
   tracks: TrackListActions;
   settingsOpen: Signal<boolean>;
   midi: MidiSettings;
+  /** Each metronome tick as it sounds: the Tempo icon flashes with it. */
+  metronomeBeat: ReadonlySignal<MetronomeBeat | null>;
 }
 
 export function App({ huds, parts }: {
@@ -105,7 +108,10 @@ export function App({ huds, parts }: {
       <div id="main-area">
         <Drawers
           drawers={[
-            { id: 'tempo', label: 'Tempo', icon: iconTempo, body: parts && <TempoPanel actions={parts.tempo} /> },
+            {
+              id: 'tempo', label: 'Tempo', icon: iconTempo, body: parts && <TempoPanel actions={parts.tempo} />,
+              pulse: parts && <MetronomePulse beat={parts.metronomeBeat} />,
+            },
             { id: 'snap', label: 'Gravity', icon: iconSnap, body: parts && <SnapPanel actions={parts.snap} /> },
             {
               id: 'prism', label: 'Harmonizer', icon: iconPrism, body: parts && <PrismPanel />,
@@ -122,6 +128,16 @@ export function App({ huds, parts }: {
       <Toast />
     </>
   );
+}
+
+/**
+ * The metronome's flash on the Tempo icon (16.8; it was a ring on the rail):
+ * a ring that fades with each tick, brighter on the downbeat. Each tick is a
+ * new element, so its animation starts over.
+ */
+function MetronomePulse({ beat }: { beat: ReadonlySignal<MetronomeBeat | null> }) {
+  const b = beat.value;
+  return b ? <span key={b.n} class={`metronome-pulse ${b.tier}`} aria-hidden="true" /> : null;
 }
 
 /** Whether the side panel is collapsed to a strip, for each mode, kept
@@ -237,6 +253,8 @@ export interface DrawerSpec {
   body: ComponentChildren;
   /** The drawer header's tooltip, when it has one. */
   headerTitle?: string;
+  /** Drawn over the rail icon (the metronome's flash on Tempo). */
+  pulse?: ComponentChildren;
 }
 
 /**
@@ -290,6 +308,7 @@ export function Drawers({ drawers, tools }: { drawers: readonly DrawerSpec[]; to
             onClick={() => setOpenId(openId === d.id ? null : d.id)}
           >
             <Icon svg={d.icon} />
+            {d.pulse}
           </button>
         ))}
         <div class="rail-divider" role="separator"></div>

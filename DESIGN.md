@@ -315,6 +315,7 @@ The outcome of the BACKLOG 16.8 session. Perform should feel like picking up an 
 - Frets and pitch lines stay **full length across the canvas**, not ticks on the string, so a finger has a line to aim for anywhere on the canvas.
 - The planchette is where the string sounds; Gravity's pull shows as the planchette moving toward its line.
 - What the haptic clicks (13.35) and the motorized slide (H.3) let you feel is the same set of lines you see.
+- **Kept simple (decided 2026-10-09, from playing with several fingers):** the string doesn't vibrate and there's no spring drawn between finger and planchette: with many planchettes close together and passing each other, both would be too busy. The planchettes stay clean markers of where pitch is. The flash on crossing a line is gone (rarely noticed, and with constant glides the planchette is seldom exactly on a line), and the metronome's tick flashes the Tempo icon instead of a ring on the rail. How the string and planchette look is left to the visual theme (16.9).
 
 **Orientation.** Two layouts of the canvas, chosen per mode as a View option:
 

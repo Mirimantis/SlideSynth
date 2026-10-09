@@ -98,7 +98,7 @@ describe('store.removeTrack', () => {
     const { doomed } = seed();
     store.addPerformPlanchette({
       voiceId: 'midi-60', trackId: doomed.id,
-      cursorWorldY: 6000, snappedWorldY: 6000, lastCrossedAt: 0,
+      cursorWorldY: 6000, snappedWorldY: 6000,
     });
     store.removeTrack(doomed.id);
     const voices = store.getState().performance.planchettes.map(p => p.voiceId);
