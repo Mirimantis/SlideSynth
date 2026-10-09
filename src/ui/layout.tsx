@@ -3,10 +3,11 @@ import type { ReadonlySignal, Signal } from '@preact/signals';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { primaryShortcut } from '../commands/catalog';
+import { store } from '../state/store';
 import type { CommandRegistry } from '../commands/registry';
 import { MIN_ZOOM_Y, MAX_ZOOM_Y } from '../constants';
 import { Icon } from './icon';
-import type { MenuSpec } from './menu';
+import type { MenuEntry, MenuSpec } from './menu';
 import { TopBar } from './top-bar';
 import { ToolStrip } from './tool-strip';
 import { TempoPanel, type TempoActions } from './tempo-panel';
@@ -15,7 +16,7 @@ import { PrismPanel } from './prism-panel';
 import { TuningPanel, type TuningActions } from './tuning-panel';
 import { PropertyPanel } from './property-panel';
 import { ToolPropertyPanel } from './tool-property-panel';
-import { TrackList, type TrackListActions } from './track-list';
+import { TrackList, TrackDots, type TrackListActions } from './track-list';
 import { PanelSection } from './panel-section';
 import { CanvasHudLayer, type CanvasHuds } from './canvas-huds';
 import { Toast } from './toast';
@@ -65,6 +66,14 @@ export const MENUS: readonly MenuSpec[] = [
   },
 ];
 
+/** Perform's one menu (16.8): File, Undo / Redo and View. The edit commands
+ *  are left out: in Perform they don't apply. */
+export const STAGE_MENU: readonly MenuEntry[] = [
+  ...MENUS.find(m => m.label === 'File')!.entries, '-',
+  'edit.undo', 'edit.redo', '-',
+  ...MENUS.find(m => m.label === 'View')!.entries,
+];
+
 /** What the panels need: made after the canvases, so they come in the
  *  second render. */
 export interface AppParts {
@@ -91,7 +100,7 @@ export function App({ huds, parts }: {
   return (
     <>
       <div id="toolbar">
-        {parts && <TopBar commands={parts.commands} menus={MENUS} canUndo={parts.canUndo} canRedo={parts.canRedo} keepable={parts.keepable} />}
+        {parts && <TopBar commands={parts.commands} menus={MENUS} stageMenu={STAGE_MENU} canUndo={parts.canUndo} canRedo={parts.canRedo} keepable={parts.keepable} />}
       </div>
       <div id="main-area">
         <Drawers
@@ -107,27 +116,83 @@ export function App({ huds, parts }: {
           tools={parts && <ToolStrip commands={parts.commands} locked={parts.toolsLocked} />}
         />
         <Stage huds={huds} />
-        <div id="property-panel">
-          <PanelSection title="Tool" id="tool-prop-content">
-            {parts && <ToolPropertyPanel />}
-          </PanelSection>
-          <PanelSection title="Selection" id="prop-content">
-            {parts && <PropertyPanel commands={parts.commands} />}
-          </PanelSection>
-          <PanelSection title="Tracks" id="tracks-section">
-            <div id="track-list">
-              {parts && <TrackList actions={parts.tracks} />}
-            </div>
-            <div class="track-panel-actions">
-              <button id="add-track-btn" title="Add track" onClick={e => { void addTrackWithPickedTone(e.currentTarget); }}>+ Track</button>
-              <button id="new-tone-btn" title="Create new tone" onClick={() => { void newTone(); }}>+ Tone</button>
-            </div>
-          </PanelSection>
-        </div>
+        <SidePanel parts={parts} />
       </div>
       {parts && <SettingsDialog open={parts.settingsOpen} midi={parts.midi} />}
       <Toast />
     </>
+  );
+}
+
+/** Whether the side panel is collapsed to a strip, for each mode, kept
+ *  between visits. */
+const SIDE_PANEL_KEY = 'slidesynth.sidePanelCollapsed';
+type SidePanelCollapsed = { edit: boolean; perform: boolean };
+
+function loadSidePanelCollapsed(): SidePanelCollapsed {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SIDE_PANEL_KEY) ?? '{}');
+    return { edit: raw?.edit === true, perform: raw?.perform === true };
+  } catch {
+    return { edit: false, perform: false };
+  }
+}
+
+/**
+ * The side panel. Editing: Tool, Selection, Tracks. Perform (16.8): Perform's
+ * settings and Tracks; nothing is selected for editing there. It reads only
+ * the mode (and the tracks, while collapsed), so it re-renders when you enter
+ * or leave Perform.
+ *
+ * It collapses to a thin strip when it isn't needed, separately in each mode;
+ * collapsed, the strip shows the tracks as colour dots, so a track is still a
+ * click away while playing.
+ */
+function SidePanel({ parts }: { parts: AppParts | null }) {
+  const perform = store.getState().performMode;
+  const [collapsedBy, setCollapsedBy] = useState(loadSidePanelCollapsed);
+  const mode = perform ? 'perform' : 'edit';
+  const collapsed = collapsedBy[mode];
+  // The page's grid gives the panel its width (styles/main.css).
+  useEffect(() => { document.body.classList.toggle('side-panel-collapsed', collapsed); }, [collapsed]);
+  const toggle = () => {
+    const next = { ...collapsedBy, [mode]: !collapsed };
+    setCollapsedBy(next);
+    try { localStorage.setItem(SIDE_PANEL_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+  };
+  return (
+    <div id="property-panel" class={collapsed ? 'collapsed' : undefined}>
+      <div class="side-panel-bar">
+        <button
+          class="side-panel-toggle"
+          title={collapsed ? 'Show the panel' : 'Collapse the panel to a strip'}
+          aria-label={collapsed ? 'Show the panel' : 'Collapse the panel'}
+          aria-expanded={!collapsed}
+          onClick={e => { (e.currentTarget as HTMLElement).blur(); toggle(); }}
+        >
+          {collapsed ? '‹' : '›'}
+        </button>
+      </div>
+      {collapsed && parts && <TrackDots actions={parts.tracks} />}
+      {/* Keyed by title, so each remembers whether it's collapsed. */}
+      <PanelSection key={perform ? 'Perform' : 'Tool'} title={perform ? 'Perform' : 'Tool'} id="tool-prop-content">
+        {parts && <ToolPropertyPanel />}
+      </PanelSection>
+      {!perform && (
+        <PanelSection title="Selection" id="prop-content">
+          {parts && <PropertyPanel commands={parts.commands} />}
+        </PanelSection>
+      )}
+      <PanelSection title="Tracks" id="tracks-section">
+        <div id="track-list">
+          {parts && <TrackList actions={parts.tracks} />}
+        </div>
+        <div class="track-panel-actions">
+          <button id="add-track-btn" title="Add track" onClick={e => { void addTrackWithPickedTone(e.currentTarget); }}>+ Track</button>
+          <button id="new-tone-btn" title="Create new tone" onClick={() => { void newTone(); }}>+ Tone</button>
+        </div>
+      </PanelSection>
+    </div>
   );
 }
 

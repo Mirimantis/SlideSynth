@@ -60,6 +60,7 @@ describe('top bar (BACKLOG 16.3)', () => {
     <TopBar
       commands={registry()}
       menus={[{ label: 'File', entries: ['file.save'] }, { label: 'Edit', entries: [] }, { label: 'View', entries: [] }]}
+      stageMenu={['file.save', '-', 'edit.undo']}
       canUndo={signal(false)}
       canRedo={signal(true)}
       keepable={signal(keep)}
@@ -72,6 +73,19 @@ describe('top bar (BACKLOG 16.3)', () => {
     for (const label of ['File', 'Edit', 'View']) expect(html).toContain(`>${label}</button>`);
     expect(html).not.toContain('BPM');
     expect(html).not.toMatch(/Perform|Jam/);
+  });
+
+  it('in Perform the left side is one menu: no name, menus or undo arrows (16.8)', () => {
+    store.setPerformMode(true);
+    const html = bar();
+    expect(html).toContain('stage-menu-btn');
+    expect(html).not.toContain('value="Sketch"');
+    expect(html).not.toContain('>File</button>');
+    expect(html).not.toContain('history-btn');
+    // The transport and the switches stay.
+    expect(html).toContain('play-pause-btn');
+    expect(html).toContain('Gravity (S)');
+    store.setPerformMode(false);
   });
 
   it('Play and Pause share one button that follows the transport', () => {
